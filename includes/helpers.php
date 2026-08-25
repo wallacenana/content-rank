@@ -5572,7 +5572,6 @@ class Content_Rank_Generator_Helper
         $selected_prompt_model = $selected_prompt_model_key !== ''
             ? Content_Rank_Generator::get_prompt_model($selected_prompt_model_key, $generator)
             : array();
-        $selected_tags = Content_Rank_Generator::get_generator_selected_tags($generator);
 
         $compact_prompt = array(
             'Voce e um classificador editorial interno.',
@@ -5597,45 +5596,6 @@ class Content_Rank_Generator_Helper
             $source_content_html !== '' ? $source_content_html : '[sem HTML de referencia]',
         );
         return implode("\n", array_values(array_filter($compact_prompt, 'strlen')));
-
-        $prompt = array(
-            'Voce e um planejador editorial interno.',
-            'Idioma obrigatorio de toda a resposta: ' . $generation_language . '.',
-            'Escreva todos os titulos, fatos, perguntas, notas e demais campos textuais exclusivamente nesse idioma. Use outro idioma somente em nomes proprios, termos da fonte e nas chaves tecnicas obrigatorias do JSON.',
-            'Analise principalmente o conteudo html enviado e escolha apenas 1 modelo.',
-            'Ignore rodape, sidebar, widgets, navegacao e blocos auxiliares (caso exista).',
-            'Retorne apenas JSON valido com estas chaves: content_type, funnel_level, primary_pain, focus_keyword, recommended_prompt_model_key.',
-            'Use content_type somente como uma destas chaves canonicas: lista, artigo, noticia, review, faq, tutorial, comparativo.',
-            'REGRA PRINCIPAL: escolha noticia quando o conteudo tratar de um acontecimento, anuncio, confirmacao, estreia, lancamento, atualizacao, declaracao ou mudanca pontual. Uma noticia pode ter varios h2; a existencia de h2 nao a transforma em artigo ou lista.',
-            'Escolha artigo somente quando a fonte desenvolver um tema evergreen, explicativo, opinativo ou analitico, com progressao de ideias e contexto, sem relatar principalmente um fato pontual.',
-            'O titulo da pauta e o principal sinal editorial para definir o formato. Use o conteudo para confirmar os fatos, mas nao deixe uma pagina mal estruturada alterar o formato pedido pelo titulo.',
-            'Escolha lista obrigatoriamente quando o titulo trouxer uma quantidade explicita associada a itens, filmes, series, jogos, cuidados, dicas, motivos, opcoes, maneiras, formas, classicos, produtos ou termos equivalentes. Isso vale mesmo quando o HTML tem apenas uma introducao ou poucos subtitulos.',
-            'Nao transforme uma pauta explicitamente numerada em artigo apenas porque a fonte nao possui headings suficientes. Preserve a quantidade e a intencao de lista no prompt do modelo escolhido.',
-            'Para titulos sem quantidade ou marcador claro de lista, use o conteudo e a intencao da pauta para diferenciar noticia, artigo, review, comparativo e tutorial.',
-            'Exemplo de noticia: \"Hana-Kimi ganha versao dublada da 2a temporada na Crunchyroll\" deve ser noticia, mesmo que a pagina tenha varios subtitulos.',
-            'Nao escolha artigo como categoria generica quando a pauta for claramente uma noticia.',
-            'Seja criterioso entre noticia e artigo, e entre lista e artigo.',
-            'A frase chave deve ser fluida e natural, não crie uma kw parecendo tags e não deve ser longa também',
-            'Escolha recommended_prompt_model_key usando somente uma das chaves validas do modelo base abaixo.',
-            !empty($selected_prompt_model)
-                ? 'MODELO FIXADO PELO GERADOR: use obrigatoriamente a chave "' . $selected_prompt_model_key . '" (' . (string) $selected_prompt_model['name'] . '). Nao classifique para outro modelo.'
-                : 'MODELO AUTOMATICO: escolha a chave mais adequada entre os modelos disponiveis abaixo.',
-            'Varra o HTML inteiro, do inicio ao fim. Nao pare na introducao e nao transforme os primeiros fatos em um resumo do restante.',
-            'Se o titulo ou a estrutura indicar uma quantidade de itens, identifique todos os itens citados na fonte. Crie pelo menos um bullet especifico para cada item, com o nome exato e os fatos correspondentes, antes de incluir contexto historico ou fatos gerais.',
-            'Nunca substitua uma lista completa de itens por uma frase dizendo que existem varios itens. Preserve os nomes e a ordem em que aparecem na fonte.',
-            'Título da fonte: ' . ($source_title !== '' ? $source_title : '[sem título disponível]'),
-            $source_item_count > 0 ? 'Quantidade de itens indicada pelo titulo: ' . $source_item_count . '. A resposta deve cobrir todos os itens encontrados.' : '',
-            'Keyword da pauta: ' . ($keyword !== '' ? $keyword : '[sem keyword disponivel]'),
-            !empty($existing_keyword_post_titles)
-                ? "Posts ja gerados para esta mesma keyword:\n- " . implode("\n- ", $existing_keyword_post_titles) . "\nNao repita a mesma intencao de busca, promessa ou angulo; escolha uma intencao diferente."
-                : '',
-            'Lista de modelos:',
-            $available_prompt_models_text,
-            'Fonte em HTML filtrado:',
-            $source_content_html !== '' ? $source_content_html : '[sem html de referencia]',
-        );
-
-        return implode("\n", $prompt);
     }
 
     private static function build_keyword_outline_analysis_prompt($generator, $item, $outline_context = array())
