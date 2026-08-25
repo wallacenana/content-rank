@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.76",
+  "version": "1.9.77",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>A extração de filmes agora usa apenas uma fonte de conteúdo prioritária.</li><li>O HTML bruto da página não é concatenado ao conteúdo limpo do artigo.</li><li>A regeneração mantém o contexto já resolvido pelo TMDB.</li></ul>",
+  "changelog": "<ul><li>A extração de filmes não recebe mais a instrução automática de tradução.</li><li>A IA deve retornar o título literalmente como aparece na fonte.</li><li>A localização dos nomes continua sendo feita exclusivamente pelo PHP via API do TMDB.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

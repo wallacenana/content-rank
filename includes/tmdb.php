@@ -117,16 +117,6 @@ final class Content_Rank_TMDB
                 break;
             }
         }
-        if ($source_text === '') {
-            foreach (array('source_title', 'title', 'keyword') as $key) {
-                if (!empty($item[$key])) {
-                    $source_text = trim(preg_replace('/\s+/u', ' ', wp_strip_all_tags((string) $item[$key])));
-                    if ($source_text !== '') {
-                        break;
-                    }
-                }
-            }
-        }
         $source_text = function_exists('mb_substr') ? mb_substr($source_text, 0, 14000, 'UTF-8') : substr($source_text, 0, 14000);
         if ($source_text === '') {
             return $item;
@@ -155,12 +145,13 @@ final class Content_Rank_TMDB
         if (preg_match('/\b(10|[1-9])\b.{0,40}\bfilmes?\b/i', $normalized_source_text, $count_match)) {
             $movie_limit = min(10, max(1, intval($count_match[1])));
         }
-        $prompt = 'Extraia do conteudo abaixo somente os titulos de filmes realmente mencionados. Nao traduza, nao explique e nao gere descricoes: retorne apenas o nome de cada filme como aparece na fonte, no campo query. Nao inclua atores, diretores, personagens, series ou plataformas. Se o titulo da fonte for uma manchete como "Nome do filme + frase editorial", isole o nome do filme. Nunca retorne um termo generico como "filmes romanticos" ou "filmes da Netflix" como se fosse um filme. A pauta pede no maximo ' . $movie_limit . ' filmes; respeite esse limite e preserve a ordem em que aparecem na fonte. Retorne apenas JSON no formato solicitado.' . "\n\nCONTEUDO:\n" . $source_text;
+        $prompt = 'Identifique os titulos de filmes realmente escritos no conteudo abaixo. Esta e uma etapa tecnica de extracao para uma busca posterior no TMDB. O campo query deve ser uma copia literal do nome encontrado na fonte: nao traduza, nao localize, nao translitere, nao corrija e nao substitua o titulo por seu equivalente em outro idioma. Nao explique, nao gere descricoes e nao inclua evidence. Nao inclua atores, diretores, personagens, series ou plataformas. Se o titulo da fonte for uma manchete como "Nome do filme + frase editorial", isole o nome do filme mantendo a grafia original. Nunca retorne um termo generico como "filmes romanticos" ou "filmes da Netflix" como se fosse um filme. A pauta pede no maximo ' . $movie_limit . ' filmes; retorne no maximo essa quantidade de itens e preserve a ordem da fonte. Retorne apenas JSON no formato solicitado.' . "\n\nCONTEUDO:\n" . $source_text;
         $extracted = Content_Rank_Generator::request_openai_json($generator, $prompt, array(
             'stage' => 'tmdb_movie_entity_extraction',
             'source_type' => !empty($generator['source_type']) ? $generator['source_type'] : 'rss',
             'item_guid' => !empty($item['guid']) ? $item['guid'] : '',
             'item_title' => !empty($item['title']) ? $item['title'] : '',
+            'skip_language_instruction' => 1,
             'response_schema' => $schema,
             'response_schema_name' => 'tmdb_movie_entities',
         ));
