@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.69",
+  "version": "1.9.70",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>O campo Fonte da imagem agora e renderizado no HTML com o valor salvo no banco.</li><li>Adicionada selecao PHP explicita para TMDB - thumbnail composta.</li><li>Mantidos os logs e a protecao contra sobrescrita no JavaScript.</li></ul>",
+  "changelog": "<ul><li>Corrigida a serializacao dos geradores para o JavaScript quando existem textos com UTF-8 invalido no banco.</li><li>O editor agora recebe corretamente os dados dos geradores, incluindo image_source_mode.</li><li>Removido log temporario do HTML.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

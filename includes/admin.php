@@ -816,7 +816,7 @@ class Content_Rank_Generator_Admin
 
             <script>
                 (function() {
-                    var generators = <?php echo wp_json_encode(array_values($generators)); ?>;
+                    var generators = <?php echo wp_json_encode(array_values($generators), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); ?>;
                     var defaults = <?php echo wp_json_encode(array(
                                         'generator_id' => '',
                                         'name' => '',
@@ -873,7 +873,7 @@ class Content_Rank_Generator_Admin
                                         'related_posts_phrases' => Content_Rank_Generator::get_default_related_posts_phrases(),
                                         'internal_links_count' => '0',
                                         'internal_links_json' => '[]',
-                                    )); ?>;
+                                    ), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); ?>;
                     var editId = <?php echo intval($edit_id); ?>;
                     var settingsModal = document.getElementById('content-rank-settings-modal');
                     var settingsBackdrop = document.getElementById('content-rank-settings-backdrop');
