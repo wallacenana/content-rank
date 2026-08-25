@@ -2489,7 +2489,7 @@ class Content_Rank_Generator_Helper
             }
         }
 
-        $max_sections = max(1, intval($max_sections));
+        $max_sections = max(0, intval($max_sections));
         $max_links_per_section = max(0, intval($max_links_per_section));
         $max_images_per_section = max(0, intval($max_images_per_section));
         libxml_use_internal_errors(true);
@@ -2512,7 +2512,7 @@ class Content_Rank_Generator_Helper
         $heading_nodes = $h2_count > 0 ? $h2_nodes : $h3_nodes;
 
         $outline = array();
-        for ($i = 0; $i < $heading_nodes->length && count($outline) < $max_sections; $i++) {
+        for ($i = 0; $i < $heading_nodes->length && ($max_sections === 0 || count($outline) < $max_sections); $i++) {
             $heading = $heading_nodes->item($i);
             if (!($heading instanceof DOMElement)) {
                 continue;
@@ -5152,7 +5152,7 @@ class Content_Rank_Generator_Helper
         $item = is_array($item) ? $item : array();
         // Keep the complete source outline. The title prompt decides how many
         // items the final article should use.
-        $max_items = PHP_INT_MAX;
+        $max_items = 0;
 
         $titles = array();
 
@@ -5165,7 +5165,7 @@ class Content_Rank_Generator_Helper
         }
 
         if ($source_html !== '') {
-            $outline_from_html = self::extract_page_outline_from_html($source_html, '', $max_items, 0, 0, '', '', '');
+            $outline_from_html = self::extract_page_outline_from_html($source_html, '', 0, 0, 0, '', '', '');
             if (is_array($outline_from_html) && !empty($outline_from_html)) {
                 foreach ($outline_from_html as $section) {
                     if (!is_array($section)) {
@@ -5186,7 +5186,7 @@ class Content_Rank_Generator_Helper
                         $titles[] = $title;
                     }
 
-                    if (count($titles) >= $max_items) {
+                    if ($max_items > 0 && count($titles) >= $max_items) {
                         break;
                     }
                 }
@@ -5213,7 +5213,7 @@ class Content_Rank_Generator_Helper
                     $titles[] = $title;
                 }
 
-                if (count($titles) >= $max_items) {
+                if ($max_items > 0 && count($titles) >= $max_items) {
                     break;
                 }
             }
@@ -5247,7 +5247,7 @@ class Content_Rank_Generator_Helper
                         }
                     }
 
-                    if (count($titles) >= $max_items) {
+                    if ($max_items > 0 && count($titles) >= $max_items) {
                         break;
                     }
                 }
