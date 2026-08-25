@@ -5072,16 +5072,12 @@ class Content_Rank_Generator_Helper
                 continue;
             }
             $title = !empty($movie['title']) ? self::normalize_plain_text((string) $movie['title']) : '';
-            $original_title = !empty($movie['original_title']) ? self::normalize_plain_text((string) $movie['original_title']) : '';
             $year = !empty($movie['year']) ? sanitize_text_field((string) $movie['year']) : '';
             $overview = !empty($movie['overview']) ? self::limit_plain_text_words(self::normalize_plain_text((string) $movie['overview']), 70) : '';
-            if ($title === '' && $original_title === '') {
+            if ($title === '') {
                 continue;
             }
-            $line = ($index + 1) . '. ' . ($title !== '' ? $title : $original_title);
-            if ($original_title !== '' && $original_title !== $title) {
-                $line .= ' | titulo original: ' . $original_title;
-            }
+            $line = ($index + 1) . '. ' . $title;
             if ($year !== '') {
                 $line .= ' | ano: ' . $year;
             }
@@ -5194,6 +5190,24 @@ class Content_Rank_Generator_Helper
     {
         $item = is_array($item) ? $item : array();
         $max_items = max(1, intval($max_items));
+
+        // Once TMDB has resolved the movies, the source outline must use only
+        // the localized titles instead of rebuilding the list from raw HTML.
+        if (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])) {
+            $localized_titles = array();
+            foreach (array_slice($item['tmdb_movies'], 0, $max_items) as $movie) {
+                if (!is_array($movie) || empty($movie['title'])) {
+                    continue;
+                }
+                $title = self::normalize_prompt_context_text((string) $movie['title']);
+                if ($title !== '') {
+                    $localized_titles[] = sprintf('%02d. %s%s', count($localized_titles) + 1, $title, !empty($movie['year']) ? ' (' . sanitize_text_field((string) $movie['year']) . ')' : '');
+                }
+            }
+            if (!empty($localized_titles)) {
+                return implode("\n", $localized_titles);
+            }
+        }
 
         $titles = array();
 
