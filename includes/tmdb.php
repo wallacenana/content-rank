@@ -98,6 +98,85 @@ final class Content_Rank_TMDB
         exit;
     }
 
+    public static function resolve_item_movies($generator, $item)
+    {
+        $generator = is_array($generator) ? $generator : array();
+        $item = is_array($item) ? $item : array();
+        if (empty($item) || !empty($item['tmdb_movies'])) {
+            return $item;
+        }
+
+        $source_text = array();
+        foreach (array('source_title', 'title', 'keyword', 'source_page_content', 'content', 'source_page_content_html', 'source_page_html') as $key) {
+            if (empty($item[$key])) {
+                continue;
+            }
+            $value = wp_strip_all_tags((string) $item[$key]);
+            $value = trim(preg_replace('/\s+/u', ' ', $value));
+            if ($value !== '') {
+                $source_text[] = $value;
+            }
+        }
+        $source_text = implode("\n", $source_text);
+        $source_text = function_exists('mb_substr') ? mb_substr($source_text, 0, 14000, 'UTF-8') : substr($source_text, 0, 14000);
+        if ($source_text === '') {
+            return $item;
+        }
+
+        $schema = array(
+            'type' => 'object',
+            'additionalProperties' => false,
+            'properties' => array(
+                'movies' => array(
+                    'type' => 'array',
+                    'items' => array(
+                        'type' => 'object',
+                        'additionalProperties' => false,
+                        'properties' => array(
+                            'query' => array('type' => 'string'),
+                            'evidence' => array('type' => 'string'),
+                        ),
+                        'required' => array('query', 'evidence'),
+                    ),
+                ),
+            ),
+            'required' => array('movies'),
+        );
+        $prompt = 'Extraia do conteudo abaixo somente os titulos de filmes realmente mencionados. Nao inclua atores, diretores, personagens, series ou plataformas. Preserve o nome como aparece na fonte para que outro sistema possa resolver a obra. Retorne apenas JSON no formato solicitado.' . "\n\nCONTEUDO:\n" . $source_text;
+        $extracted = Content_Rank_Generator::request_openai_json($generator, $prompt, array(
+            'stage' => 'tmdb_movie_entity_extraction',
+            'source_type' => !empty($generator['source_type']) ? $generator['source_type'] : 'rss',
+            'item_guid' => !empty($item['guid']) ? $item['guid'] : '',
+            'item_title' => !empty($item['title']) ? $item['title'] : '',
+            'response_schema' => $schema,
+            'response_schema_name' => 'tmdb_movie_entities',
+        ));
+        if (is_wp_error($extracted) || empty($extracted['movies']) || !is_array($extracted['movies'])) {
+            return $item;
+        }
+
+        $service = new self();
+        $movies = array();
+        foreach (array_slice($extracted['movies'], 0, 10) as $entity) {
+            $query = !empty($entity['query']) ? sanitize_text_field((string) $entity['query']) : '';
+            if ($query === '') {
+                continue;
+            }
+            $search = $service->search_movies($query);
+            if (empty($search['results'][0])) {
+                continue;
+            }
+            $movie = $search['results'][0];
+            $movie['source_query'] = $query;
+            $movie['source_evidence'] = !empty($entity['evidence']) ? sanitize_text_field((string) $entity['evidence']) : '';
+            $movies[] = $movie;
+        }
+        if (!empty($movies)) {
+            $item['tmdb_movies'] = $movies;
+        }
+        return $item;
+    }
+
     private function generate_post_from_term($term)
     {
         $term = trim((string) $term);

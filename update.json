@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.55",
+  "version": "1.9.56",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Incluidos no esboco e no conteudo os filmes selecionados pelo TMDB.</li><li>Adicionados titulo brasileiro, titulo original, ano e sinopse como contexto factual.</li></ul>",
+  "changelog": "<ul><li>Adicionada extracao opcional de titulos de filmes em conteudos RSS.</li><li>Os titulos extraidos sao resolvidos no TMDB antes do esboco.</li><li>O esboco e o conteudo recebem os filmes confirmados pelo TMDB.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

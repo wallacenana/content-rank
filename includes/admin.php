@@ -2117,6 +2117,11 @@ class Content_Rank_Generator_Admin
                             <label class="mb-1 mt-3 block text-sm font-medium text-slate-700">API key TMDB v3 (alternativa)</label>
                             <input type="password" name="tmdb_api_key" value="<?php echo esc_attr($settings['tmdb_api_key']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
                             <p class="mt-2 text-xs text-slate-600">Use preferencialmente o Token de Leitura v4. A API key v3 fica como alternativa.</p>
+                            <label class="mt-3 flex items-center gap-2 text-sm text-slate-700">
+                                <input type="checkbox" name="tmdb_auto_resolve_movies" value="1" <?php checked(!empty($settings['tmdb_auto_resolve_movies'])); ?> class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                                Identificar filmes automaticamente em fontes RSS
+                            </label>
+                            <p class="mt-2 text-xs text-slate-600">Usa uma etapa adicional da OpenAI para extrair titulos do RSS e consulta-los no TMDB antes do esboco.</p>
                         </div>
                         <div data-settings-tab-panel="general" class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                             <div class="mb-3">
