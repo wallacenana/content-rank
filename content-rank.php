@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.59
+Version: 1.9.60
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.59');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.60');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.59';
+        const VERSION = '1.9.60';
         const DB_VERSION = '1.8.4';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -1910,6 +1910,9 @@ if (!class_exists('Content_Rank_Generator')) {
 
         public static function generator_uses_source_content_images($generator)
         {
+            if (!empty($generator['image_source_mode']) && sanitize_key((string) $generator['image_source_mode']) === 'tmdb_composite') {
+                return false;
+            }
             if (isset($generator['source_content_images_enabled'])) {
                 return !empty($generator['source_content_images_enabled']);
             }
@@ -3457,6 +3460,9 @@ if (!class_exists('Content_Rank_Generator')) {
             $payload['source_content_links_enabled'] = isset($raw['source_content_links_enabled'])
                 ? (!empty($raw['source_content_links_enabled']) ? 1 : 0)
                 : (isset($raw['source_content_media_enabled']) ? (!empty($raw['source_content_media_enabled']) ? 1 : 0) : 1);
+            if ($payload['image_source_mode'] === 'tmdb_composite') {
+                $payload['source_content_images_enabled'] = 0;
+            }
             $payload['tmdb_composite_thumbnail_enabled'] = !empty($raw['tmdb_composite_thumbnail_enabled']) ? 1 : 0;
             $payload['video_selector_class'] = isset($raw['video_selector_class']) ? sanitize_text_field(wp_unslash($raw['video_selector_class'])) : '';
             $payload['image_selector_class'] = isset($raw['image_selector_class']) ? sanitize_text_field(wp_unslash($raw['image_selector_class'])) : '';
@@ -9228,7 +9234,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 return $item;
             }
             $tmdb_composite_mode = !empty($generator['image_source_mode']) && sanitize_key((string) $generator['image_source_mode']) === 'tmdb_composite';
-            if (class_exists('Content_Rank_TMDB') && ($tmdb_composite_mode || !empty(self::get_settings()['tmdb_auto_resolve_movies'])) && !empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'rss') {
+            if (class_exists('Content_Rank_TMDB') && ($tmdb_composite_mode || (!empty(self::get_settings()['tmdb_auto_resolve_movies']) && !empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'rss'))) {
                 $item = Content_Rank_TMDB::resolve_item_movies($generator, $item);
             }
 
@@ -9528,7 +9534,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 return $item;
             }
             $tmdb_composite_mode = !empty($generator['image_source_mode']) && sanitize_key((string) $generator['image_source_mode']) === 'tmdb_composite';
-            if (class_exists('Content_Rank_TMDB') && ($tmdb_composite_mode || !empty(self::get_settings()['tmdb_auto_resolve_movies'])) && !empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'rss') {
+            if (class_exists('Content_Rank_TMDB') && ($tmdb_composite_mode || (!empty(self::get_settings()['tmdb_auto_resolve_movies']) && !empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'rss'))) {
                 $item = Content_Rank_TMDB::resolve_item_movies($generator, $item);
             }
             $use_source_page_context = self::generator_uses_source_page_context($generator);

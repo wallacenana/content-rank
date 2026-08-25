@@ -142,7 +142,7 @@ final class Content_Rank_TMDB
             ),
             'required' => array('movies'),
         );
-        $prompt = 'Extraia do conteudo abaixo somente os titulos de filmes realmente mencionados. Nao inclua atores, diretores, personagens, series ou plataformas. Preserve o nome como aparece na fonte para que outro sistema possa resolver a obra. Retorne apenas JSON no formato solicitado.' . "\n\nCONTEUDO:\n" . $source_text;
+        $prompt = 'Extraia do conteudo abaixo somente os titulos de filmes realmente mencionados. Nao inclua atores, diretores, personagens, series ou plataformas. Se o titulo da fonte for uma manchete como "Nome do filme + frase editorial", isole o nome do filme. Preserve o nome como aparece na fonte para que outro sistema possa resolver a obra. Nunca retorne um termo generico como "filmes romanticos" ou "filmes da Netflix" como se fosse um filme. Retorne apenas JSON no formato solicitado.' . "\n\nCONTEUDO:\n" . $source_text;
         $extracted = Content_Rank_Generator::request_openai_json($generator, $prompt, array(
             'stage' => 'tmdb_movie_entity_extraction',
             'source_type' => !empty($generator['source_type']) ? $generator['source_type'] : 'rss',

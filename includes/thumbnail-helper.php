@@ -37,11 +37,16 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     isset($generator['pexels_enabled']) ? !empty($generator['pexels_enabled']) : null,
                     $keyword_list_mode
                 );
+            $is_tmdb_composite_mode = $image_source_mode === 'tmdb_composite';
 
-            $use_source_image = $treat_like_rss
+            // TMDB mode must not silently fall back to the RSS image. The
+            // composite step runs after this helper and needs a clean fallback
+            // only when no poster could be resolved.
+            $use_source_image = !$is_tmdb_composite_mode
+                && $treat_like_rss
                 && Content_Rank_Generator::image_source_mode_uses_source_image($image_source_mode);
-            $use_pexels = Content_Rank_Generator::image_source_mode_uses_pexels($image_source_mode);
-            $use_dalle = Content_Rank_Generator::image_source_mode_uses_dalle($image_source_mode);
+            $use_pexels = !$is_tmdb_composite_mode && Content_Rank_Generator::image_source_mode_uses_pexels($image_source_mode);
+            $use_dalle = !$is_tmdb_composite_mode && Content_Rank_Generator::image_source_mode_uses_dalle($image_source_mode);
             $title = !empty($article['title'])
                 ? (string) $article['title']
                 : (!empty($item['source_title']) ? (string) $item['source_title'] : (!empty($item['title']) ? (string) $item['title'] : ''));
