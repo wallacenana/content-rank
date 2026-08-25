@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.60",
+  "version": "1.9.61",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Corrigido o modo TMDB para nao usar imagens do RSS como thumbnail ou imagens internas do conteudo.</li><li>Reforcada a identificacao de filmes quando o RSS usa manchetes editoriais.</li><li>O modo TMDB continua usando o idioma configurado no gerador.</li></ul>",
+  "changelog": "<ul><li>A regeneracao agora usa as configuracoes atuais do gerador.</li><li>Ao regenerar no modo TMDB, os filmes sao resolvidos novamente no idioma atual.</li><li>Mantidas as correcoes para impedir imagens do RSS no modo thumbnail composta.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

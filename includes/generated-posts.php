@@ -152,8 +152,13 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
 
             $snapshot = self::get_regeneration_snapshot($post_id);
             if (!empty($snapshot)) {
+                $snapshot_generator = $snapshot['generator'];
+                $generator_id = intval(get_post_meta($post_id, '_content_rank_generator_id', true));
+                $current_generator = $generator_id > 0 ? Content_Rank_Generator::get_generator($generator_id) : array();
                 return array(
-                    'generator' => $snapshot['generator'],
+                    // Keep the original RSS item, but use the current generator
+                    // configuration so regeneration honors new TMDB settings.
+                    'generator' => !empty($current_generator) ? $current_generator : $snapshot_generator,
                     'item' => $snapshot['item'],
                     'post' => $post,
                     'from_snapshot' => 1,
