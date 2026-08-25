@@ -6611,6 +6611,7 @@ class Content_Rank_Generator_Helper
                 break;
             }
         }
+        $source_outline_titles = self::build_source_outline_titles_for_prompt($item, 0, $generator);
         $selected_tags = Content_Rank_Generator::get_generator_selected_tags($generator);
         $selected_tags_csv = !empty($selected_tags) ? implode(', ', $selected_tags) : '';
 
@@ -6645,6 +6646,7 @@ class Content_Rank_Generator_Helper
 
         $hidden_context = array(
             'Contexto interno:',
+            'REESCRITA PRINCIPAL: reescreva o conteudo da fonte de forma original, clara e natural. Preserve os fatos, nomes, anos, ordem dos itens e informacoes importantes. Nao invente dados, nao resuma a ponto de remover itens e nao mencione que o texto foi reescrito.',
             'Titulo gerado: {{generated_title}}',
             'kw: {{generated_focus_keyword}}',
             'Site de referencia: {{source_site_name}}',
@@ -6654,6 +6656,9 @@ class Content_Rank_Generator_Helper
             'Conteudo HTML filtrado da fonte: {{source_content}}',
             'LIMITE ABSOLUTO: o content_html final deve ter no maximo 1200 palavras. Se faltar espaco, corte detalhes secundarios; nunca ultrapasse esse limite.',
         );
+        if ($source_outline_titles !== '') {
+            $hidden_context[] = 'TITULOS DOS ITENS DA FONTE, JA LOCALIZADOS PELO TMDB: ' . $source_outline_titles;
+        }
         if (is_string($row_data) && $row_data !== '') {
             $hidden_context[] = 'Dados completos da linha de origem: {{row_data}}';
         }
@@ -6866,11 +6871,18 @@ class Content_Rank_Generator_Helper
             }
         }
 
-        $outline_base_context = self::build_outline_context_base($generator);
-        $outline_context = self::build_outline_context_from_source($generator, $item, array(), $outline_base_context);
-        if (is_wp_error($outline_context)) {
-            return $outline_context;
-        }
+        // Temporarily avoid the AI outline/classification pass. The source is
+        // already structured; only a minimal deterministic context is needed.
+        $outline_context = self::build_outline_context_base($generator);
+        $outline_context['content_type'] = !empty($generator['prompt_model_key'])
+            ? Content_Rank_Generator::normalize_prompt_model_key((string) $generator['prompt_model_key'])
+            : 'artigo';
+        $outline_context['funnel_level'] = 'mid';
+        $outline_context['focus_keyword'] = !empty($item['keyword'])
+            ? self::normalize_prompt_context_text((string) $item['keyword'])
+            : (!empty($item['source_title']) ? self::normalize_prompt_context_text((string) $item['source_title']) : '');
+        $outline_context['outline_text'] = '';
+        $outline_context['outline_sections'] = array();
 
         if (!empty($item['existing_keyword_post_titles']) && is_array($item['existing_keyword_post_titles'])) {
             $outline_context['existing_keyword_post_titles'] = array_values($item['existing_keyword_post_titles']);
@@ -7006,11 +7018,12 @@ class Content_Rank_Generator_Helper
 
         $seo_article = !empty($seo_stage['seo_article']) && is_array($seo_stage['seo_article']) ? $seo_stage['seo_article'] : array();
         $outline_context = !empty($seo_stage['outline_context']) && is_array($seo_stage['outline_context']) ? $seo_stage['outline_context'] : $outline_context;
-        $content_outline_context = self::generate_content_outline_context($generator, $item, $seo_article, $outline_context);
-        if (is_wp_error($content_outline_context)) {
-            return $content_outline_context;
-        }
-        $outline_context = $content_outline_context;
+        // Temporarily skip the second AI outline pass. The source already has
+        // the editorial structure; the content stage should rewrite it directly.
+        $outline_context['outline_text'] = '';
+        $outline_context['outline_sections'] = array();
+        $outline_context['outline_response_id'] = '';
+        self::build_source_outline_titles_for_prompt($item, 0, $generator);
         $content_article = self::generate_content_article_stage($generator, $item, $seo_article, $outline_context);
         if (is_wp_error($content_article)) {
             return $content_article;
