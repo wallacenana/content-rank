@@ -180,6 +180,41 @@ final class Content_Rank_TMDB
         return $item;
     }
 
+    public static function refresh_item_movies_language($generator, $item)
+    {
+        $generator = is_array($generator) ? $generator : array();
+        $item = is_array($item) ? $item : array();
+        if (empty($item['tmdb_movies']) || !is_array($item['tmdb_movies'])) {
+            return $item;
+        }
+
+        $service = new self();
+        $language = self::tmdb_language_from_generator($generator);
+        $movies = array();
+        foreach ($item['tmdb_movies'] as $movie) {
+            if (!is_array($movie)) {
+                continue;
+            }
+            $query = !empty($movie['source_query']) ? (string) $movie['source_query'] : (!empty($movie['original_title']) ? (string) $movie['original_title'] : (string) ($movie['title'] ?? ''));
+            $query = trim($query);
+            if ($query === '') {
+                continue;
+            }
+            $search = $service->search_movies($query, $language);
+            if (!empty($search['results'][0]) && is_array($search['results'][0])) {
+                $localized = $search['results'][0];
+                $localized['source_query'] = $query;
+                $movies[] = $localized;
+            } else {
+                $movies[] = $movie;
+            }
+        }
+        if (!empty($movies)) {
+            $item['tmdb_movies'] = $movies;
+        }
+        return $item;
+    }
+
     public static function create_composite_thumbnail_for_post($post_id, $term, $movies)
     {
         return (new self())->create_composite_thumbnail($post_id, $term, $movies);

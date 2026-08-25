@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.73
+Version: 1.9.74
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.73');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.74');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.73';
+        const VERSION = '1.9.74';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -9237,12 +9237,12 @@ if (!class_exists('Content_Rank_Generator')) {
                 return $item;
             }
             $tmdb_composite_mode = !empty($generator['image_source_mode']) && sanitize_key((string) $generator['image_source_mode']) === 'tmdb_composite';
-            if ($tmdb_composite_mode && isset($item['tmdb_movies'])) {
-                // Regeneration must resolve titles again using the current
-                // generator language instead of reusing an old snapshot.
-                unset($item['tmdb_movies']);
-            }
-            if (class_exists('Content_Rank_TMDB') && ($tmdb_composite_mode || (!empty(self::get_settings()['tmdb_auto_resolve_movies']) && !empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'rss'))) {
+            if (class_exists('Content_Rank_TMDB') && $tmdb_composite_mode && !empty($item['tmdb_movies'])) {
+                // Regeneration already has the resolved movies in its snapshot.
+                // Refresh only their localized TMDB data; never ask the AI to
+                // re-extract the same source list from the raw article.
+                $item = Content_Rank_TMDB::refresh_item_movies_language($generator, $item);
+            } elseif (class_exists('Content_Rank_TMDB') && ($tmdb_composite_mode || (!empty(self::get_settings()['tmdb_auto_resolve_movies']) && !empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'rss'))) {
                 $item = Content_Rank_TMDB::resolve_item_movies($generator, $item);
             }
 
