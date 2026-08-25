@@ -122,6 +122,23 @@ final class Content_Rank_TMDB
             return $item;
         }
 
+        // Several pipeline stages receive a copy of the item. Cache the
+        // extraction and the resolved TMDB records so those stages do not
+        // call the AI and TMDB again for the same source.
+        $language = self::tmdb_language_from_generator($generator);
+        $cache_identity = !empty($item['guid'])
+            ? (string) $item['guid']
+            : (!empty($item['permalink']) ? (string) $item['permalink'] : (!empty($item['title']) ? (string) $item['title'] : $source_text));
+        $cache_suffix = md5($cache_identity . '|' . md5($source_text) . '|' . $language);
+        $resolved_cache_key = 'content_rank_tmdb_movies_' . $cache_suffix;
+        $cached_resolved = get_transient($resolved_cache_key);
+        if (is_array($cached_resolved) && !empty($cached_resolved['resolved'])) {
+            if (isset($cached_resolved['movies']) && is_array($cached_resolved['movies']) && !empty($cached_resolved['movies'])) {
+                $item['tmdb_movies'] = $cached_resolved['movies'];
+            }
+            return $item;
+        }
+
         $schema = array(
             'type' => 'object',
             'additionalProperties' => false,
@@ -146,21 +163,29 @@ final class Content_Rank_TMDB
             $movie_limit = min(10, max(1, intval($count_match[1])));
         }
         $prompt = 'Identifique os titulos de filmes realmente escritos no conteudo abaixo. Esta e uma etapa tecnica de extracao para uma busca posterior no TMDB. O campo query deve ser uma copia literal do nome encontrado na fonte: nao traduza, nao localize, nao translitere, nao corrija e nao substitua o titulo por seu equivalente em outro idioma. Nao explique, nao gere descricoes e nao inclua evidence. Nao inclua atores, diretores, personagens, series ou plataformas. Se o titulo da fonte for uma manchete como "Nome do filme + frase editorial", isole o nome do filme mantendo a grafia original. Nunca retorne um termo generico como "filmes romanticos" ou "filmes da Netflix" como se fosse um filme. A pauta pede no maximo ' . $movie_limit . ' filmes; retorne no maximo essa quantidade de itens e preserve a ordem da fonte. Retorne apenas JSON no formato solicitado.' . "\n\nCONTEUDO:\n" . $source_text;
-        $extracted = Content_Rank_Generator::request_openai_json($generator, $prompt, array(
-            'stage' => 'tmdb_movie_entity_extraction',
-            'source_type' => !empty($generator['source_type']) ? $generator['source_type'] : 'rss',
-            'item_guid' => !empty($item['guid']) ? $item['guid'] : '',
-            'item_title' => !empty($item['title']) ? $item['title'] : '',
-            'skip_language_instruction' => 1,
-            'response_schema' => $schema,
-            'response_schema_name' => 'tmdb_movie_entities',
-        ));
+        $extraction_cache_key = 'content_rank_tmdb_extract_' . $cache_suffix;
+        $cached_extraction = get_transient($extraction_cache_key);
+        if (is_array($cached_extraction) && isset($cached_extraction['movies']) && is_array($cached_extraction['movies'])) {
+            $extracted = $cached_extraction;
+        } else {
+            $extracted = Content_Rank_Generator::request_openai_json($generator, $prompt, array(
+                'stage' => 'tmdb_movie_entity_extraction',
+                'source_type' => !empty($generator['source_type']) ? $generator['source_type'] : 'rss',
+                'item_guid' => !empty($item['guid']) ? $item['guid'] : '',
+                'item_title' => !empty($item['title']) ? $item['title'] : '',
+                'skip_language_instruction' => 1,
+                'response_schema' => $schema,
+                'response_schema_name' => 'tmdb_movie_entities',
+            ));
+            if (is_array($extracted) && isset($extracted['movies']) && is_array($extracted['movies'])) {
+                set_transient($extraction_cache_key, array('movies' => $extracted['movies']), HOUR_IN_SECONDS);
+            }
+        }
         if (is_wp_error($extracted) || empty($extracted['movies']) || !is_array($extracted['movies'])) {
             return $item;
         }
 
         $service = new self();
-        $language = self::tmdb_language_from_generator($generator);
         $movies = array();
         foreach (array_slice($extracted['movies'], 0, $movie_limit) as $entity) {
             $query = !empty($entity['query']) ? sanitize_text_field((string) $entity['query']) : '';
@@ -169,6 +194,11 @@ final class Content_Rank_TMDB
             }
             $search = $service->search_movies($query, $language);
             if (empty($search['results'][0])) {
+                error_log('[Content Rank][tmdb] movie not found ' . wp_json_encode(array(
+                    'query' => $query,
+                    'language' => $language,
+                    'error' => isset($search['error']) ? $search['error'] : 'no results',
+                ), JSON_UNESCAPED_UNICODE));
                 continue;
             }
             $movie = $search['results'][0];
@@ -192,6 +222,7 @@ final class Content_Rank_TMDB
         if (!empty($movies)) {
             $item['tmdb_movies'] = $movies;
         }
+        set_transient($resolved_cache_key, array('resolved' => 1, 'movies' => $movies), HOUR_IN_SECONDS);
         error_log('[Content Rank][tmdb] resolved movies ' . wp_json_encode(array(
             'language' => $language,
             'movies' => array_map(function ($movie) {
