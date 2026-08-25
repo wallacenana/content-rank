@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.64",
+  "version": "1.9.65",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Corrigida a preservacao de TMDB no formulario de geradores.</li><li>O salvamento agora informa o erro real do banco quando falhar.</li><li>Mantidos o fluxo de regeneracao e a thumbnail composta.</li></ul>",
+  "changelog": "<ul><li>Adicionados logs do valor recebido, normalizado e salvo no gerador.</li><li>Falhas de UPDATE e INSERT agora ficam registradas no debug.log.</li><li>Mantidos o fluxo de regeneracao e a thumbnail composta.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""
