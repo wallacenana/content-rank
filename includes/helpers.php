@@ -4764,6 +4764,8 @@ class Content_Rank_Generator_Helper
         }
 
         $title = preg_replace('/\s+/u', ' ', $title);
+        // Remove a numeracao de lista que a IA pode colocar antes de um titulo quantificado.
+        $title = preg_replace('/^\s*\d{1,2}\s*[\.\)]\s+(?=\d{1,3}\s)/u', '', $title);
 
         return trim($title);
     }
