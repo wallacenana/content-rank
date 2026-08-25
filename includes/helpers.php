@@ -6051,6 +6051,16 @@ class Content_Rank_Generator_Helper
 
     public static function build_outline_context_from_source($generator, $item, $seo_article = array(), $outline_context = array())
     {
+        $generator = is_array($generator) ? $generator : array();
+        $item = is_array($item) ? $item : array();
+        $tmdb_composite_mode = !empty($generator['image_source_mode'])
+            && sanitize_key((string) $generator['image_source_mode']) === 'tmdb_composite';
+        if ($tmdb_composite_mode && class_exists('Content_Rank_TMDB') && empty($item['tmdb_movies'])) {
+            $resolved_item = Content_Rank_TMDB::resolve_item_movies($generator, $item);
+            if (is_array($resolved_item)) {
+                $item = $resolved_item;
+            }
+        }
         $outline_context = is_array($outline_context) && !empty($outline_context) ? $outline_context : self::build_outline_context_base($generator);
         $selected_prompt_model_key = !empty($generator['prompt_model_key'])
             ? Content_Rank_Generator::normalize_prompt_model_key((string) $generator['prompt_model_key'])

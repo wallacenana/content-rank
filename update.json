@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.82",
+  "version": "1.9.83",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>A estrutura da página agora usa somente os títulos localizados pelo TMDB.</li><li>Os títulos originais em inglês não são mais enviados no bloco oficial de filmes.</li><li>A lista numerada da pipeline passa a ser baseada diretamente em tmdb_movies.</li></ul>",
+  "changelog": "<ul><li>O prompt de outline agora resolve o TMDB antes de montar a estrutura da fonte.</li><li>Os títulos localizados ficam disponíveis mesmo quando o outline é chamado diretamente.</li><li>A lista em inglês não é usada quando o gerador está em modo TMDB composite.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""
