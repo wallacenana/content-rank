@@ -126,10 +126,10 @@ final class Content_Rank_TMDB
         // extraction and the resolved TMDB records so those stages do not
         // call the AI and TMDB again for the same source.
         $language = self::tmdb_language_from_generator($generator);
-        $cache_identity = !empty($item['guid'])
-            ? (string) $item['guid']
-            : (!empty($item['permalink']) ? (string) $item['permalink'] : (!empty($item['title']) ? (string) $item['title'] : $source_text));
-        $cache_suffix = md5($cache_identity . '|' . md5($source_text) . '|' . $language);
+        // The same RSS entry can arrive with different item metadata during
+        // the staged pipeline. The normalized source is the stable identity.
+        $source_cache_suffix = md5($source_text);
+        $cache_suffix = md5($source_cache_suffix . '|' . $language);
         $resolved_cache_key = 'content_rank_tmdb_movies_' . $cache_suffix;
         $cached_resolved = get_transient($resolved_cache_key);
         if (is_array($cached_resolved) && !empty($cached_resolved['resolved'])) {
@@ -163,8 +163,11 @@ final class Content_Rank_TMDB
             $movie_limit = min(10, max(1, intval($count_match[1])));
         }
         $prompt = 'Identifique os titulos de filmes realmente escritos no conteudo abaixo. Esta e uma etapa tecnica de extracao para uma busca posterior no TMDB. O campo query deve ser uma copia literal do nome encontrado na fonte: nao traduza, nao localize, nao translitere, nao corrija e nao substitua o titulo por seu equivalente em outro idioma. Nao explique, nao gere descricoes e nao inclua evidence. Nao inclua atores, diretores, personagens, series ou plataformas. Se o titulo da fonte for uma manchete como "Nome do filme + frase editorial", isole o nome do filme mantendo a grafia original. Nunca retorne um termo generico como "filmes romanticos" ou "filmes da Netflix" como se fosse um filme. A pauta pede no maximo ' . $movie_limit . ' filmes; retorne no maximo essa quantidade de itens e preserve a ordem da fonte. Retorne apenas JSON no formato solicitado.' . "\n\nCONTEUDO:\n" . $source_text;
-        $extraction_cache_key = 'content_rank_tmdb_extract_' . $cache_suffix;
-        $cached_extraction = get_transient($extraction_cache_key);
+        $extraction_cache_key = 'content_rank_tmdb_extract_' . $source_cache_suffix;
+        static $extraction_memory_cache = array();
+        $cached_extraction = isset($extraction_memory_cache[$extraction_cache_key])
+            ? $extraction_memory_cache[$extraction_cache_key]
+            : get_transient($extraction_cache_key);
         if (is_array($cached_extraction) && isset($cached_extraction['movies']) && is_array($cached_extraction['movies'])) {
             $extracted = $cached_extraction;
         } else {
@@ -178,7 +181,9 @@ final class Content_Rank_TMDB
                 'response_schema_name' => 'tmdb_movie_entities',
             ));
             if (is_array($extracted) && isset($extracted['movies']) && is_array($extracted['movies'])) {
-                set_transient($extraction_cache_key, array('movies' => $extracted['movies']), HOUR_IN_SECONDS);
+                $cached_extraction = array('movies' => $extracted['movies']);
+                $extraction_memory_cache[$extraction_cache_key] = $cached_extraction;
+                set_transient($extraction_cache_key, $cached_extraction, HOUR_IN_SECONDS);
             }
         }
         if (is_wp_error($extracted) || empty($extracted['movies']) || !is_array($extracted['movies'])) {
