@@ -341,6 +341,11 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
             }
             $this->redirect_with_notice('Regeneracao iniciada. Acompanhe o progresso no aviso de geracao.', 'success');
 
+            // The staged pipeline is now responsible for the whole
+            // regeneration. Do not continue into the legacy synchronous
+            // call_openai flow, or the same post is generated twice.
+            return;
+
             $article = Content_Rank_Generator_Helper::call_openai($generator, $item);
             if (is_wp_error($article)) {
                 Content_Rank_Generator::force_generated_post_draft($post_id, $article->get_error_message());
