@@ -595,6 +595,14 @@ class Content_Rank_Generator_Admin
                                         <option value="1">Sim</option>
                                     </select>
                                 </div>
+                                <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 md:col-span-2">
+                                    <label class="mb-1 block text-sm font-medium text-amber-900">Criar thumbnail composta com os filmes encontrados pelo TMDB</label>
+                                    <select name="tmdb_composite_thumbnail_enabled" class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                        <option value="0" selected>Nao</option>
+                                        <option value="1">Sim</option>
+                                    </select>
+                                    <p class="mt-1 text-xs text-amber-800">Funciona quando o TMDB identifica filmes no item. A imagem sera criada sem texto adicional.</p>
+                                </div>
                                 <div class="grid gap-4 md:col-span-2 md:grid-cols-2" data-rss-source-media-toggle-field>
                                     <div>
                                         <label class="mb-1 block text-sm font-medium text-slate-700">Usar imagens da fonte</label>
@@ -839,6 +847,7 @@ class Content_Rank_Generator_Admin
                                         'source_video_enabled' => '0',
                                         'source_content_images_enabled' => '1',
                                         'source_content_links_enabled' => '1',
+                                        'tmdb_composite_thumbnail_enabled' => '0',
                                         'video_selector_class' => '',
                                         'image_selector_class' => '',
                                         'link_selector_class' => '',
@@ -1657,6 +1666,7 @@ class Content_Rank_Generator_Admin
                         setValue('image_source_mode', normalizeImageSourceModeForType(defaults.source_type, defaults.keyword_list_mode, defaults.image_source_mode || getDefaultImageSourceModeForType(defaults.source_type, defaults.keyword_list_mode)));
                         setValue('pexels_query', defaults.pexels_query);
                         setValue('source_video_enabled', defaults.source_video_enabled);
+                        setValue('tmdb_composite_thumbnail_enabled', defaults.tmdb_composite_thumbnail_enabled);
                         setValue('video_selector_class', defaults.video_selector_class);
                         setValue('content_selector', defaults.content_selector);
                         setValue('content_image_size', defaults.content_image_size);
@@ -1717,6 +1727,7 @@ class Content_Rank_Generator_Admin
                         setValue('image_source_mode', normalizeImageSourceModeForType(generator.source_type || defaults.source_type, generator.keyword_list_mode || defaults.keyword_list_mode, generator.image_source_mode || (typeof generator.pexels_enabled !== 'undefined' ? (String(generator.pexels_enabled) === '1' ? 'rss_or_pexels' : 'rss') : defaults.image_source_mode)));
                         setValue('pexels_query', generator.pexels_query || defaults.pexels_query);
                         setValue('source_video_enabled', String(typeof generator.source_video_enabled !== 'undefined' ? generator.source_video_enabled : defaults.source_video_enabled));
+                        setValue('tmdb_composite_thumbnail_enabled', String(typeof generator.tmdb_composite_thumbnail_enabled !== 'undefined' ? generator.tmdb_composite_thumbnail_enabled : defaults.tmdb_composite_thumbnail_enabled));
                         setValue('video_selector_class', generator.video_selector_class || defaults.video_selector_class);
                         setValue('content_selector', generator.content_selector || defaults.content_selector);
                         setValue('content_image_size', generator.content_image_size || defaults.content_image_size);

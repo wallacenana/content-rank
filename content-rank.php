@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.57
+Version: 1.9.58
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.57');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.58');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.57';
+        const VERSION = '1.9.58';
         const DB_VERSION = '1.8.4';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -604,6 +604,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 source_video_enabled tinyint(1) NOT NULL DEFAULT 0,
                 source_content_images_enabled tinyint(1) NOT NULL DEFAULT 1,
                 source_content_links_enabled tinyint(1) NOT NULL DEFAULT 1,
+                tmdb_composite_thumbnail_enabled tinyint(1) NOT NULL DEFAULT 0,
                 video_selector_class varchar(255) NOT NULL DEFAULT '',
                 image_selector_class varchar(255) NOT NULL DEFAULT '',
                 link_selector_class varchar(255) NOT NULL DEFAULT '',
@@ -2296,6 +2297,7 @@ if (!class_exists('Content_Rank_Generator')) {
             $generator['source_content_links_enabled'] = isset($generator['source_content_links_enabled'])
                 ? (!empty($generator['source_content_links_enabled']) ? 1 : 0)
                 : (isset($generator['source_content_media_enabled']) ? (!empty($generator['source_content_media_enabled']) ? 1 : 0) : 1);
+            $generator['tmdb_composite_thumbnail_enabled'] = !empty($generator['tmdb_composite_thumbnail_enabled']) ? 1 : 0;
             $generator['source_link_phrases'] = isset($generator['source_link_phrases']) ? sanitize_textarea_field((string) $generator['source_link_phrases']) : '';
             $generator['pexels_query'] = !empty($settings['pexels_query']) ? sanitize_text_field($settings['pexels_query']) : self::get_default_pexels_query();
             $source_context_filters = array(
@@ -3219,6 +3221,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 'source_video_enabled' => !empty($settings['source_video_enabled']) ? 1 : 0,
                 'source_content_images_enabled' => isset($settings['source_content_images_enabled']) ? (!empty($settings['source_content_images_enabled']) ? 1 : 0) : 1,
                 'source_content_links_enabled' => isset($settings['source_content_links_enabled']) ? (!empty($settings['source_content_links_enabled']) ? 1 : 0) : 1,
+                'tmdb_composite_thumbnail_enabled' => !empty($settings['tmdb_composite_thumbnail_enabled']) ? 1 : 0,
                 'video_selector_class' => !empty($settings['video_selector_class']) ? sanitize_text_field($settings['video_selector_class']) : '',
                 'image_selector_class' => !empty($settings['image_selector_class']) ? sanitize_text_field($settings['image_selector_class']) : '',
                 'link_selector_class' => !empty($settings['link_selector_class']) ? sanitize_text_field($settings['link_selector_class']) : '',
@@ -3454,6 +3457,7 @@ if (!class_exists('Content_Rank_Generator')) {
             $payload['source_content_links_enabled'] = isset($raw['source_content_links_enabled'])
                 ? (!empty($raw['source_content_links_enabled']) ? 1 : 0)
                 : (isset($raw['source_content_media_enabled']) ? (!empty($raw['source_content_media_enabled']) ? 1 : 0) : 1);
+            $payload['tmdb_composite_thumbnail_enabled'] = !empty($raw['tmdb_composite_thumbnail_enabled']) ? 1 : 0;
             $payload['video_selector_class'] = isset($raw['video_selector_class']) ? sanitize_text_field(wp_unslash($raw['video_selector_class'])) : '';
             $payload['image_selector_class'] = isset($raw['image_selector_class']) ? sanitize_text_field(wp_unslash($raw['image_selector_class'])) : '';
             $payload['link_selector_class'] = isset($raw['link_selector_class']) ? sanitize_text_field(wp_unslash($raw['link_selector_class'])) : '';
@@ -9807,6 +9811,16 @@ if (!class_exists('Content_Rank_Generator')) {
                 self::force_generated_post_draft($post_id, $thumbnail_result->get_error_message());
                 return $thumbnail_result;
             }
+            if (class_exists('Content_Rank_TMDB') && !empty($generator['tmdb_composite_thumbnail_enabled']) && !empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])) {
+                $composite_thumbnail_id = Content_Rank_TMDB::create_composite_thumbnail_for_post(
+                    $post_id,
+                    !empty($article['title']) ? $article['title'] : (!empty($item['title']) ? $item['title'] : 'tmdb-thumbnail'),
+                    $item['tmdb_movies']
+                );
+                if (!is_wp_error($composite_thumbnail_id) && intval($composite_thumbnail_id) > 0) {
+                    set_post_thumbnail($post_id, intval($composite_thumbnail_id));
+                }
+            }
 
             $featured_image_id = intval(get_post_thumbnail_id($post_id));
             if ($featured_image_id <= 0) {
@@ -10545,6 +10559,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 'source_video_enabled' => $payload['source_video_enabled'],
                 'source_content_images_enabled' => $payload['source_content_images_enabled'],
                 'source_content_links_enabled' => $payload['source_content_links_enabled'],
+                'tmdb_composite_thumbnail_enabled' => $payload['tmdb_composite_thumbnail_enabled'],
                 'video_selector_class' => $payload['video_selector_class'],
                 'image_selector_class' => $payload['image_selector_class'],
                 'link_selector_class' => $payload['link_selector_class'],
@@ -10649,6 +10664,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 'source_video_enabled' => $generator['source_video_enabled'],
                 'source_content_images_enabled' => isset($generator['source_content_images_enabled']) ? $generator['source_content_images_enabled'] : 1,
                 'source_content_links_enabled' => isset($generator['source_content_links_enabled']) ? $generator['source_content_links_enabled'] : 1,
+                'tmdb_composite_thumbnail_enabled' => !empty($generator['tmdb_composite_thumbnail_enabled']) ? 1 : 0,
                 'video_selector_class' => isset($generator['video_selector_class']) ? $generator['video_selector_class'] : '',
                 'image_selector_class' => isset($generator['image_selector_class']) ? $generator['image_selector_class'] : '',
                 'link_selector_class' => isset($generator['link_selector_class']) ? $generator['link_selector_class'] : '',

@@ -177,6 +177,11 @@ final class Content_Rank_TMDB
         return $item;
     }
 
+    public static function create_composite_thumbnail_for_post($post_id, $term, $movies)
+    {
+        return (new self())->create_composite_thumbnail($post_id, $term, $movies);
+    }
+
     private static function tmdb_language_from_generator($generator)
     {
         $language = !empty($generator['generation_language']) ? strtolower(remove_accents((string) $generator['generation_language'])) : '';
