@@ -40,7 +40,16 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 ? (string) $article['title']
                 : (!empty($item['source_title']) ? (string) $item['source_title'] : (!empty($item['title']) ? (string) $item['title'] : ''));
 
+            Content_Rank_Generator::log_image_debug('thumbnail_helper_mode', array(
+                'post_id' => $post_id,
+                'image_source_mode' => $image_source_mode,
+                'generator_image_source_mode' => isset($generator['image_source_mode']) ? (string) $generator['image_source_mode'] : '',
+            ));
+
             if ($image_source_mode === 'tmdb_composite' && class_exists('Content_Rank_TMDB')) {
+                if (empty($item['tmdb_movies']) || !is_array($item['tmdb_movies'])) {
+                    Content_Rank_TMDB::localize_article_movie_titles($generator, $item, $article, false);
+                }
                 Content_Rank_Generator::log_image_debug('thumbnail_helper_tmdb_start', array(
                     'post_id' => $post_id,
                     'movies_count' => !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? count($item['tmdb_movies']) : 0,
@@ -58,6 +67,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     'post_id' => $post_id,
                     'error' => is_wp_error($composite_result) ? $composite_result->get_error_message() : 'unknown',
                 ));
+                return $composite_result;
             }
 
             $use_source_image = $treat_like_rss
