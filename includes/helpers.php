@@ -5348,7 +5348,9 @@ class Content_Rank_Generator_Helper
             }
         }
 
-        $source_page_outline_titles = self::build_source_outline_titles_for_prompt($item, 0, $generator);
+        // Model inference must not trigger external TMDB requests. Localization
+        // starts only when the actual outline prompt is being built.
+        $source_page_outline_titles = self::build_raw_source_outline_titles_for_prompt($item, 0);
         if ($source_page_outline_titles !== '') {
             $source_bits[] = $source_page_outline_titles;
         }
@@ -6978,12 +6980,6 @@ class Content_Rank_Generator_Helper
     public static function call_openai($generator, $item)
     {
         $item = is_array($item) ? $item : array();
-        $tmdb_enabled = !empty($generator['tmdb_title_translation_enabled'])
-            || (!empty($generator['image_source_mode']) && sanitize_key((string) $generator['image_source_mode']) === 'tmdb_composite');
-        if ($tmdb_enabled && class_exists('Content_Rank_TMDB')) {
-            // Resolve localized movie titles before any AI stage sees the source.
-            Content_Rank_TMDB::localize_article_movie_titles($generator, $item, array(), false);
-        }
         $planning = self::prepare_generation_planning($generator, $item);
         if (is_wp_error($planning)) {
             return $planning;
