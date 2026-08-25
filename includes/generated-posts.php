@@ -515,6 +515,12 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
                 Content_Rank_Generator::force_generated_post_draft($post_id, $taxonomy_result->get_error_message());
                 $this->redirect_with_notice($taxonomy_result->get_error_message(), 'error');
             }
+            if (!empty($generator['image_source_mode'])
+                && sanitize_key((string) $generator['image_source_mode']) === 'tmdb_composite'
+                && class_exists('Content_Rank_TMDB')
+            ) {
+                Content_Rank_TMDB::localize_article_movie_titles($generator, $item, $article, false);
+            }
             $thumbnail_result = Content_Rank_Thumbnail_Helper::set_featured_image(
                 $post_id,
                 $generator,

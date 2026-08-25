@@ -6,7 +6,7 @@ if (!defined('ABSPATH')) {
 
 final class Content_Rank_TMDB
 {
-    public static function localize_article_movie_titles($generator, &$item, $article)
+    public static function localize_article_movie_titles($generator, &$item, $article, $apply_replacements = true)
     {
         $generator = is_array($generator) ? $generator : array();
         $item = is_array($item) ? $item : array();
@@ -90,7 +90,7 @@ final class Content_Rank_TMDB
             }
         }
 
-        if (empty($replacements)) {
+        if (!$apply_replacements || empty($replacements)) {
             if (!empty($movies)) {
                 $item['tmdb_movies'] = $movies;
             }
