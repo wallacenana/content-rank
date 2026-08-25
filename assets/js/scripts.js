@@ -82,6 +82,7 @@
     var keywordListModeField = form.querySelector('[data-keyword-list-mode-field]');
     var tavilyField = form.querySelector('[data-tavily-field]');
     var tmdbThumbnailField = form.querySelector('[data-tmdb-thumbnail-field]');
+    var imageSourceModeEl = form.querySelector('[name="image_source_mode"]');
     var videoSelectorField = form.querySelector('[data-rss-video-selector-field]');
     var sourceMediaToggleField = form.querySelector('[data-rss-source-media-toggle-field]');
     var sourceSelectorsField = form.querySelector('[data-rss-source-selectors-field]');
@@ -143,11 +144,11 @@
         return String(sourceType || '') === 'spreadsheet';
     }
 
-    function normalizeImageSourceModeForType(sourceType, value) {
+    function normalizeImageSourceModeForType(sourceType, keywordListMode, value) {
         var mode = String(value || '').trim();
-    var allowed = ['rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite'];
+        var allowed = ['rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite'];
         if (allowed.indexOf(mode) === -1) {
-            return getDefaultImageSourceModeForType(sourceType);
+            return getDefaultImageSourceModeForType(sourceType, keywordListMode);
         }
         if (isKeywordListSourceType(sourceType)) {
             if (mode === 'rss' || mode === 'rss_or_pexels') {
@@ -289,7 +290,7 @@
         var sourceType = sourceTypeEl ? sourceTypeEl.value : 'keyword_list';
         var keywordListModeEl = byName('keyword_list_mode');
         var keywordListMode = keywordListModeEl ? keywordListModeEl.value : 'keywords';
-        var imageSourceModeEl = byName('image_source_mode');
+        imageSourceModeEl = byName('image_source_mode');
         var isSatelliteMode = generationMode === 'satellite';
         var isListSource = isKeywordListSourceType(sourceType);
         var isSpreadsheetSource = isSpreadsheetSourceType(sourceType);
@@ -764,7 +765,7 @@
         setValue('jitter_minutes', defaults.jitter_minutes);
         setValue('daily_start', defaults.daily_start || '');
         setValue('daily_end', defaults.daily_end || '');
-        setValue('image_source_mode', normalizeImageSourceModeForType(defaults.source_type, defaults.image_source_mode || getDefaultImageSourceModeForType(defaults.source_type)));
+        setValue('image_source_mode', normalizeImageSourceModeForType(defaults.source_type, defaults.keyword_list_mode, defaults.image_source_mode || getDefaultImageSourceModeForType(defaults.source_type, defaults.keyword_list_mode)));
         setValue('tmdb_thumbnail_bg_color', defaults.tmdb_thumbnail_bg_color || '#c91414');
         setValue('pexels_query', defaults.pexels_query);
         setValue('source_video_enabled', defaults.source_video_enabled);
@@ -825,7 +826,7 @@
         setValue('jitter_minutes', generator.jitter_minutes);
         setValue('daily_start', generator.daily_start || '');
         setValue('daily_end', generator.daily_end || '');
-        setValue('image_source_mode', normalizeImageSourceModeForType(generator.source_type || defaults.source_type, generator.image_source_mode || (typeof generator.pexels_enabled !== 'undefined' ? (String(generator.pexels_enabled) === '1' ? 'rss_or_pexels' : 'rss') : defaults.image_source_mode)));
+        setValue('image_source_mode', normalizeImageSourceModeForType(generator.source_type || defaults.source_type, generator.keyword_list_mode || defaults.keyword_list_mode, generator.image_source_mode || (typeof generator.pexels_enabled !== 'undefined' ? (String(generator.pexels_enabled) === '1' ? 'rss_or_pexels' : 'rss') : defaults.image_source_mode)));
         setValue('tmdb_thumbnail_bg_color', generator.tmdb_thumbnail_bg_color || defaults.tmdb_thumbnail_bg_color || '#c91414');
         setValue('pexels_query', generator.pexels_query || defaults.pexels_query);
         setValue('source_video_enabled', String(typeof generator.source_video_enabled !== 'undefined' ? generator.source_video_enabled : defaults.source_video_enabled));
@@ -872,6 +873,9 @@
     var keywordListModeEl = byName('keyword_list_mode');
     if (keywordListModeEl) {
         keywordListModeEl.addEventListener('change', syncSourceFields);
+    }
+    if (imageSourceModeEl) {
+        imageSourceModeEl.addEventListener('change', syncSourceFields);
     }
     form.querySelectorAll('input[name="category_ids[]"]').forEach(function (input) {
         input.addEventListener('change', syncDefaultCategoryField);
