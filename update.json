@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.62",
+  "version": "1.9.63",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Corrigida a migracao da coluna da thumbnail composta do TMDB.</li><li>Agora a selecao TMDB e persistida corretamente nos geradores.</li><li>Mantidos o fluxo de regeneracao atual e o bloqueio das imagens do RSS.</li></ul>",
+  "changelog": "<ul><li>O salvamento do gerador agora depende apenas de image_source_mode para o TMDB.</li><li>Removida a dependencia do campo legado de thumbnail composta.</li><li>Mantidos o fluxo de regeneracao atual e o bloqueio das imagens do RSS.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""
