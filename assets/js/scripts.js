@@ -144,9 +144,12 @@
 
     function normalizeImageSourceModeForType(sourceType, value) {
         var mode = String(value || '').trim();
-        var allowed = ['rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle'];
+        var allowed = ['rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite'];
         if (allowed.indexOf(mode) === -1) {
             return getDefaultImageSourceModeForType(sourceType);
+        }
+        if (mode === 'tmdb_composite') {
+            return mode;
         }
         if (isKeywordListSourceType(sourceType)) {
             if (mode === 'rss' || mode === 'rss_or_pexels') {

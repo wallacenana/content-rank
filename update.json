@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.70",
+  "version": "1.9.71",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Corrigida a serializacao dos geradores para o JavaScript quando existem textos com UTF-8 invalido no banco.</li><li>O editor agora recebe corretamente os dados dos geradores, incluindo image_source_mode.</li><li>Removido log temporario do HTML.</li></ul>",
+  "changelog": "<ul><li>Corrigida a normalizacao do modo TMDB no assets/js/scripts.js.</li><li>O editor agora preserva image_source_mode vindo de arcConfig.generators.</li><li>Removidos logs de console temporarios.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""
