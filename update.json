@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.80",
+  "version": "1.9.81",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>O prompt de planejamento agora usa os títulos do TMDB como lista oficial.</li><li>Os títulos crus extraídos do HTML não competem mais com os títulos localizados.</li><li>A fonte HTML continua disponível apenas para fatos e contexto.</li></ul>",
+  "changelog": "<ul><li>Corrigida a variável TMDB ausente no prompt de análise de keywords.</li><li>Todos os prompts de planejamento agora inicializam corretamente o contexto de filmes.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

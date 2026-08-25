@@ -5765,6 +5765,7 @@ class Content_Rank_Generator_Helper
         $existing_keyword_post_titles = !empty($item['existing_keyword_post_titles']) && is_array($item['existing_keyword_post_titles'])
             ? array_values(array_filter(array_map('strval', $item['existing_keyword_post_titles']), 'strlen'))
             : array();
+        $tmdb_movies_prompt = self::build_tmdb_movies_prompt_block($item);
 
         $lines = array(
             'Voce e um planejador editorial para uma keyword, sem pagina de referencia.',
