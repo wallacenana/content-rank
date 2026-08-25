@@ -984,6 +984,9 @@ class Content_Rank_Generator_Admin
                         if (allowed.indexOf(mode) === -1) {
                             return getDefaultImageSourceModeForType(sourceType, keywordListMode);
                         }
+                        if (mode === 'tmdb_composite') {
+                            return mode;
+                        }
                         if (isKeywordListSourceType(sourceType) && String(keywordListMode || 'keywords') !== 'url_reference') {
                             if (mode === 'rss' || mode === 'rss_or_pexels') {
                                 return 'pexels';
@@ -1804,6 +1807,10 @@ class Content_Rank_Generator_Admin
                     if (form) {
                         form.addEventListener('submit', function() {
                             syncInternalLinksField();
+                            var imageSourceModeEl = byName('image_source_mode');
+                            if (imageSourceModeEl && imageSourceModeEl.value === 'tmdb_composite') {
+                                imageSourceModeEl.disabled = false;
+                            }
                         });
                     }
 

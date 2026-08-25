@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.63
+Version: 1.9.64
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.63');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.64');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.63';
+        const VERSION = '1.9.64';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -10607,18 +10607,24 @@ if (!class_exists('Content_Rank_Generator')) {
             );
 
             if ($generator_id > 0) {
-                $wpdb->update(
+                $updated = $wpdb->update(
                     self::$table_generators,
                     $data,
                     array('id' => $generator_id)
                 );
+                if ($updated === false) {
+                    return new WP_Error('content_rank_generator_save_failed', 'O banco recusou o salvamento do gerador: ' . $wpdb->last_error);
+                }
                 self::update_generator_schedule($generator_id);
                 return $generator_id;
             }
 
             $data['created_at'] = $now;
             $data['next_run_at'] = null;
-            $wpdb->insert(self::$table_generators, $data);
+            $inserted = $wpdb->insert(self::$table_generators, $data);
+            if ($inserted === false) {
+                return new WP_Error('content_rank_generator_save_failed', 'O banco recusou o salvamento do gerador: ' . $wpdb->last_error);
+            }
 
             $generator_id = intval($wpdb->insert_id);
             self::update_generator_schedule($generator_id);
