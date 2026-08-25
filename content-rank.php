@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.85
+Version: 1.9.86
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.85');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.86');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.85';
+        const VERSION = '1.9.86';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -9395,6 +9395,19 @@ if (!class_exists('Content_Rank_Generator')) {
             set_transient($lock_key, 1, 10 * MINUTE_IN_SECONDS);
 
             try {
+                $tmdb_composite_mode = !empty($generator['image_source_mode'])
+                    && sanitize_key((string) $generator['image_source_mode']) === 'tmdb_composite';
+                if ($tmdb_composite_mode && class_exists('Content_Rank_TMDB') && empty($item['tmdb_movies'])) {
+                    // Keep the localized TMDB records in the pipeline state.
+                    // Without this assignment later stages receive the old
+                    // item copy and rebuild the source titles in English.
+                    $resolved_item = Content_Rank_TMDB::resolve_item_movies($generator, $item);
+                    if (is_array($resolved_item)) {
+                        $item = $resolved_item;
+                        $state['item'] = $item;
+                        update_post_meta($post_id, self::GENERATION_PIPELINE_META, $state);
+                    }
+                }
                 $stage = sanitize_key((string) $state['stage']);
                 if ($stage === 'planning') {
                     $result = Content_Rank_Generator_Helper::prepare_generation_planning($generator, $item);
