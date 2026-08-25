@@ -198,6 +198,12 @@ final class Content_Rank_TMDB
                 continue;
             }
             $search = $service->search_movies($query, $language);
+            if (empty($search['results'][0]) && $language !== 'en-US') {
+                // The extracted title is usually English. If TMDB has no
+                // localized search match, find the record in its original
+                // language and localize it through the details endpoint.
+                $search = $service->search_movies($query, 'en-US');
+            }
             if (empty($search['results'][0])) {
                 error_log('[Content Rank][tmdb] movie not found ' . wp_json_encode(array(
                     'query' => $query,
@@ -227,7 +233,11 @@ final class Content_Rank_TMDB
         if (!empty($movies)) {
             $item['tmdb_movies'] = $movies;
         }
-        set_transient($resolved_cache_key, array('resolved' => 1, 'movies' => $movies), HOUR_IN_SECONDS);
+        // Do not cache an empty resolution. A temporary TMDB/API failure must
+        // be retried on the next pipeline stage instead of hiding the issue.
+        if (!empty($movies)) {
+            set_transient($resolved_cache_key, array('resolved' => 1, 'movies' => $movies), HOUR_IN_SECONDS);
+        }
         error_log('[Content Rank][tmdb] resolved movies ' . wp_json_encode(array(
             'language' => $language,
             'movies' => array_map(function ($movie) {
@@ -263,6 +273,9 @@ final class Content_Rank_TMDB
                 continue;
             }
             $search = $service->search_movies($query, $language);
+            if (empty($search['results'][0]) && $language !== 'en-US') {
+                $search = $service->search_movies($query, 'en-US');
+            }
             if (!empty($search['results'][0]) && is_array($search['results'][0])) {
                 $localized = $search['results'][0];
                 if (!empty($localized['id'])) {
