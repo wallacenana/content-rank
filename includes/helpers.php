@@ -5094,7 +5094,6 @@ class Content_Rank_Generator_Helper
         $source_page_content_html = $include_html && isset($item['source_page_content_html'])
             ? self::limit_prompt_html_chars(self::normalize_prompt_context_html((string) $item['source_page_content_html']), 6000)
             : '';
-        $source_page_outline_titles = $include_outline ? self::build_source_outline_titles_for_prompt($item, 10) : '';
         $source_type = !empty($generator['source_type']) ? sanitize_key((string) $generator['source_type']) : 'rss';
         $generator_editorial_context = self::get_generator_editorial_context($generator);
         $tavily_context_text = '';
@@ -5131,10 +5130,6 @@ class Content_Rank_Generator_Helper
 
         if ($source_excerpt !== '') {
             $lines[] = 'Resumo da fonte: ' . self::limit_plain_text_words($source_excerpt, 100);
-        }
-        if ($source_page_outline_titles !== '') {
-            $lines[] = 'Estrutura da pagina de origem:';
-            $lines[] = $source_page_outline_titles;
         }
         if ($source_page_content_html !== '') {
             $lines[] = 'Conteudo em HTML limpo da pagina de origem: ' . $source_page_content_html;
@@ -5552,7 +5547,6 @@ class Content_Rank_Generator_Helper
                 $source_item_count = intval($count_match[1]);
             }
         }
-        $source_outline_titles = self::build_source_outline_titles_for_prompt($item, 10);
         $keyword = !empty($item['keyword'])
             ? self::normalize_prompt_context_text((string) $item['keyword'])
             : '';
@@ -5580,6 +5574,30 @@ class Content_Rank_Generator_Helper
             : array();
         $selected_tags = Content_Rank_Generator::get_generator_selected_tags($generator);
 
+        $compact_prompt = array(
+            'Voce e um classificador editorial interno.',
+            'Idioma da resposta: ' . $generation_language . '.',
+            'Analise o titulo, a keyword e o HTML completo da fonte. Ignore rodape, sidebar, widgets e navegacao.',
+            'Retorne somente JSON valido com: content_type, funnel_level, primary_pain, focus_keyword, recommended_prompt_model_key.',
+            'Escolha lista para pautas numeradas ou com quantidade; noticia para acontecimento pontual; review para avaliacao; comparativo para duas opcoes; tutorial para passo a passo; artigo para os demais temas evergreen.',
+            'Siga primeiro o titulo e a intencao da pauta; use o HTML apenas para confirmar o contexto.',
+            'A focus_keyword deve ser curta, natural e coerente com a pauta.',
+            !empty($selected_prompt_model)
+                ? 'Modelo fixado pelo gerador: ' . $selected_prompt_model_key . ' (' . (string) $selected_prompt_model['name'] . ').'
+                : 'Escolha recommended_prompt_model_key entre os modelos disponiveis abaixo.',
+            'Titulo da fonte: ' . ($source_title !== '' ? $source_title : '[sem titulo disponivel]'),
+            $source_item_count > 0 ? 'Quantidade indicada no titulo: ' . $source_item_count . '.' : '',
+            'Keyword: ' . ($keyword !== '' ? $keyword : '[sem keyword]'),
+            !empty($existing_keyword_post_titles)
+                ? "Posts ja gerados para esta keyword:\n- " . implode("\n- ", $existing_keyword_post_titles) . "\nEscolha um angulo diferente."
+                : '',
+            'Modelos disponiveis:',
+            !empty($selected_prompt_model) ? $selected_prompt_model_key : $available_prompt_models_text,
+            'HTML completo da fonte:',
+            $source_content_html !== '' ? $source_content_html : '[sem HTML de referencia]',
+        );
+        return implode("\n", array_values(array_filter($compact_prompt, 'strlen')));
+
         $prompt = array(
             'Voce e um planejador editorial interno.',
             'Idioma obrigatorio de toda a resposta: ' . $generation_language . '.',
@@ -5597,12 +5615,6 @@ class Content_Rank_Generator_Helper
             'Exemplo de noticia: \"Hana-Kimi ganha versao dublada da 2a temporada na Crunchyroll\" deve ser noticia, mesmo que a pagina tenha varios subtitulos.',
             'Nao escolha artigo como categoria generica quando a pauta for claramente uma noticia.',
             'Seja criterioso entre noticia e artigo, e entre lista e artigo.',
-            'Quando nao houver HTML de referencia, trate a keyword como a pauta principal e escolha o formato pela intencao de busca, sem assumir noticia e sem usar o modelo padrao do gerador.',
-            'Keywords com melhor, vale a pena, qual escolher ou avaliacao de um produto ou servico devem preferir review, salvo se a frase pedir explicitamente uma lista ou comparacao.',
-            'Keywords com versus, vs, comparar ou duas opcoes devem preferir comparativo.',
-            'Keywords com como, passo a passo, tutorial ou instrucoes devem preferir tutorial.',
-            'Keywords que pedem varias recomendacoes, cuidados, dicas, opcoes ou itens podem ser lista quando isso fizer sentido para a intencao da frase.',
-            'Uma keyword ampla e informativa, sem sinal claro de noticia, review, comparacao ou tutorial, deve preferir artigo.',
             'A frase chave deve ser fluida e natural, não crie uma kw parecendo tags e não deve ser longa também',
             'Escolha recommended_prompt_model_key usando somente uma das chaves validas do modelo base abaixo.',
             !empty($selected_prompt_model)
@@ -5613,7 +5625,6 @@ class Content_Rank_Generator_Helper
             'Nunca substitua uma lista completa de itens por uma frase dizendo que existem varios itens. Preserve os nomes e a ordem em que aparecem na fonte.',
             'Título da fonte: ' . ($source_title !== '' ? $source_title : '[sem título disponível]'),
             $source_item_count > 0 ? 'Quantidade de itens indicada pelo titulo: ' . $source_item_count . '. A resposta deve cobrir todos os itens encontrados.' : '',
-            $source_outline_titles !== '' ? 'Titulos e subtitulos extraidos da fonte, preserve os nomes e a ordem:' . "\n" . $source_outline_titles : '',
             'Keyword da pauta: ' . ($keyword !== '' ? $keyword : '[sem keyword disponivel]'),
             !empty($existing_keyword_post_titles)
                 ? "Posts ja gerados para esta mesma keyword:\n- " . implode("\n- ", $existing_keyword_post_titles) . "\nNao repita a mesma intencao de busca, promessa ou angulo; escolha uma intencao diferente."
