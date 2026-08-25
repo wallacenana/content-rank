@@ -1905,6 +1905,10 @@ class Content_Rank_Generator_Admin
                                 }
                             }
                             fillForm(generator || null);
+                            var finalImageSourceMode = String(button.getAttribute('data-image-source-mode') || '').trim();
+                            if (finalImageSourceMode !== '') {
+                                setValue('image_source_mode', finalImageSourceMode);
+                            }
                             openModal(modal);
                         });
                     });

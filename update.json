@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.67",
+  "version": "1.9.68",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>O admin agora le o modo de imagem diretamente no botao de edicao gerado pelo PHP.</li><li>Corrigida a divergencia entre o valor salvo no banco e o valor exibido no formulario.</li><li>Mantidos os logs de diagnostico do salvamento.</li></ul>",
+  "changelog": "<ul><li>O modo salvo agora e aplicado novamente apos o preenchimento completo do formulario.</li><li>Impedida a sobrescrita do modo TMDB por valores padrao do admin.</li><li>Mantidos os logs de diagnostico.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""
