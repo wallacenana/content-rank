@@ -5456,35 +5456,6 @@ class Content_Rank_Generator_Helper
             $lines[] = 'Modelo de prompt recomendado: ' . $recommended_prompt_model_key;
         }
 
-        if (!empty($outline_context['key_facts']) && is_array($outline_context['key_facts'])) {
-            $lines[] = 'Fatos essenciais da fonte, em ordem editorial:';
-            foreach ($outline_context['key_facts'] as $fact) {
-                $fact = self::normalize_plain_text((string) $fact);
-                if ($fact !== '') {
-                    $lines[] = '- ' . $fact;
-                }
-            }
-            $lines[] = 'Use estes fatos como base factual e preserve a ordem quando ela ajudar a construir um texto fluido.';
-        }
-
-        foreach (
-            array(
-                'semantic_terms' => 'Semanticas prioritarias:',
-                'reader_questions' => 'Perguntas que o conteudo deve responder:',
-            ) as $context_key => $label
-        ) {
-            if (empty($outline_context[$context_key]) || !is_array($outline_context[$context_key])) {
-                continue;
-            }
-            $lines[] = $label;
-            foreach ($outline_context[$context_key] as $entry) {
-                $entry = self::normalize_plain_text((string) $entry);
-                if ($entry !== '') {
-                    $lines[] = '- ' . $entry;
-                }
-            }
-        }
-
         if (!empty($outline_context['outline_sections']) && is_array($outline_context['outline_sections'])) {
             $lines[] = 'Esboco editorial:';
             $index = 1;
@@ -5619,7 +5590,7 @@ class Content_Rank_Generator_Helper
             'Escreva todos os titulos, fatos, perguntas, notas e demais campos textuais exclusivamente nesse idioma. Use outro idioma somente em nomes proprios, termos da fonte e nas chaves tecnicas obrigatorias do JSON.',
             'Analise principalmente o conteudo html enviado e escolha apenas 1 modelo.',
             'Ignore rodape, sidebar, widgets, navegacao e blocos auxiliares (caso exista).',
-            'Retorne apenas JSON valido com estas chaves: content_type, funnel_level, tone, primary_pain, focus_keyword, recommended_prompt_model_key, key_facts, semantic_terms, reader_questions.',
+            'Retorne apenas JSON valido com estas chaves: content_type, funnel_level, tone, primary_pain, focus_keyword, recommended_prompt_model_key.',
             'Use content_type somente como uma destas chaves canonicas: lista, artigo, noticia, review, faq, tutorial, comparativo.',
             'REGRA PRINCIPAL: escolha noticia quando o conteudo tratar de um acontecimento, anuncio, confirmacao, estreia, lancamento, atualizacao, declaracao ou mudanca pontual. Uma noticia pode ter varios h2; a existencia de h2 nao a transforma em artigo ou lista.',
             'Escolha artigo somente quando a fonte desenvolver um tema evergreen, explicativo, opinativo ou analitico, com progressao de ideias e contexto, sem relatar principalmente um fato pontual.',
@@ -5644,12 +5615,6 @@ class Content_Rank_Generator_Helper
             'Varra o HTML inteiro, do inicio ao fim. Nao pare na introducao e nao transforme os primeiros fatos em um resumo do restante.',
             'Se o titulo ou a estrutura indicar uma quantidade de itens, identifique todos os itens citados na fonte. Crie pelo menos um bullet especifico para cada item, com o nome exato e os fatos correspondentes, antes de incluir contexto historico ou fatos gerais.',
             'Nunca substitua uma lista completa de itens por uma frase dizendo que existem varios itens. Preserve os nomes e a ordem em que aparecem na fonte.',
-            'key_facts deve ser um array com o maior numero possivel de fatos concretos, relevantes e verificaveis encontrados na fonte.',
-            'Escreva cada fato como um bullet autocontido e rico, incluindo nomes, acontecimentos, datas, numeros, locais, relacoes e atribuicoes quando existirem.',
-            'Nao inclua frases genericas, opinioes inventadas, conselhos, transicoes ou fatos que nao estejam na fonte. Nao repita o mesmo fato.',
-            'Organize os fatos em uma ordem editorial fluida, que ajude o redator a construir o conteudo com sentido do inicio ao fim.',
-            'Liste semantic_terms com termos e entidades que o conteudo precisa abordar naturalmente, sem repetir a keyword de forma artificial.',
-            'Liste reader_questions com as principais perguntas que uma pessoa faria sobre esta pauta.',
             'Título da fonte: ' . ($source_title !== '' ? $source_title : '[sem título disponível]'),
             $source_item_count > 0 ? 'Quantidade de itens indicada pelo titulo: ' . $source_item_count . '. A resposta deve cobrir todos os itens encontrados.' : '',
             $source_outline_titles !== '' ? 'Titulos e subtitulos extraidos da fonte, preserve os nomes e a ordem:' . "\n" . $source_outline_titles : '',
@@ -5728,7 +5693,7 @@ class Content_Rank_Generator_Helper
         $lines = array(
             'Voce e um planejador editorial para uma keyword, sem pagina de referencia.',
             'Idioma obrigatorio de toda a resposta: ' . $generation_language . '.',
-            'Escreva semantic_terms, conflitos, dores e todos os demais campos textuais exclusivamente nesse idioma. Use outro idioma somente em nomes proprios, termos da keyword e nas chaves tecnicas obrigatorias do JSON.',
+            'Escreva todos os campos textuais exclusivamente nesse idioma. Use outro idioma somente em nomes proprios, termos da keyword e nas chaves tecnicas obrigatorias do JSON.',
             'Analise somente a intencao da keyword e escolha o modelo mais adequado.',
             'O objetivo principal e criar um conteudo com potencial para Google Discover.',
             'Evite estruturar o conteudo como um guia generico apenas porque a keyword e ampla.',
@@ -5738,9 +5703,8 @@ class Content_Rank_Generator_Helper
             'Escolha comparativo quando houver versus, vs, comparar ou duas opcoes claras.',
             'Escolha tutorial quando houver como fazer, passo a passo ou instrucoes.',
             'Escolha noticia somente quando a keyword indicar acontecimento, anuncio, estreia, lancamento ou atualizacao pontual.',
-            'Retorne somente JSON valido com estas chaves: content_type, funnel_level, tone, primary_pain, focus_keyword, recommended_prompt_model_key, semantic_terms.',
+            'Retorne somente JSON valido com estas chaves: content_type, funnel_level, tone, primary_pain, focus_keyword, recommended_prompt_model_key.',
             'Use content_type e recommended_prompt_model_key somente com as chaves validas abaixo.',
-            'Liste semantic_terms com termos e entidades relevantes para a keyword, sem repetir a keyword de forma artificial.',
             'Keyword da pauta: ' . ($keyword !== '' ? $keyword : '[sem keyword]'),
             'Nome do gerador: ' . $generator_name,
             'Categoria editorial: ' . $generator_category,
@@ -5815,51 +5779,9 @@ class Content_Rank_Generator_Helper
 
             return array_values(array_unique($normalized));
         };
-        $outline_context['semantic_terms'] = isset($analysis['semantic_terms'])
-            ? $normalize_context_list($analysis['semantic_terms'])
-            : (!empty($outline_context['semantic_terms']) ? (array) $outline_context['semantic_terms'] : array());
-        $outline_context['reader_questions'] = isset($analysis['reader_questions'])
-            ? $normalize_context_list($analysis['reader_questions'])
-            : (!empty($outline_context['reader_questions']) ? (array) $outline_context['reader_questions'] : array());
-        $raw_facts = array();
-        if (!empty($analysis['key_facts']) && is_array($analysis['key_facts'])) {
-            $raw_facts = $analysis['key_facts'];
-        } elseif (!empty($analysis['facts']) && is_array($analysis['facts'])) {
-            $raw_facts = $analysis['facts'];
-        } elseif (!empty($analysis['key_facts']) && is_string($analysis['key_facts'])) {
-            $raw_facts = preg_split('/\R/u', $analysis['key_facts']);
-        }
-
-        $key_facts = array();
-        $seen_facts = array();
-        foreach (array_slice($raw_facts, 0, 50) as $raw_fact) {
-            if (is_array($raw_fact)) {
-                foreach (array('fact', 'text', 'content', 'bullet') as $fact_key) {
-                    if (isset($raw_fact[$fact_key]) && is_scalar($raw_fact[$fact_key])) {
-                        $raw_fact = $raw_fact[$fact_key];
-                        break;
-                    }
-                }
-            }
-            if (!is_scalar($raw_fact)) {
-                continue;
-            }
-
-            $fact = self::normalize_plain_text((string) $raw_fact);
-            $fact = preg_replace('/^(?:[-*]\s*|\d+[\.)]\s*)/u', '', $fact);
-            $fact = trim((string) $fact);
-            if ($fact === '') {
-                continue;
-            }
-
-            $fact_key = function_exists('mb_strtolower') ? mb_strtolower($fact, 'UTF-8') : strtolower($fact);
-            if (isset($seen_facts[$fact_key])) {
-                continue;
-            }
-            $seen_facts[$fact_key] = true;
-            $key_facts[] = $fact;
-        }
-        $outline_context['key_facts'] = $key_facts;
+        $outline_context['semantic_terms'] = array();
+        $outline_context['reader_questions'] = array();
+        $outline_context['key_facts'] = array();
         $sections = array();
         $raw_sections = array();
         if (!empty($analysis['outline_sections']) && is_array($analysis['outline_sections'])) {
@@ -6125,26 +6047,6 @@ class Content_Rank_Generator_Helper
             }
             if ($source_item_count > 0) {
                 $source_outline_titles = self::build_source_outline_titles_for_prompt($item, min(10, max(10, $source_item_count)));
-                if ($source_outline_titles !== '') {
-                    $existing_fact_keys = array();
-                    foreach ($outline_context['key_facts'] as $existing_fact) {
-                        $existing_fact_key = function_exists('mb_strtolower') ? mb_strtolower((string) $existing_fact, 'UTF-8') : strtolower((string) $existing_fact);
-                        $existing_fact_keys[$existing_fact_key] = true;
-                    }
-                    foreach (preg_split('/\R/u', $source_outline_titles) as $source_outline_title) {
-                        $source_outline_title = trim((string) $source_outline_title);
-                        $source_outline_title = preg_replace('/^\d+\.\s*/', '', $source_outline_title);
-                        if ($source_outline_title === '') {
-                            continue;
-                        }
-                        $source_fact = 'Item da fonte: ' . $source_outline_title;
-                        $source_fact_key = function_exists('mb_strtolower') ? mb_strtolower($source_fact, 'UTF-8') : strtolower($source_fact);
-                        if (!isset($existing_fact_keys[$source_fact_key])) {
-                            $outline_context['key_facts'][] = $source_fact;
-                            $existing_fact_keys[$source_fact_key] = true;
-                        }
-                    }
-                }
             }
         }
 
@@ -6411,23 +6313,6 @@ class Content_Rank_Generator_Helper
             : '';
         $generator_context = self::get_generator_editorial_context($generator);
 
-        $fact_lines = array();
-        $outline_context_keys = $is_keyword_only
-            ? array('semantic_terms')
-            : array('key_facts', 'semantic_terms', 'reader_questions');
-        foreach ($outline_context_keys as $context_key) {
-            if (empty($outline_context[$context_key]) || !is_array($outline_context[$context_key])) {
-                continue;
-            }
-            $fact_lines[] = ucfirst(str_replace('_', ' ', $context_key)) . ':';
-            foreach ($outline_context[$context_key] as $entry) {
-                $entry = self::normalize_plain_text((string) $entry);
-                if ($entry !== '') {
-                    $fact_lines[] = '- ' . $entry;
-                }
-            }
-        }
-
         $is_list_outline = in_array($content_type, array('lista', 'list', 'list_article'), true)
             || in_array($prompt_model_key, array('lista', 'list', 'list_article'), true)
             || $outline_model_key === 'list_article';
@@ -6491,7 +6376,7 @@ class Content_Rank_Generator_Helper
             implode("\n", $outline_structure_rules),
             $is_list_outline
                 ? 'Modelo lista: siga o titulo gerado e crie uma secao para cada item mencionado nele. Preserve a ordem dos itens da fonte.'
-                : 'Demais modelos: use as semanticas e perguntas coletadas para construir uma progressao fluida que responda as principais duvidas do leitor.',
+                : 'Demais modelos: construa uma progressao fluida a partir da fonte e do titulo definido.',
             'Modelo: ' . ($outline_model_name !== '' ? $outline_model_name : ($outline_model_key !== '' ? $outline_model_key : '[nao definido]')),
             'Descricao do modelo: ' . ($outline_model_description !== '' ? $outline_model_description : '[sem descricao]'),
             'Categoria editorial: ' . (!empty($generator_context['category_text']) ? $generator_context['category_text'] : '[sem categoria]'),
@@ -6506,7 +6391,6 @@ class Content_Rank_Generator_Helper
             'Titulo da fonte ou keyword: ' . ($source_title !== '' ? $source_title : ($keyword !== '' ? $keyword : '[sem titulo ou keyword]')),
             'Titulo gerado (esse é o ponto central de tudo, é isso que deve ser respondido no conteúdo): ' . ($generated_title !== '' ? $generated_title : '[sem titulo gerado]'),
             'Keyword foco: ' . ($keyword !== '' ? $keyword : '[sem keyword]'),
-            !empty($fact_lines) ? "Informacoes coletadas no planejamento:\n" . implode("\n", $fact_lines) : 'Informacoes coletadas no planejamento: [sem dados adicionais]',
             $source_outline_titles !== '' && $is_list_outline ? 'Itens da fonte, preserve a ordem:' . "\n" . $source_outline_titles : '',
             $tavily_text !== '' ? 'Informacoes adicionais coletadas pelo Tavily:' . "\n" . $tavily_text : '',
             $review_products_prompt !== '' ? 'Dados fixos dos produtos da review. Use os placeholders exatamente como informados:' . "\n" . $review_products_prompt : '',
@@ -6573,17 +6457,7 @@ class Content_Rank_Generator_Helper
         $outline_source_type = !empty($generator['source_type']) ? sanitize_key((string) $generator['source_type']) : 'rss';
         $is_keyword_only = $outline_source_type === 'keyword_list'
             || ($outline_source_type === 'spreadsheet' && !Content_Rank_Generator::generator_uses_keyword_list_url_reference_mode($generator));
-        if ($is_keyword_only) {
-            $outline_context['key_facts'] = array();
-            $outline_context['reader_questions'] = array();
-        }
-        $planning_facts = !$is_keyword_only && !empty($outline_context['key_facts']) && is_array($outline_context['key_facts'])
-            ? $outline_context['key_facts']
-            : array();
         $result_context = self::normalize_outline_analysis_context($outline_response, $outline_context);
-        if (empty($result_context['key_facts']) && !empty($planning_facts)) {
-            $result_context['key_facts'] = $planning_facts;
-        }
         if (empty($result_context['outline_sections']) || !is_array($result_context['outline_sections'])) {
             return new WP_Error('content_rank_content_outline_empty', 'A IA nao retornou secoes para o esboco do conteudo.');
         }
@@ -6756,17 +6630,6 @@ class Content_Rank_Generator_Helper
         if (!$is_list_content) {
             $source_page_outline_titles = '';
         }
-        $key_facts_text = '';
-        if (!empty($outline_context['key_facts']) && is_array($outline_context['key_facts'])) {
-            $fact_lines = array();
-            foreach ($outline_context['key_facts'] as $fact) {
-                $fact = self::normalize_plain_text((string) $fact);
-                if ($fact !== '') {
-                    $fact_lines[] = '- ' . $fact;
-                }
-            }
-            $key_facts_text = implode("\n", $fact_lines);
-        }
         $tavily_context_text = '';
         if (!empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'keyword_list' && !empty($item['tavily_context']) && is_array($item['tavily_context'])) {
             $tavily_context_text = self::format_tavily_context_for_prompt($item['tavily_context']);
@@ -6836,11 +6699,6 @@ class Content_Rank_Generator_Helper
             $hidden_context[] = 'ESTRUTURA OBRIGATORIA: a introducao deve ser feita em paragrafos sem H2; desenvolva os topicos do esboco em H2/H3 e finalize com a conclusao.';
         }
         $hidden_context[] = 'LEAD OBRIGATORIO: abra com a situacao, duvida, dor ou fato concreto que motivou a busca. Nao use "Bem-vindo", "este guia", "este artigo", "neste conteudo" ou introducoes genericas de marketing.';
-        if ($key_facts_text !== '') {
-            $hidden_context[] = 'Fatos essenciais extraidos no planejamento. Use esses dados factuais de forma absolutam pois já estão interpretados e devem ser usados. Esses dados são parte do conteúdo, são apenas um filtro com os dados mais importantes, para ter noção do tamanho do conteúdo, use apenas o conteudo em html filtrado, não use esses fatos como base para o tamanho do conteúdo, pois ele só repete o que o conteúdo principal já tem:';
-            $hidden_context[] = '{{key_facts}}';
-            $hidden_context[] = 'Use o maior numero possivel desses fatos concretos, sem inventar, repetir ou substituir por frases genericas. Mantenha a ordem quando ela der sentido ao texto.';
-        }
         if ($outline_text !== '') {
             $hidden_context[] = 'ESBOCO EDITORIAL OBRIGATORIO, GERADO DEPOIS DO TITULO SEO:';
             $hidden_context[] = '{{outline_text}}';
@@ -6911,7 +6769,6 @@ class Content_Rank_Generator_Helper
             '{{prompt_model_key}}' => $prompt_model_key,
             '{{outline_model_text}}' => $outline_model_text,
             '{{outline_text}}' => $outline_text,
-            '{{key_facts}}' => $key_facts_text,
             '{{review_products_prompt}}' => $review_products_prompt,
         );
 
