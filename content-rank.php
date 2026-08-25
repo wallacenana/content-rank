@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.53
+Version: 1.9.54
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.53');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.54');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.53';
+        const VERSION = '1.9.54';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -388,6 +388,7 @@ if (!class_exists('Content_Rank_Generator')) {
                     'content_image_interval_words',
                     'random_bolds_enabled',
                     'tmdb_title_translation_enabled',
+                    'tmdb_thumbnail_bg_color',
                 );
                 foreach ($required_generator_columns as $column_name) {
                     $found_column = $wpdb->get_var($wpdb->prepare(
@@ -465,6 +466,10 @@ if (!class_exists('Content_Rank_Generator')) {
                 'tmdb_title_translation_enabled' => array(
                     'definition' => 'tinyint(1) NOT NULL DEFAULT 0',
                     'after' => 'keyword_list_mode',
+                ),
+                'tmdb_thumbnail_bg_color' => array(
+                    'definition' => "varchar(7) NOT NULL DEFAULT '#c91414'",
+                    'after' => 'tmdb_title_translation_enabled',
                 ),
             );
 
@@ -581,6 +586,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 keyword_list_mode varchar(20) NOT NULL DEFAULT 'keywords',
                 tavily_enabled tinyint(1) NOT NULL DEFAULT 0,
                 tmdb_title_translation_enabled tinyint(1) NOT NULL DEFAULT 0,
+                tmdb_thumbnail_bg_color varchar(7) NOT NULL DEFAULT '#c91414',
                 status varchar(20) NOT NULL DEFAULT 'active',
                 post_type varchar(60) NOT NULL DEFAULT 'post',
                 post_status varchar(20) NOT NULL DEFAULT 'draft',
@@ -1989,6 +1995,15 @@ if (!class_exists('Content_Rank_Generator')) {
             return Content_Rank_Generator_Helper::normalize_source_context_filters($decoded);
         }
 
+        public static function normalize_hex_color($value, $fallback = '#c91414')
+        {
+            $value = strtolower(trim((string) $value));
+            if (preg_match('/^#[0-9a-f]{6}$/i', $value)) {
+                return $value;
+            }
+            return strtolower($fallback);
+        }
+
         public static function get_default_image_source_mode($source_type = 'rss', $keyword_list_mode = 'keywords')
         {
             return 'rss_or_pexels';
@@ -1999,7 +2014,7 @@ if (!class_exists('Content_Rank_Generator')) {
             $source_type = sanitize_key((string) $source_type);
             $image_source_mode = sanitize_key((string) $image_source_mode);
             $keyword_list_mode = sanitize_key((string) $keyword_list_mode);
-            $allowed = array('rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle');
+            $allowed = array('rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite');
 
             if ($image_source_mode !== '' && in_array($image_source_mode, $allowed, true)) {
                 return $image_source_mode;
@@ -2284,6 +2299,7 @@ if (!class_exists('Content_Rank_Generator')) {
 
             $generator['keyword_list_mode'] = $keyword_list_mode;
             $generator['tmdb_title_translation_enabled'] = !empty($generator['tmdb_title_translation_enabled']) ? 1 : 0;
+            $generator['tmdb_thumbnail_bg_color'] = self::normalize_hex_color(isset($generator['tmdb_thumbnail_bg_color']) ? $generator['tmdb_thumbnail_bg_color'] : '#c91414');
             $generator['image_source_mode'] = $image_source_mode;
             $generator['image_selector_class'] = isset($generator['image_selector_class']) ? sanitize_text_field((string) $generator['image_selector_class']) : '';
             $generator['link_selector_class'] = isset($generator['link_selector_class']) ? sanitize_text_field((string) $generator['link_selector_class']) : '';
@@ -3442,6 +3458,7 @@ if (!class_exists('Content_Rank_Generator')) {
             }
             $payload['tavily_enabled'] = ($payload['source_type'] === 'keyword_list' && !empty($raw['tavily_enabled'])) ? 1 : 0;
             $payload['tmdb_title_translation_enabled'] = !empty($raw['tmdb_title_translation_enabled']) ? 1 : 0;
+            $payload['tmdb_thumbnail_bg_color'] = self::normalize_hex_color(isset($raw['tmdb_thumbnail_bg_color']) ? wp_unslash($raw['tmdb_thumbnail_bg_color']) : '#c91414');
             if ($payload['generation_mode'] === 'satellite') {
                 $payload['source_post_id'] = 0;
             }
@@ -10523,6 +10540,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 'keyword_list_mode' => $payload['keyword_list_mode'],
                 'tavily_enabled' => $payload['tavily_enabled'],
                 'tmdb_title_translation_enabled' => $payload['tmdb_title_translation_enabled'],
+                'tmdb_thumbnail_bg_color' => $payload['tmdb_thumbnail_bg_color'],
                 'status' => $payload['status'],
                 'post_type' => $payload['post_type'],
                 'post_status' => $payload['post_status'],
@@ -10628,6 +10646,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 'keyword_list_mode' => isset($generator['keyword_list_mode']) ? $generator['keyword_list_mode'] : self::get_default_keyword_list_mode(),
                 'tavily_enabled' => !empty($generator['tavily_enabled']) ? 1 : 0,
                 'tmdb_title_translation_enabled' => !empty($generator['tmdb_title_translation_enabled']) ? 1 : 0,
+                'tmdb_thumbnail_bg_color' => isset($generator['tmdb_thumbnail_bg_color']) ? self::normalize_hex_color($generator['tmdb_thumbnail_bg_color']) : '#c91414',
                 'status' => $generator['status'],
                 'post_type' => $generator['post_type'],
                 'post_status' => $generator['post_status'],

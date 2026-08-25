@@ -598,7 +598,13 @@ class Content_Rank_Generator_Admin
                                         <option value="rss_or_dalle">Fonte do RSS ou Dall-e</option>
                                         <option value="pexels">Pexels</option>
                                         <option value="dalle">Dall-e</option>
+                                        <option value="tmdb_composite">TMDB - thumbnail composta</option>
                                     </select>
+                                </div>
+                                <div data-tmdb-thumbnail-field class="hidden">
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Cor da faixa inferior</label>
+                                    <input type="color" name="tmdb_thumbnail_bg_color" value="#c91414" class="h-11 w-20 cursor-pointer rounded-lg border border-slate-300 bg-white p-1" />
+                                    <p class="mt-1 text-xs text-slate-500">A faixa ocupa no mÃ¡ximo 30% da thumbnail. A sombra usa a mesma cor.</p>
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Localizar tÃ­tulos de filmes via TMDB</label>
@@ -859,6 +865,7 @@ class Content_Rank_Generator_Admin
                                         'daily_start' => '',
                                         'daily_end' => '',
                                         'image_source_mode' => '',
+                                        'tmdb_thumbnail_bg_color' => '#c91414',
                                         'tmdb_title_translation_enabled' => '0',
                                         'pexels_query' => Content_Rank_Generator::get_default_pexels_query(),
                                         'source_video_enabled' => '0',
@@ -926,6 +933,7 @@ class Content_Rank_Generator_Admin
                     var listIdField = form.querySelector('[data-list-id-field]');
                     var keywordListModeField = form.querySelector('[data-keyword-list-mode-field]');
                     var tavilyField = form.querySelector('[data-tavily-field]');
+                    var tmdbThumbnailField = form.querySelector('[data-tmdb-thumbnail-field]');
                     var videoSelectorField = form.querySelector('[data-rss-video-selector-field]');
                     var imageIntervalField = form.querySelector('[data-rss-image-interval-field]');
                     var apiBase = <?php echo wp_json_encode(rest_url('content-rank/v1')); ?>;
@@ -1004,7 +1012,7 @@ class Content_Rank_Generator_Admin
 
                     function normalizeImageSourceModeForType(sourceType, keywordListMode, value) {
                         var mode = String(value || '').trim();
-                        var allowed = ['rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle'];
+                        var allowed = ['rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite'];
                         if (allowed.indexOf(mode) === -1) {
                             return getDefaultImageSourceModeForType(sourceType, keywordListMode);
                         }
@@ -1208,6 +1216,9 @@ class Content_Rank_Generator_Admin
                         }
                         if (imageSourceModeEl) {
                             imageSourceModeEl.value = normalizeImageSourceModeForType(sourceType, keywordListMode, imageSourceModeEl.value);
+                        }
+                        if (tmdbThumbnailField) {
+                            tmdbThumbnailField.classList.toggle('hidden', !imageSourceModeEl || imageSourceModeEl.value !== 'tmdb_composite');
                         }
 
                         var promptEl = byName('prompt_template');
@@ -1680,6 +1691,7 @@ class Content_Rank_Generator_Admin
                         setValue('daily_start', defaults.daily_start);
                         setValue('daily_end', defaults.daily_end);
                         setValue('image_source_mode', normalizeImageSourceModeForType(defaults.source_type, defaults.keyword_list_mode, defaults.image_source_mode || getDefaultImageSourceModeForType(defaults.source_type, defaults.keyword_list_mode)));
+                        setValue('tmdb_thumbnail_bg_color', defaults.tmdb_thumbnail_bg_color);
                         setValue('tmdb_title_translation_enabled', defaults.tmdb_title_translation_enabled);
                         setValue('pexels_query', defaults.pexels_query);
                         setValue('source_video_enabled', defaults.source_video_enabled);
@@ -1741,6 +1753,7 @@ class Content_Rank_Generator_Admin
                         setValue('daily_start', generator.daily_start);
                         setValue('daily_end', generator.daily_end);
                         setValue('image_source_mode', normalizeImageSourceModeForType(generator.source_type || defaults.source_type, generator.keyword_list_mode || defaults.keyword_list_mode, generator.image_source_mode || (typeof generator.pexels_enabled !== 'undefined' ? (String(generator.pexels_enabled) === '1' ? 'rss_or_pexels' : 'rss') : defaults.image_source_mode)));
+                        setValue('tmdb_thumbnail_bg_color', generator.tmdb_thumbnail_bg_color || defaults.tmdb_thumbnail_bg_color);
                         setValue('tmdb_title_translation_enabled', typeof generator.tmdb_title_translation_enabled !== 'undefined' ? String(generator.tmdb_title_translation_enabled) : defaults.tmdb_title_translation_enabled);
                         setValue('pexels_query', generator.pexels_query || defaults.pexels_query);
                         setValue('source_video_enabled', String(typeof generator.source_video_enabled !== 'undefined' ? generator.source_video_enabled : defaults.source_video_enabled));

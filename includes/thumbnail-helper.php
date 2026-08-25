@@ -38,6 +38,22 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     $keyword_list_mode
                 );
 
+            if ($image_source_mode === 'tmdb_composite' && class_exists('Content_Rank_TMDB')) {
+                $composite_result = Content_Rank_TMDB::create_composite_thumbnail_for_post(
+                    $post_id,
+                    $title,
+                    !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? $item['tmdb_movies'] : array(),
+                    !empty($generator['tmdb_thumbnail_bg_color']) ? $generator['tmdb_thumbnail_bg_color'] : '#c91414'
+                );
+                if (!is_wp_error($composite_result) && intval($composite_result) > 0) {
+                    return intval($composite_result);
+                }
+                Content_Rank_Generator::log_image_debug('thumbnail_helper_tmdb_failed', array(
+                    'post_id' => $post_id,
+                    'error' => is_wp_error($composite_result) ? $composite_result->get_error_message() : 'unknown',
+                ));
+            }
+
             $use_source_image = $treat_like_rss
                 && Content_Rank_Generator::image_source_mode_uses_source_image($image_source_mode);
             $use_pexels = Content_Rank_Generator::image_source_mode_uses_pexels($image_source_mode);

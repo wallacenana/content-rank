@@ -81,6 +81,7 @@
     var listIdField = form.querySelector('[data-list-id-field]');
     var keywordListModeField = form.querySelector('[data-keyword-list-mode-field]');
     var tavilyField = form.querySelector('[data-tavily-field]');
+    var tmdbThumbnailField = form.querySelector('[data-tmdb-thumbnail-field]');
     var videoSelectorField = form.querySelector('[data-rss-video-selector-field]');
     var sourceMediaToggleField = form.querySelector('[data-rss-source-media-toggle-field]');
     var sourceSelectorsField = form.querySelector('[data-rss-source-selectors-field]');
@@ -144,7 +145,7 @@
 
     function normalizeImageSourceModeForType(sourceType, value) {
         var mode = String(value || '').trim();
-        var allowed = ['rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle'];
+    var allowed = ['rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite'];
         if (allowed.indexOf(mode) === -1) {
             return getDefaultImageSourceModeForType(sourceType);
         }
@@ -338,6 +339,9 @@
         }
         if (tavilyField) {
             tavilyField.classList.toggle('hidden', isSatelliteMode || sourceType !== 'keyword_list');
+        }
+        if (tmdbThumbnailField) {
+            tmdbThumbnailField.classList.toggle('hidden', !imageSourceModeEl || imageSourceModeEl.value !== 'tmdb_composite');
         }
         var showSourceMediaControls = !isSatelliteMode && (sourceType === 'rss' || (isSpreadsheetSource && keywordListMode === 'url_reference'));
         var sourceContentImagesEnabledEl = byName('source_content_images_enabled');
@@ -761,6 +765,7 @@
         setValue('daily_start', defaults.daily_start || '');
         setValue('daily_end', defaults.daily_end || '');
         setValue('image_source_mode', normalizeImageSourceModeForType(defaults.source_type, defaults.image_source_mode || getDefaultImageSourceModeForType(defaults.source_type)));
+        setValue('tmdb_thumbnail_bg_color', defaults.tmdb_thumbnail_bg_color || '#c91414');
         setValue('pexels_query', defaults.pexels_query);
         setValue('source_video_enabled', defaults.source_video_enabled);
         setValue('source_content_images_enabled', typeof defaults.source_content_images_enabled !== 'undefined' ? defaults.source_content_images_enabled : '1');
@@ -821,6 +826,7 @@
         setValue('daily_start', generator.daily_start || '');
         setValue('daily_end', generator.daily_end || '');
         setValue('image_source_mode', normalizeImageSourceModeForType(generator.source_type || defaults.source_type, generator.image_source_mode || (typeof generator.pexels_enabled !== 'undefined' ? (String(generator.pexels_enabled) === '1' ? 'rss_or_pexels' : 'rss') : defaults.image_source_mode)));
+        setValue('tmdb_thumbnail_bg_color', generator.tmdb_thumbnail_bg_color || defaults.tmdb_thumbnail_bg_color || '#c91414');
         setValue('pexels_query', generator.pexels_query || defaults.pexels_query);
         setValue('source_video_enabled', String(typeof generator.source_video_enabled !== 'undefined' ? generator.source_video_enabled : defaults.source_video_enabled));
         setValue('source_content_images_enabled', String(typeof generator.source_content_images_enabled !== 'undefined' ? generator.source_content_images_enabled : defaults.source_content_images_enabled));
