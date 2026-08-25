@@ -218,6 +218,7 @@ class Content_Rank_Generator_Admin
                                                     <button
                                                         type="button"
                                                         data-edit-generator-id="<?php echo esc_attr($generator['id']); ?>"
+                                                        data-image-source-mode="<?php echo esc_attr(isset($generator['image_source_mode']) ? $generator['image_source_mode'] : ''); ?>"
                                                         class="content-rank-generator-action-btn inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
                                                         aria-label="Editar"
                                                         title="Editar">
@@ -1897,6 +1898,12 @@ class Content_Rank_Generator_Admin
                             var generator = generators.find(function(item) {
                                 return String(item.id) === id;
                             });
+                            if (generator) {
+                                var storedImageSourceMode = String(button.getAttribute('data-image-source-mode') || '').trim();
+                                if (storedImageSourceMode !== '') {
+                                    generator.image_source_mode = storedImageSourceMode;
+                                }
+                            }
                             fillForm(generator || null);
                             openModal(modal);
                         });
