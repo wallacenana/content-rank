@@ -5150,7 +5150,9 @@ class Content_Rank_Generator_Helper
     public static function build_source_outline_titles_for_prompt($item, $max_items = 10)
     {
         $item = is_array($item) ? $item : array();
-        $max_items = max(1, intval($max_items));
+        // Keep the complete source outline. The title prompt decides how many
+        // items the final article should use.
+        $max_items = PHP_INT_MAX;
 
         $titles = array();
 
@@ -5706,7 +5708,11 @@ class Content_Rank_Generator_Helper
         $raw_funnel_level = sanitize_key((string) $raw_funnel_level);
         $outline_context['funnel_level'] = in_array($raw_funnel_level, array('top', 'mid', 'bottom'), true) ? $raw_funnel_level : 'mid';
         $outline_context['primary_pain'] = !empty($analysis['primary_pain']) ? sanitize_textarea_field((string) $analysis['primary_pain']) : (!empty($outline_context['primary_pain']) ? sanitize_textarea_field((string) $outline_context['primary_pain']) : '');
-        $outline_context['focus_keyword'] = !empty($analysis['focus_keyword']) ? sanitize_text_field((string) $analysis['focus_keyword']) : (!empty($outline_context['focus_keyword']) ? sanitize_text_field((string) $outline_context['focus_keyword']) : '');
+        $focus_keyword = !empty($analysis['focus_keyword'])
+            ? sanitize_text_field((string) $analysis['focus_keyword'])
+            : (!empty($outline_context['focus_keyword']) ? sanitize_text_field((string) $outline_context['focus_keyword']) : '');
+        $focus_keyword = preg_replace('/^\s*(?:melhores?|best)\s+/iu', '', (string) $focus_keyword);
+        $outline_context['focus_keyword'] = trim((string) $focus_keyword);
         foreach (array('editorial_conflict', 'reader_transformation', 'main_promise', 'reader_intent') as $narrative_key) {
             $outline_context[$narrative_key] = !empty($analysis[$narrative_key])
                 ? sanitize_textarea_field((string) $analysis[$narrative_key])
@@ -6183,6 +6189,9 @@ class Content_Rank_Generator_Helper
             'include_html' => false,
         ));
         $prompt = strtr($template, $replacements);
+        $prompt .= "\n\nREGRAS DE TITULO E KEYWORD:\n";
+        $prompt .= "- Em pautas de lista, o titulo pode indicar no maximo 10 itens. Nunca crie titulo com 11 ou mais itens.\n";
+        $prompt .= "- Use no focus_keyword apenas os termos essenciais da pauta. Nao adicione 'melhor', 'melhores', 'best' ou superlativos que nao estejam no titulo ou na fonte.\n";
         if (!empty($item['review_products_prompt'])) {
             $prompt .= "\n\nDADOS DOS PRODUTOS DA REVIEW:\n" . trim((string) $item['review_products_prompt']);
         }
