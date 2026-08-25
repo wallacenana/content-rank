@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.58",
+  "version": "1.9.59",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Adicionada opcao por gerador para criar thumbnail composta com filmes do TMDB.</li><li>A thumbnail composta substitui a imagem destacada normal quando houver posters resolvidos.</li><li>Mantido o recurso desativado por padrao.</li></ul>",
+  "changelog": "<ul><li>Adicionada a opcao TMDB - thumbnail composta ao seletor Fonte da imagem.</li><li>O modo TMDB resolve automaticamente os filmes do RSS no idioma do gerador e usa os posters na imagem destacada.</li><li>O controle antigo permanece compativel com geradores ja salvos.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""
