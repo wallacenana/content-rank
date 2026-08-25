@@ -6,13 +6,48 @@ if (!defined('ABSPATH')) {
 
 final class Content_Rank_TMDB
 {
+    public static function translate_source_outline_titles($generator, &$item, $source_titles)
+    {
+        $generator = is_array($generator) ? $generator : array();
+        $item = is_array($item) ? $item : array();
+        $source_titles = trim((string) $source_titles);
+        if ($source_titles === '') {
+            return '';
+        }
+
+        self::localize_article_movie_titles($generator, $item, array(), false);
+        error_log('[Content Rank][tmdb-outline] resultados TMDB: ' . (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? count($item['tmdb_movies']) : 0));
+        $localized_by_source = array();
+        foreach (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? $item['tmdb_movies'] : array() as $movie) {
+            if (!empty($movie['source_query']) && !empty($movie['title'])) {
+                $localized_by_source[self::normalize_title_key($movie['source_query'])] = array(
+                    'title' => (string) $movie['title'],
+                    'year' => !empty($movie['year']) ? (string) $movie['year'] : '',
+                );
+            }
+        }
+
+        $translated = array();
+        foreach (preg_split('/\R/u', $source_titles) as $line) {
+            $query = self::normalize_source_title($line);
+            $key = self::normalize_title_key($query);
+            $movie = isset($localized_by_source[$key]) ? $localized_by_source[$key] : array();
+            $title = !empty($movie['title']) ? $movie['title'] : $query;
+            $year = !empty($movie['year']) ? $movie['year'] : self::extract_source_year($line);
+            if ($title !== '') {
+                $translated[] = sprintf('%02d. %s%s', count($translated) + 1, $title, $year !== '' ? ' (' . $year . ')' : '');
+            }
+        }
+        return implode("\n", $translated);
+    }
+
     public static function localize_article_movie_titles($generator, &$item, $article, $apply_replacements = true)
     {
         $generator = is_array($generator) ? $generator : array();
         $item = is_array($item) ? $item : array();
         $article = is_array($article) ? $article : array();
 
-        $source_titles = Content_Rank_Generator_Helper::build_source_outline_titles_for_prompt($item, 10);
+        $source_titles = Content_Rank_Generator_Helper::build_raw_source_outline_titles_for_prompt($item, 0);
         if ($source_titles === '') {
             return $article;
         }
@@ -237,6 +272,11 @@ final class Content_Rank_TMDB
             return strtolower((string) preg_replace('/[^a-z0-9]+/i', '', $value));
         };
         return $normalize($left) !== '' && $normalize($left) === $normalize($right);
+    }
+
+    private static function normalize_title_key($title)
+    {
+        return strtolower((string) preg_replace('/[^a-z0-9]+/i', '', remove_accents((string) $title)));
     }
 
     private static function choose_search_result($results, $query, $year)

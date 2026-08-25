@@ -5147,7 +5147,37 @@ class Content_Rank_Generator_Helper
         return implode("\n", $lines);
     }
 
-    public static function build_source_outline_titles_for_prompt($item, $max_items = 10)
+    public static function build_source_outline_titles_for_prompt(&$item, $max_items = 0, $generator = array())
+    {
+        $item = is_array($item) ? $item : array();
+        if (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])) {
+            $localized_titles = array();
+            foreach ($item['tmdb_movies'] as $movie) {
+                if (!is_array($movie) || empty($movie['title'])) {
+                    continue;
+                }
+                $localized_titles[] = sprintf(
+                    '%02d. %s%s',
+                    count($localized_titles) + 1,
+                    self::normalize_prompt_context_text((string) $movie['title']),
+                    !empty($movie['year']) ? ' (' . sanitize_text_field((string) $movie['year']) . ')' : ''
+                );
+            }
+            if (!empty($localized_titles)) {
+                error_log('[Content Rank][tmdb-outline] reutilizando ' . count($localized_titles) . ' titulos localizados');
+                return implode("\n", $localized_titles);
+            }
+        }
+
+        $raw_titles = self::build_raw_source_outline_titles_for_prompt($item, $max_items);
+        if ($raw_titles !== '' && class_exists('Content_Rank_TMDB')) {
+            error_log('[Content Rank][tmdb-outline] traduzindo titulos extraidos dos H2');
+            return Content_Rank_TMDB::translate_source_outline_titles($generator, $item, $raw_titles);
+        }
+        return $raw_titles;
+    }
+
+    public static function build_raw_source_outline_titles_for_prompt($item, $max_items = 0)
     {
         $item = is_array($item) ? $item : array();
         // Keep the complete source outline. The title prompt decides how many
@@ -5318,7 +5348,7 @@ class Content_Rank_Generator_Helper
             }
         }
 
-        $source_page_outline_titles = self::build_source_outline_titles_for_prompt($item, 10);
+        $source_page_outline_titles = self::build_source_outline_titles_for_prompt($item, 0, $generator);
         if ($source_page_outline_titles !== '') {
             $source_bits[] = $source_page_outline_titles;
         }
@@ -5937,7 +5967,7 @@ class Content_Rank_Generator_Helper
                 $generator
             );
 
-            $source_page_outline_titles = self::build_source_outline_titles_for_prompt($item, 10);
+            $source_page_outline_titles = self::build_source_outline_titles_for_prompt($item, 0, $generator);
             $sections = array();
             if ($source_page_outline_titles !== '') {
                 $outline_title_lines = preg_split('/\R/u', $source_page_outline_titles);
@@ -6019,7 +6049,7 @@ class Content_Rank_Generator_Helper
                 }
             }
             if ($source_item_count > 0) {
-                $source_outline_titles = self::build_source_outline_titles_for_prompt($item, min(10, max(10, $source_item_count)));
+                $source_outline_titles = self::build_source_outline_titles_for_prompt($item, 0, $generator);
             }
         }
 
@@ -6277,7 +6307,7 @@ class Content_Rank_Generator_Helper
                 break;
             }
         }
-        $source_outline_titles = self::build_source_outline_titles_for_prompt($item, 10);
+        $source_outline_titles = self::build_source_outline_titles_for_prompt($item, 0, $generator);
         $review_products_prompt = !empty($item['review_products_prompt'])
             ? trim((string) $item['review_products_prompt'])
             : '';
