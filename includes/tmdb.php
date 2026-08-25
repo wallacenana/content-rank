@@ -106,32 +106,27 @@ final class Content_Rank_TMDB
             return $item;
         }
 
-        $source_chunks = array();
-        foreach (array('source_title', 'title', 'keyword', 'source_page_content', 'content', 'source_page_content_html', 'source_page_html') as $key) {
+        $source_text = '';
+        foreach (array('source_page_content', 'source_page_content_html', 'source_page_html', 'content') as $key) {
             if (empty($item[$key])) {
                 continue;
             }
-            $value = wp_strip_all_tags((string) $item[$key]);
-            $value = trim(preg_replace('/\s+/u', ' ', $value));
-            if ($value === '') {
-                continue;
-            }
-
-            $is_duplicate = false;
-            foreach ($source_chunks as $index => $existing_chunk) {
-                if ($existing_chunk === $value || (strlen($value) >= 200 && strpos($existing_chunk, $value) !== false)) {
-                    $is_duplicate = true;
-                    break;
-                }
-                if (strlen($existing_chunk) >= 200 && strpos($value, $existing_chunk) !== false) {
-                    unset($source_chunks[$index]);
-                }
-            }
-            if (!$is_duplicate) {
-                $source_chunks[] = $value;
+            $source_text = wp_strip_all_tags((string) $item[$key]);
+            $source_text = trim(preg_replace('/\s+/u', ' ', $source_text));
+            if ($source_text !== '') {
+                break;
             }
         }
-        $source_text = implode("\n", array_values($source_chunks));
+        if ($source_text === '') {
+            foreach (array('source_title', 'title', 'keyword') as $key) {
+                if (!empty($item[$key])) {
+                    $source_text = trim(preg_replace('/\s+/u', ' ', wp_strip_all_tags((string) $item[$key])));
+                    if ($source_text !== '') {
+                        break;
+                    }
+                }
+            }
+        }
         $source_text = function_exists('mb_substr') ? mb_substr($source_text, 0, 14000, 'UTF-8') : substr($source_text, 0, 14000);
         if ($source_text === '') {
             return $item;
