@@ -142,7 +142,12 @@
         return String(sourceType || '') === 'spreadsheet';
     }
 
-    function normalizeImageSourceModeForType(sourceType, value) {
+    function normalizeImageSourceModeForType(sourceType, keywordListMode, value) {
+        // Keep the selected image source stable when source fields are synchronized.
+        if (arguments.length < 3) {
+            value = keywordListMode;
+            keywordListMode = '';
+        }
         var mode = String(value || '').trim();
         var allowed = ['rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite'];
         if (allowed.indexOf(mode) === -1) {
@@ -763,7 +768,7 @@
         setValue('jitter_minutes', defaults.jitter_minutes);
         setValue('daily_start', defaults.daily_start || '');
         setValue('daily_end', defaults.daily_end || '');
-        setValue('image_source_mode', normalizeImageSourceModeForType(defaults.source_type, defaults.image_source_mode || getDefaultImageSourceModeForType(defaults.source_type)));
+        setValue('image_source_mode', normalizeImageSourceModeForType(defaults.source_type, defaults.keyword_list_mode, defaults.image_source_mode || getDefaultImageSourceModeForType(defaults.source_type)));
         setValue('pexels_query', defaults.pexels_query);
         setValue('source_video_enabled', defaults.source_video_enabled);
         setValue('source_content_images_enabled', typeof defaults.source_content_images_enabled !== 'undefined' ? defaults.source_content_images_enabled : '1');
@@ -823,7 +828,7 @@
         setValue('jitter_minutes', generator.jitter_minutes);
         setValue('daily_start', generator.daily_start || '');
         setValue('daily_end', generator.daily_end || '');
-        setValue('image_source_mode', normalizeImageSourceModeForType(generator.source_type || defaults.source_type, generator.image_source_mode || (typeof generator.pexels_enabled !== 'undefined' ? (String(generator.pexels_enabled) === '1' ? 'rss_or_pexels' : 'rss') : defaults.image_source_mode)));
+        setValue('image_source_mode', normalizeImageSourceModeForType(generator.source_type || defaults.source_type, generator.keyword_list_mode || defaults.keyword_list_mode, generator.image_source_mode || (typeof generator.pexels_enabled !== 'undefined' ? (String(generator.pexels_enabled) === '1' ? 'rss_or_pexels' : 'rss') : defaults.image_source_mode)));
         setValue('pexels_query', generator.pexels_query || defaults.pexels_query);
         setValue('source_video_enabled', String(typeof generator.source_video_enabled !== 'undefined' ? generator.source_video_enabled : defaults.source_video_enabled));
         setValue('source_content_images_enabled', String(typeof generator.source_content_images_enabled !== 'undefined' ? generator.source_content_images_enabled : defaults.source_content_images_enabled));
@@ -974,7 +979,16 @@
             var generator = generators.find(function (item) {
                 return String(item.id) === id;
             });
+            var storedImageSourceMode = String(button.getAttribute('data-image-source-mode') || '').trim();
+            if (generator && storedImageSourceMode !== '') {
+                generator = Object.assign({}, generator, {
+                    image_source_mode: storedImageSourceMode
+                });
+            }
             fillForm(generator || null);
+            if (storedImageSourceMode !== '') {
+                setValue('image_source_mode', storedImageSourceMode);
+            }
             openModal(modal);
         });
     });
