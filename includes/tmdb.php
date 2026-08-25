@@ -134,15 +134,19 @@ final class Content_Rank_TMDB
                         'additionalProperties' => false,
                         'properties' => array(
                             'query' => array('type' => 'string'),
-                            'evidence' => array('type' => 'string'),
                         ),
-                        'required' => array('query', 'evidence'),
+                        'required' => array('query'),
                     ),
                 ),
             ),
             'required' => array('movies'),
         );
-        $prompt = 'Extraia do conteudo abaixo somente os titulos de filmes realmente mencionados. Nao inclua atores, diretores, personagens, series ou plataformas. Se o titulo da fonte for uma manchete como "Nome do filme + frase editorial", isole o nome do filme. Preserve o nome como aparece na fonte para que outro sistema possa resolver a obra. Nunca retorne um termo generico como "filmes romanticos" ou "filmes da Netflix" como se fosse um filme. Retorne apenas JSON no formato solicitado.' . "\n\nCONTEUDO:\n" . $source_text;
+        $movie_limit = 10;
+        $normalized_source_text = function_exists('remove_accents') ? remove_accents($source_text) : $source_text;
+        if (preg_match('/\b(10|[1-9])\b.{0,40}\bfilmes?\b/i', $normalized_source_text, $count_match)) {
+            $movie_limit = min(10, max(1, intval($count_match[1])));
+        }
+        $prompt = 'Extraia do conteudo abaixo somente os titulos de filmes realmente mencionados. Nao traduza, nao explique e nao gere descricoes: retorne apenas o nome de cada filme como aparece na fonte, no campo query. Nao inclua atores, diretores, personagens, series ou plataformas. Se o titulo da fonte for uma manchete como "Nome do filme + frase editorial", isole o nome do filme. Nunca retorne um termo generico como "filmes romanticos" ou "filmes da Netflix" como se fosse um filme. A pauta pede no maximo ' . $movie_limit . ' filmes; respeite esse limite e preserve a ordem em que aparecem na fonte. Retorne apenas JSON no formato solicitado.' . "\n\nCONTEUDO:\n" . $source_text;
         $extracted = Content_Rank_Generator::request_openai_json($generator, $prompt, array(
             'stage' => 'tmdb_movie_entity_extraction',
             'source_type' => !empty($generator['source_type']) ? $generator['source_type'] : 'rss',
@@ -157,7 +161,7 @@ final class Content_Rank_TMDB
 
         $service = new self();
         $movies = array();
-        foreach (array_slice($extracted['movies'], 0, 10) as $entity) {
+        foreach (array_slice($extracted['movies'], 0, $movie_limit) as $entity) {
             $query = !empty($entity['query']) ? sanitize_text_field((string) $entity['query']) : '';
             if ($query === '') {
                 continue;
@@ -168,7 +172,6 @@ final class Content_Rank_TMDB
             }
             $movie = $search['results'][0];
             $movie['source_query'] = $query;
-            $movie['source_evidence'] = !empty($entity['evidence']) ? sanitize_text_field((string) $entity['evidence']) : '';
             $movies[] = $movie;
         }
         if (!empty($movies)) {

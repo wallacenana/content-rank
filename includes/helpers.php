@@ -6891,6 +6891,11 @@ class Content_Rank_Generator_Helper
             $hidden_context[] = '{{review_products_prompt}}';
             $hidden_context[] = 'REVIEW COM CARDS: use TODOS os placeholders de produtos informados, exatamente uma vez cada e sempre na ordem {{prod1}}, {{prod2}}, {{prod3}}...; coloque cada placeholder sozinho em um bloco, no ponto em que o respectivo produto deve aparecer. Nao crie HTML de card, nao invente dados, nao omita produtos e nao troque a ordem.';
         }
+        $tmdb_movies_prompt = self::build_tmdb_movies_prompt_block($item);
+        if ($tmdb_movies_prompt !== '') {
+            $hidden_context[] = $tmdb_movies_prompt;
+            $hidden_context[] = 'Os titulos acima foram resolvidos pelo TMDB no idioma final do gerador. Use esses nomes exatamente no esboco e no conteudo; nao volte aos titulos crus da fonte nem traduza por conta propria.';
+        }
         if ($tavily_context_text !== '') {
             $hidden_context[] = 'Pesquisa factual auxiliar do Tavily. Use apenas como apoio factual e nao invente informacoes fora dela:';
             $hidden_context[] = $tavily_context_text;

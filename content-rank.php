@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.72
+Version: 1.9.73
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.72');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.73');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.72';
+        const VERSION = '1.9.73';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -9192,7 +9192,6 @@ if (!class_exists('Content_Rank_Generator')) {
             ));
 
             if (is_wp_error($response)) {
-                error_log('[content-rank] staged generation async dispatch failed: ' . $response->get_error_message());
                 return false;
             }
 
@@ -10537,11 +10536,6 @@ if (!class_exists('Content_Rank_Generator')) {
             if (is_wp_error($payload)) {
                 return $payload;
             }
-            error_log('[Content Rank][generator-save] normalized ' . wp_json_encode(array(
-                'source_type' => $payload['source_type'],
-                'image_source_mode' => $payload['image_source_mode'],
-                'pexels_enabled' => $payload['pexels_enabled'],
-            )));
 
             $generator_id = isset($raw['generator_id']) ? intval($raw['generator_id']) : 0;
             $now = current_time('mysql');
@@ -10618,18 +10612,12 @@ if (!class_exists('Content_Rank_Generator')) {
                     array('id' => $generator_id)
                 );
                 if ($updated === false) {
-                    error_log('[Content Rank][generator-save] update failed ' . $wpdb->last_error);
                     return new WP_Error('content_rank_generator_save_failed', 'O banco recusou o salvamento do gerador: ' . $wpdb->last_error);
                 }
-                error_log('[Content Rank][generator-save] update ok ' . wp_json_encode(array('generator_id' => $generator_id, 'rows' => $updated)));
                 $stored_mode = $wpdb->get_var($wpdb->prepare(
                     'SELECT image_source_mode FROM ' . self::$table_generators . ' WHERE id = %d',
                     $generator_id
                 ));
-                error_log('[Content Rank][generator-save] stored ' . wp_json_encode(array(
-                    'generator_id' => $generator_id,
-                    'image_source_mode' => $stored_mode,
-                )));
                 self::update_generator_schedule($generator_id);
                 return $generator_id;
             }
@@ -10638,10 +10626,8 @@ if (!class_exists('Content_Rank_Generator')) {
             $data['next_run_at'] = null;
             $inserted = $wpdb->insert(self::$table_generators, $data);
             if ($inserted === false) {
-                error_log('[Content Rank][generator-save] insert failed ' . $wpdb->last_error);
                 return new WP_Error('content_rank_generator_save_failed', 'O banco recusou o salvamento do gerador: ' . $wpdb->last_error);
             }
-            error_log('[Content Rank][generator-save] insert ok ' . wp_json_encode(array('generator_id' => intval($wpdb->insert_id), 'rows' => $inserted)));
 
             $generator_id = intval($wpdb->insert_id);
             self::update_generator_schedule($generator_id);
@@ -10962,12 +10948,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 wp_die('Acesso negado.');
             }
             check_admin_referer('content_rank_save_generator', 'content_rank_generator_nonce');
-            error_log('[Content Rank][generator-save] received ' . wp_json_encode(array(
-                'generator_id' => isset($_POST['generator_id']) ? intval($_POST['generator_id']) : 0,
-                'name' => isset($_POST['name']) ? sanitize_text_field(wp_unslash($_POST['name'])) : '',
-                'source_type' => isset($_POST['source_type']) ? sanitize_key(wp_unslash($_POST['source_type'])) : '',
-                'image_source_mode' => isset($_POST['image_source_mode']) ? sanitize_key(wp_unslash($_POST['image_source_mode'])) : '',
-            )));
+
             $saved = self::save_generator($_POST);
             if (is_wp_error($saved)) {
                 self::redirect_with_notice($saved->get_error_message(), 'error');
