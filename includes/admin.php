@@ -296,6 +296,22 @@ class Content_Rank_Generator_Admin
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Chave da API do Pexels</label>
                                     <input type="password" name="pexels_api_key" value="<?php echo esc_attr($settings['pexels_api_key']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
                                 </div>
+                                <div class="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                                    <div class="mb-3">
+                                        <h3 class="text-sm font-semibold text-slate-900">TMDB experimental</h3>
+                                        <p class="mt-1 text-xs text-slate-600">Credenciais usadas pela futura localizaÃ§Ã£o de tÃ­tulos de filmes.</p>
+                                    </div>
+                                    <div class="space-y-3">
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-slate-700">Token de leitura da API</label>
+                                            <input type="password" name="tmdb_read_access_token" value="<?php echo esc_attr($settings['tmdb_read_access_token']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-slate-700">API key v3 (opcional)</label>
+                                            <input type="password" name="tmdb_api_key" value="<?php echo esc_attr($settings['tmdb_api_key']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
+                                        </div>
+                                    </div>
+                                </div>
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Modelo padrão</label>
                                     <input type="text" name="default_model" value="<?php echo esc_attr($settings['default_model']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
@@ -585,6 +601,14 @@ class Content_Rank_Generator_Admin
                                     </select>
                                 </div>
                                 <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Extrair tÃ­tulos de filmes via IA</label>
+                                    <select name="tmdb_title_translation_enabled" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                        <option value="0">NÃ£o</option>
+                                        <option value="1">Sim (experimental)</option>
+                                    </select>
+                                    <p class="mt-1 text-xs text-slate-500">Nesta etapa apenas extrai os nomes originais. A traduÃ§Ã£o pelo TMDB serÃ¡ adicionada depois.</p>
+                                </div>
+                                <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Consulta no Pexels</label>
                                     <input type="text" name="pexels_query" value="<?php echo esc_attr(Content_Rank_Generator::get_default_pexels_query()); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
                                 </div>
@@ -835,6 +859,7 @@ class Content_Rank_Generator_Admin
                                         'daily_start' => '',
                                         'daily_end' => '',
                                         'image_source_mode' => '',
+                                        'tmdb_title_translation_enabled' => '0',
                                         'pexels_query' => Content_Rank_Generator::get_default_pexels_query(),
                                         'source_video_enabled' => '0',
                                         'source_content_images_enabled' => '1',
@@ -1655,6 +1680,7 @@ class Content_Rank_Generator_Admin
                         setValue('daily_start', defaults.daily_start);
                         setValue('daily_end', defaults.daily_end);
                         setValue('image_source_mode', normalizeImageSourceModeForType(defaults.source_type, defaults.keyword_list_mode, defaults.image_source_mode || getDefaultImageSourceModeForType(defaults.source_type, defaults.keyword_list_mode)));
+                        setValue('tmdb_title_translation_enabled', defaults.tmdb_title_translation_enabled);
                         setValue('pexels_query', defaults.pexels_query);
                         setValue('source_video_enabled', defaults.source_video_enabled);
                         setValue('video_selector_class', defaults.video_selector_class);
@@ -1715,6 +1741,7 @@ class Content_Rank_Generator_Admin
                         setValue('daily_start', generator.daily_start);
                         setValue('daily_end', generator.daily_end);
                         setValue('image_source_mode', normalizeImageSourceModeForType(generator.source_type || defaults.source_type, generator.keyword_list_mode || defaults.keyword_list_mode, generator.image_source_mode || (typeof generator.pexels_enabled !== 'undefined' ? (String(generator.pexels_enabled) === '1' ? 'rss_or_pexels' : 'rss') : defaults.image_source_mode)));
+                        setValue('tmdb_title_translation_enabled', typeof generator.tmdb_title_translation_enabled !== 'undefined' ? String(generator.tmdb_title_translation_enabled) : defaults.tmdb_title_translation_enabled);
                         setValue('pexels_query', generator.pexels_query || defaults.pexels_query);
                         setValue('source_video_enabled', String(typeof generator.source_video_enabled !== 'undefined' ? generator.source_video_enabled : defaults.source_video_enabled));
                         setValue('video_selector_class', generator.video_selector_class || defaults.video_selector_class);
@@ -2110,6 +2137,22 @@ class Content_Rank_Generator_Admin
                         <div data-settings-tab-panel="general" class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                             <label class="mb-1 block text-sm font-medium text-slate-700">Chave da API do Pexels</label>
                             <input type="password" name="pexels_api_key" value="<?php echo esc_attr($settings['pexels_api_key']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
+                        </div>
+                        <div data-settings-tab-panel="general" class="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                            <div class="mb-3">
+                                <h3 class="text-sm font-semibold text-slate-900">TMDB experimental</h3>
+                                <p class="mt-1 text-xs text-slate-600">Credenciais usadas pela futura localizaÃ§Ã£o de tÃ­tulos de filmes.</p>
+                            </div>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Token de leitura da API</label>
+                                    <input type="password" name="tmdb_read_access_token" value="<?php echo esc_attr($settings['tmdb_read_access_token']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">API key v3 (opcional)</label>
+                                    <input type="password" name="tmdb_api_key" value="<?php echo esc_attr($settings['tmdb_api_key']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
+                                </div>
+                            </div>
                         </div>
                         <div data-settings-tab-panel="general" class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                             <div class="mb-3">

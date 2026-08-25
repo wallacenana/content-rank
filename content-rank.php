@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.51
+Version: 1.9.52
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.51');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.52');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -47,6 +47,7 @@ require_once __DIR__ . '/plugin.php';
 require_once __DIR__ . '/includes/admin.php';
 require_once __DIR__ . '/includes/rest.php';
 require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/tmdb.php';
 require_once __DIR__ . '/includes/global-filters.php';
 require_once __DIR__ . '/includes/thumbnail-helper.php';
 require_once __DIR__ . '/includes/pexels-media.php';
@@ -63,8 +64,8 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.51';
-        const DB_VERSION = '1.8.4';
+        const VERSION = '1.9.52';
+        const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
         const FEATURED_IMAGE_TARGET_RATIO = 1.7777777778;
@@ -386,6 +387,7 @@ if (!class_exists('Content_Rank_Generator')) {
                     'internal_links_count',
                     'content_image_interval_words',
                     'random_bolds_enabled',
+                    'tmdb_title_translation_enabled',
                 );
                 foreach ($required_generator_columns as $column_name) {
                     $found_column = $wpdb->get_var($wpdb->prepare(
@@ -459,6 +461,10 @@ if (!class_exists('Content_Rank_Generator')) {
                 'content_image_interval_words' => array(
                     'definition' => 'int(11) NOT NULL DEFAULT 500',
                     'after' => 'content_image_size',
+                ),
+                'tmdb_title_translation_enabled' => array(
+                    'definition' => 'tinyint(1) NOT NULL DEFAULT 0',
+                    'after' => 'keyword_list_mode',
                 ),
             );
 
@@ -574,6 +580,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 list_id bigint(20) unsigned NOT NULL DEFAULT 0,
                 keyword_list_mode varchar(20) NOT NULL DEFAULT 'keywords',
                 tavily_enabled tinyint(1) NOT NULL DEFAULT 0,
+                tmdb_title_translation_enabled tinyint(1) NOT NULL DEFAULT 0,
                 status varchar(20) NOT NULL DEFAULT 'active',
                 post_type varchar(60) NOT NULL DEFAULT 'post',
                 post_status varchar(20) NOT NULL DEFAULT 'draft',
@@ -747,6 +754,8 @@ if (!class_exists('Content_Rank_Generator')) {
             return array(
                 'openai_api_key' => '',
                 'pexels_api_key' => '',
+                'tmdb_read_access_token' => '',
+                'tmdb_api_key' => '',
                 'global_internal_links_json' => '[]',
                 'blacklist_json' => '[]',
                 'tavily_api_key' => '',
@@ -2274,6 +2283,7 @@ if (!class_exists('Content_Rank_Generator')) {
             }
 
             $generator['keyword_list_mode'] = $keyword_list_mode;
+            $generator['tmdb_title_translation_enabled'] = !empty($generator['tmdb_title_translation_enabled']) ? 1 : 0;
             $generator['image_source_mode'] = $image_source_mode;
             $generator['image_selector_class'] = isset($generator['image_selector_class']) ? sanitize_text_field((string) $generator['image_selector_class']) : '';
             $generator['link_selector_class'] = isset($generator['link_selector_class']) ? sanitize_text_field((string) $generator['link_selector_class']) : '';
@@ -2321,6 +2331,8 @@ if (!class_exists('Content_Rank_Generator')) {
             $current = self::get_settings();
             $current['openai_api_key'] = isset($raw['openai_api_key']) ? sanitize_text_field(wp_unslash($raw['openai_api_key'])) : '';
             $current['pexels_api_key'] = isset($raw['pexels_api_key']) ? sanitize_text_field(wp_unslash($raw['pexels_api_key'])) : '';
+            $current['tmdb_read_access_token'] = isset($raw['tmdb_read_access_token']) ? sanitize_text_field(wp_unslash($raw['tmdb_read_access_token'])) : $current['tmdb_read_access_token'];
+            $current['tmdb_api_key'] = isset($raw['tmdb_api_key']) ? sanitize_text_field(wp_unslash($raw['tmdb_api_key'])) : $current['tmdb_api_key'];
             if (isset($raw['global_internal_links_json'])) {
                 $global_internal_links_raw = wp_unslash($raw['global_internal_links_json']);
                 $current['global_internal_links_json'] = wp_json_encode(Content_Rank_Generator_Helper::parse_internal_link_rules($global_internal_links_raw), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -3429,6 +3441,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 $payload['keyword_list_mode'] = 'keywords';
             }
             $payload['tavily_enabled'] = ($payload['source_type'] === 'keyword_list' && !empty($raw['tavily_enabled'])) ? 1 : 0;
+            $payload['tmdb_title_translation_enabled'] = !empty($raw['tmdb_title_translation_enabled']) ? 1 : 0;
             if ($payload['generation_mode'] === 'satellite') {
                 $payload['source_post_id'] = 0;
             }
@@ -3903,7 +3916,11 @@ if (!class_exists('Content_Rank_Generator')) {
                 : self::get_default_generation_language();
             $language_instruction = 'IDIOMA OBRIGATORIO: gere toda a resposta exclusivamente em ' . $generation_language . '. '
                 . 'Mantenha em outro idioma somente nomes proprios, marcas, obras ou termos que precisem permanecer assim.';
-            $prompt = $language_instruction . "\n\n" . trim((string) $prompt) . "\n\n" . $language_instruction;
+            if (empty($context['skip_language_instruction'])) {
+                $prompt = $language_instruction . "\n\n" . trim((string) $prompt) . "\n\n" . $language_instruction;
+            } else {
+                $prompt = trim((string) $prompt);
+            }
 
             $model = trim((string) $settings['default_model']);
             $temperature = max(0.0, min(2.0, floatval($settings['default_temperature'])));
@@ -9213,6 +9230,9 @@ if (!class_exists('Content_Rank_Generator')) {
                 }
                 return $item;
             }
+            if (!empty($generator['tmdb_title_translation_enabled']) && class_exists('Content_Rank_TMDB')) {
+                $item = Content_Rank_TMDB::extract_item_movie_titles($generator, $item);
+            }
 
             if (self::generator_uses_source_page_context($generator)) {
                 $item = self::resolve_item_media_for_generation($generator, $item);
@@ -10502,6 +10522,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 'list_id' => $payload['list_id'],
                 'keyword_list_mode' => $payload['keyword_list_mode'],
                 'tavily_enabled' => $payload['tavily_enabled'],
+                'tmdb_title_translation_enabled' => $payload['tmdb_title_translation_enabled'],
                 'status' => $payload['status'],
                 'post_type' => $payload['post_type'],
                 'post_status' => $payload['post_status'],
@@ -10606,6 +10627,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 'list_id' => $duplicated_list_id,
                 'keyword_list_mode' => isset($generator['keyword_list_mode']) ? $generator['keyword_list_mode'] : self::get_default_keyword_list_mode(),
                 'tavily_enabled' => !empty($generator['tavily_enabled']) ? 1 : 0,
+                'tmdb_title_translation_enabled' => !empty($generator['tmdb_title_translation_enabled']) ? 1 : 0,
                 'status' => $generator['status'],
                 'post_type' => $generator['post_type'],
                 'post_status' => $generator['post_status'],
