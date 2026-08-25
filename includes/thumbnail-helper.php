@@ -37,6 +37,9 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     isset($generator['pexels_enabled']) ? !empty($generator['pexels_enabled']) : null,
                     $keyword_list_mode
                 );
+            $title = !empty($article['title'])
+                ? (string) $article['title']
+                : (!empty($item['source_title']) ? (string) $item['source_title'] : (!empty($item['title']) ? (string) $item['title'] : ''));
 
             if ($image_source_mode === 'tmdb_composite' && class_exists('Content_Rank_TMDB')) {
                 $composite_result = Content_Rank_TMDB::create_composite_thumbnail_for_post(
@@ -58,9 +61,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 && Content_Rank_Generator::image_source_mode_uses_source_image($image_source_mode);
             $use_pexels = Content_Rank_Generator::image_source_mode_uses_pexels($image_source_mode);
             $use_dalle = Content_Rank_Generator::image_source_mode_uses_dalle($image_source_mode);
-            $title = !empty($article['title'])
-                ? (string) $article['title']
-                : (!empty($item['source_title']) ? (string) $item['source_title'] : (!empty($item['title']) ? (string) $item['title'] : ''));
             $source_image_url = '';
             if ($use_source_image) {
                 $source_html = self::get_cached_source_html($item);
