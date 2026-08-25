@@ -2112,9 +2112,11 @@ class Content_Rank_Generator_Admin
                             <input type="password" name="pexels_api_key" value="<?php echo esc_attr($settings['pexels_api_key']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
                         </div>
                         <div data-settings-tab-panel="general" class="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                            <label class="mb-1 block text-sm font-medium text-slate-700">Chave da API do TMDB (experimental)</label>
+                            <label class="mb-1 block text-sm font-medium text-slate-700">Token de leitura do TMDB v4 (experimental)</label>
+                            <input type="password" name="tmdb_read_access_token" value="<?php echo esc_attr($settings['tmdb_read_access_token']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
+                            <label class="mb-1 mt-3 block text-sm font-medium text-slate-700">API key TMDB v3 (alternativa)</label>
                             <input type="password" name="tmdb_api_key" value="<?php echo esc_attr($settings['tmdb_api_key']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
-                            <p class="mt-2 text-xs text-slate-600">Usada na pagina experimental de consulta. Configure a atribuicao e a autorizacao antes de qualquer uso publico.</p>
+                            <p class="mt-2 text-xs text-slate-600">Use preferencialmente o Token de Leitura v4. A API key v3 fica como alternativa.</p>
                         </div>
                         <div data-settings-tab-panel="general" class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                             <div class="mb-3">

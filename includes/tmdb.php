@@ -30,8 +30,8 @@ final class Content_Rank_TMDB
             delete_transient(self::TEST_TRANSIENT_PREFIX . get_current_user_id());
         }
         echo '<div class="wrap"><h1>TMDB Experimental</h1><p>Teste a identificacao de titulos antes de conectar o TMDB aos geradores.</p>';
-        if (empty($settings['tmdb_api_key'])) {
-            echo '<div class="notice notice-warning"><p>Configure a chave do TMDB em Content Rank &gt; Configuracoes.</p></div>';
+        if (empty($settings['tmdb_read_access_token']) && empty($settings['tmdb_api_key'])) {
+            echo '<div class="notice notice-warning"><p>Configure o token do TMDB em Content Rank &gt; Configuracoes.</p></div>';
         }
         if (is_array($test) && !empty($test['error'])) {
             echo '<div class="notice notice-error"><p>' . esc_html($test['error']) . '</p></div>';
@@ -71,15 +71,23 @@ final class Content_Rank_TMDB
     {
         $query = trim((string) $query);
         $settings = Content_Rank_Generator::get_settings();
+        $read_access_token = trim((string) ($settings['tmdb_read_access_token'] ?? ''));
         $api_key = trim((string) ($settings['tmdb_api_key'] ?? ''));
-        if ($api_key === '') {
-            return array('error' => 'Informe a chave do TMDB nas configuracoes.');
+        if ($read_access_token === '' && $api_key === '') {
+            return array('error' => 'Informe o token ou a API key do TMDB nas configuracoes.');
         }
         if ($query === '') {
             return array('error' => 'Informe um titulo para pesquisar.');
         }
-        $url = add_query_arg(array('api_key' => $api_key, 'query' => $query, 'language' => 'pt-BR', 'region' => 'BR', 'include_adult' => 'false', 'page' => 1), 'https://api.themoviedb.org/3/search/movie');
-        $response = wp_remote_get($url, array('timeout' => 15, 'headers' => array('Accept' => 'application/json')));
+        $query_args = array('query' => $query, 'language' => 'pt-BR', 'region' => 'BR', 'include_adult' => 'false', 'page' => 1);
+        $headers = array('Accept' => 'application/json');
+        if ($read_access_token !== '') {
+            $headers['Authorization'] = 'Bearer ' . $read_access_token;
+        } else {
+            $query_args['api_key'] = $api_key;
+        }
+        $url = add_query_arg($query_args, 'https://api.themoviedb.org/3/search/movie');
+        $response = wp_remote_get($url, array('timeout' => 15, 'headers' => $headers));
         if (is_wp_error($response)) {
             return array('error' => $response->get_error_message());
         }

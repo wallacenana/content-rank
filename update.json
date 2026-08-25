@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.52",
+  "version": "1.9.53",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Adicionado laboratorio experimental para buscar titulos e posters no TMDB.</li><li>Adicionada configuracao da chave do TMDB.</li></ul>",
+  "changelog": "<ul><li>Adicionado suporte ao Token de Leitura v4 do TMDB.</li><li>Mantida compatibilidade com API key v3 no laboratorio experimental.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

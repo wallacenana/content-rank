@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.52
+Version: 1.9.53
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.52');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.53');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.52';
+        const VERSION = '1.9.53';
         const DB_VERSION = '1.8.4';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -752,6 +752,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 'openai_api_key' => '',
                 'pexels_api_key' => '',
                 'tmdb_api_key' => '',
+                'tmdb_read_access_token' => '',
                 'global_internal_links_json' => '[]',
                 'blacklist_json' => '[]',
                 'tavily_api_key' => '',
@@ -2327,6 +2328,7 @@ if (!class_exists('Content_Rank_Generator')) {
             $current['openai_api_key'] = isset($raw['openai_api_key']) ? sanitize_text_field(wp_unslash($raw['openai_api_key'])) : '';
             $current['pexels_api_key'] = isset($raw['pexels_api_key']) ? sanitize_text_field(wp_unslash($raw['pexels_api_key'])) : '';
             $current['tmdb_api_key'] = isset($raw['tmdb_api_key']) ? sanitize_text_field(wp_unslash($raw['tmdb_api_key'])) : '';
+            $current['tmdb_read_access_token'] = isset($raw['tmdb_read_access_token']) ? sanitize_text_field(wp_unslash($raw['tmdb_read_access_token'])) : '';
             if (isset($raw['global_internal_links_json'])) {
                 $global_internal_links_raw = wp_unslash($raw['global_internal_links_json']);
                 $current['global_internal_links_json'] = wp_json_encode(Content_Rank_Generator_Helper::parse_internal_link_rules($global_internal_links_raw), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
