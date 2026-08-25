@@ -21,22 +21,23 @@ final class Content_Rank_TMDB
         $replacements = array();
         $movies = array();
         foreach (preg_split('/\R/u', $source_titles) as $source_title) {
+            $source_year = self::extract_source_year($source_title);
             $query = self::normalize_source_title($source_title);
             if ($query === '') {
                 continue;
             }
             $source_query = $query;
 
-            $search = self::search_movie($query, $language);
+            $search = self::search_movie($query, $language, $source_year);
             if (empty($search['results'][0]) && preg_match('/\s[-|:–—]\s/u', $query)) {
                 $short_query = trim((string) preg_replace('/\s[-|:–—]\s.*$/u', '', $query));
                 if ($short_query !== '' && $short_query !== $query) {
-                    $search = self::search_movie($short_query, $language);
+                    $search = self::search_movie($short_query, $language, $source_year);
                     $query = $short_query;
                 }
             }
             if (empty($search['results'][0]) && $language !== 'en-US') {
-                $search = self::search_movie($query, 'en-US');
+                $search = self::search_movie($query, 'en-US', $source_year);
             }
             if (empty($search['results'][0]) || empty($search['results'][0]['id'])) {
                 error_log('[Content Rank][tmdb] titulo nao localizado ' . wp_json_encode(array(
@@ -47,9 +48,18 @@ final class Content_Rank_TMDB
                 continue;
             }
 
-            $result = $search['results'][0];
+            $result = self::choose_search_result($search['results'], $query, $source_year);
+            if (empty($result['id'])) {
+                continue;
+            }
             $details = self::movie_details(intval($result['id']), $language);
             $localized_title = !empty($details['title']) ? (string) $details['title'] : (string) $result['title'];
+            if ($language === 'pt-BR' && self::titles_match($localized_title, $query)) {
+                $alternative_title = self::get_brazilian_alternative_title(intval($result['id']));
+                if ($alternative_title !== '') {
+                    $localized_title = $alternative_title;
+                }
+            }
             $poster_path = !empty($details['poster_path']) ? $details['poster_path'] : (!empty($result['poster_path']) ? $result['poster_path'] : '');
             $movies[] = array(
                 'id' => intval($result['id']),
@@ -59,7 +69,7 @@ final class Content_Rank_TMDB
                 'poster_url' => $poster_path !== '' ? 'https://image.tmdb.org/t/p/w780' . $poster_path : '',
                 'source_query' => $source_query,
             );
-            if ($localized_title === '' || strcasecmp($query, $localized_title) === 0) {
+            if ($localized_title === '' || self::titles_match($query, $localized_title)) {
                 continue;
             }
 
@@ -67,6 +77,16 @@ final class Content_Rank_TMDB
             $replacements[$query] = $localized_title;
             if (!empty($result['original_title'])) {
                 $replacements[(string) $result['original_title']] = $localized_title;
+            }
+            if (!empty($details['original_title'])) {
+                $replacements[(string) $details['original_title']] = $localized_title;
+            }
+            foreach (array($source_query, $query, $result['original_title'] ?? '', $details['original_title'] ?? '') as $title_variant) {
+                $title_variant = trim((string) $title_variant);
+                $without_punctuation = trim((string) preg_replace('/[^\p{L}\p{N}]+/u', ' ', $title_variant));
+                if ($without_punctuation !== '' && $without_punctuation !== $title_variant) {
+                    $replacements[$without_punctuation] = $localized_title;
+                }
             }
         }
 
@@ -185,6 +205,13 @@ final class Content_Rank_TMDB
         return array(hexdec(substr($color, 1, 2)), hexdec(substr($color, 3, 2)), hexdec(substr($color, 5, 2)));
     }
 
+    private static function extract_source_year($title)
+    {
+        return preg_match('/\b((?:19|20)\d{2})\b/u', (string) $title, $matches)
+            ? (int) $matches[1]
+            : 0;
+    }
+
     private static function normalize_source_title($title)
     {
         $title = trim(wp_strip_all_tags((string) $title));
@@ -203,6 +230,57 @@ final class Content_Rank_TMDB
         return $text;
     }
 
+    private static function titles_match($left, $right)
+    {
+        $normalize = function ($value) {
+            $value = remove_accents(wp_strip_all_tags((string) $value));
+            return strtolower((string) preg_replace('/[^a-z0-9]+/i', '', $value));
+        };
+        return $normalize($left) !== '' && $normalize($left) === $normalize($right);
+    }
+
+    private static function choose_search_result($results, $query, $year)
+    {
+        $results = is_array($results) ? $results : array();
+        $best = array();
+        $best_score = -1;
+        foreach ($results as $result) {
+            if (!is_array($result) || empty($result['id'])) {
+                continue;
+            }
+            $result_year = !empty($result['release_date']) ? (int) substr((string) $result['release_date'], 0, 4) : 0;
+            $score = 0;
+            if ($year > 0 && $result_year === $year) {
+                $score += 100;
+            } elseif ($year > 0) {
+                $score -= 50;
+            }
+            if (!empty($result['title']) && self::titles_match($query, $result['title'])) {
+                $score += 50;
+            }
+            if (!empty($result['original_title']) && self::titles_match($query, $result['original_title'])) {
+                $score += 50;
+            }
+            if ($score > $best_score) {
+                $best = $result;
+                $best_score = $score;
+            }
+        }
+        return $best;
+    }
+
+    private static function get_brazilian_alternative_title($movie_id)
+    {
+        $response = self::request('movie/' . absint($movie_id) . '/alternative_titles');
+        $titles = !empty($response['titles']) && is_array($response['titles']) ? $response['titles'] : array();
+        foreach ($titles as $title) {
+            if (!empty($title['iso_3166_1']) && strtoupper((string) $title['iso_3166_1']) === 'BR' && !empty($title['title'])) {
+                return (string) $title['title'];
+            }
+        }
+        return '';
+    }
+
     private static function language_from_generator($generator)
     {
         $language = !empty($generator['generation_language']) ? strtolower(remove_accents((string) $generator['generation_language'])) : '';
@@ -215,15 +293,19 @@ final class Content_Rank_TMDB
         return 'pt-BR';
     }
 
-    private static function search_movie($query, $language)
+    private static function search_movie($query, $language, $year = 0)
     {
-        return self::request('search/movie', array(
+        $args = array(
             'query' => $query,
             'language' => $language,
             'region' => 'BR',
             'include_adult' => 'false',
             'page' => 1,
-        ));
+        );
+        if ((int) $year > 0) {
+            $args['year'] = (int) $year;
+        }
+        return self::request('search/movie', $args);
     }
 
     private static function movie_details($movie_id, $language)
