@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.78",
+  "version": "1.9.79",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Adicionada validação do título localizado após a busca no TMDB.</li><li>A API de detalhes do TMDB agora confirma idioma, título, ano, sinopse e poster da obra.</li><li>O log registra a relação entre query da IA e título final retornado pelo TMDB.</li></ul>",
+  "changelog": "<ul><li>O contexto TMDB agora é resolvido antes do primeiro prompt editorial.</li><li>O planejamento recebe os títulos localizados antes de escolher o modelo e gerar o esboço.</li><li>Normalizações técnicas não alteram o texto enviado à IA.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""
