@@ -5413,7 +5413,6 @@ class Content_Rank_Generator_Helper
         $lines = array();
         $content_type = !empty($outline_context['content_type']) ? Content_Rank_Generator::normalize_prompt_model_key((string) $outline_context['content_type']) : '';
         $funnel_level = !empty($outline_context['funnel_level']) ? sanitize_text_field((string) $outline_context['funnel_level']) : '';
-        $tone = !empty($outline_context['tone']) ? sanitize_text_field((string) $outline_context['tone']) : '';
         $primary_pain = !empty($outline_context['primary_pain']) ? sanitize_textarea_field((string) $outline_context['primary_pain']) : '';
         $focus_keyword = !empty($outline_context['focus_keyword']) ? sanitize_text_field((string) $outline_context['focus_keyword']) : '';
         $editorial_conflict = !empty($outline_context['editorial_conflict']) ? sanitize_textarea_field((string) $outline_context['editorial_conflict']) : '';
@@ -5427,9 +5426,6 @@ class Content_Rank_Generator_Helper
         }
         if ($funnel_level !== '') {
             $lines[] = 'Nivel de funil: ' . $funnel_level;
-        }
-        if ($tone !== '') {
-            $lines[] = 'Tom: ' . $tone;
         }
         if ($primary_pain !== '') {
             $lines[] = 'Dor principal: ' . $primary_pain;
@@ -5590,7 +5586,7 @@ class Content_Rank_Generator_Helper
             'Escreva todos os titulos, fatos, perguntas, notas e demais campos textuais exclusivamente nesse idioma. Use outro idioma somente em nomes proprios, termos da fonte e nas chaves tecnicas obrigatorias do JSON.',
             'Analise principalmente o conteudo html enviado e escolha apenas 1 modelo.',
             'Ignore rodape, sidebar, widgets, navegacao e blocos auxiliares (caso exista).',
-            'Retorne apenas JSON valido com estas chaves: content_type, funnel_level, tone, primary_pain, focus_keyword, recommended_prompt_model_key.',
+            'Retorne apenas JSON valido com estas chaves: content_type, funnel_level, primary_pain, focus_keyword, recommended_prompt_model_key.',
             'Use content_type somente como uma destas chaves canonicas: lista, artigo, noticia, review, faq, tutorial, comparativo.',
             'REGRA PRINCIPAL: escolha noticia quando o conteudo tratar de um acontecimento, anuncio, confirmacao, estreia, lancamento, atualizacao, declaracao ou mudanca pontual. Uma noticia pode ter varios h2; a existencia de h2 nao a transforma em artigo ou lista.',
             'Escolha artigo somente quando a fonte desenvolver um tema evergreen, explicativo, opinativo ou analitico, com progressao de ideias e contexto, sem relatar principalmente um fato pontual.',
@@ -5703,7 +5699,7 @@ class Content_Rank_Generator_Helper
             'Escolha comparativo quando houver versus, vs, comparar ou duas opcoes claras.',
             'Escolha tutorial quando houver como fazer, passo a passo ou instrucoes.',
             'Escolha noticia somente quando a keyword indicar acontecimento, anuncio, estreia, lancamento ou atualizacao pontual.',
-            'Retorne somente JSON valido com estas chaves: content_type, funnel_level, tone, primary_pain, focus_keyword, recommended_prompt_model_key.',
+            'Retorne somente JSON valido com estas chaves: content_type, funnel_level, primary_pain, focus_keyword, recommended_prompt_model_key.',
             'Use content_type e recommended_prompt_model_key somente com as chaves validas abaixo.',
             'Keyword da pauta: ' . ($keyword !== '' ? $keyword : '[sem keyword]'),
             'Nome do gerador: ' . $generator_name,
@@ -5733,7 +5729,6 @@ class Content_Rank_Generator_Helper
                 ? Content_Rank_Generator::normalize_prompt_model_key((string) $outline_context['content_type'])
                 : 'artigo');
         $outline_context['funnel_level'] = !empty($analysis['funnel_level']) ? sanitize_key((string) $analysis['funnel_level']) : (!empty($outline_context['funnel_level']) ? sanitize_key((string) $outline_context['funnel_level']) : 'mid');
-        $outline_context['tone'] = !empty($analysis['tone']) ? sanitize_text_field((string) $analysis['tone']) : (!empty($outline_context['tone']) ? sanitize_text_field((string) $outline_context['tone']) : '');
         $outline_context['primary_pain'] = !empty($analysis['primary_pain']) ? sanitize_textarea_field((string) $analysis['primary_pain']) : (!empty($outline_context['primary_pain']) ? sanitize_textarea_field((string) $outline_context['primary_pain']) : '');
         $outline_context['focus_keyword'] = !empty($analysis['focus_keyword']) ? sanitize_text_field((string) $analysis['focus_keyword']) : (!empty($outline_context['focus_keyword']) ? sanitize_text_field((string) $outline_context['focus_keyword']) : '');
         foreach (array('editorial_conflict', 'reader_transformation', 'main_promise', 'reader_intent') as $narrative_key) {
@@ -5779,9 +5774,6 @@ class Content_Rank_Generator_Helper
 
             return array_values(array_unique($normalized));
         };
-        $outline_context['semantic_terms'] = array();
-        $outline_context['reader_questions'] = array();
-        $outline_context['key_facts'] = array();
         $sections = array();
         $raw_sections = array();
         if (!empty($analysis['outline_sections']) && is_array($analysis['outline_sections'])) {
@@ -5940,7 +5932,6 @@ class Content_Rank_Generator_Helper
                 ? Content_Rank_Generator::normalize_prompt_model_key((string) $outline_model_hint_key)
                 : 'artigo';
             $outline_context['funnel_level'] = $outline_model_hint_key === 'news_short' ? 'top' : 'mid';
-            $outline_context['tone'] = !empty($outline_context['tone']) ? $outline_context['tone'] : 'editorial';
             $outline_context['primary_pain'] = !empty($outline_context['primary_pain'])
                 ? $outline_context['primary_pain']
                 : (!empty($item['source_page_excerpt'])
@@ -6254,9 +6245,6 @@ class Content_Rank_Generator_Helper
         $funnel_level = !empty($outline_context['funnel_level'])
             ? sanitize_key((string) $outline_context['funnel_level'])
             : '';
-        $tone = !empty($outline_context['tone'])
-            ? self::normalize_prompt_context_text((string) $outline_context['tone'])
-            : '';
         $primary_pain = !empty($outline_context['primary_pain'])
             ? self::normalize_prompt_context_text((string) $outline_context['primary_pain'])
             : '';
@@ -6382,7 +6370,6 @@ class Content_Rank_Generator_Helper
             'Categoria editorial: ' . (!empty($generator_context['category_text']) ? $generator_context['category_text'] : '[sem categoria]'),
             'Tipo de conteudo planejado: ' . ($content_type !== '' ? $content_type : '[nao definido]'),
             'Nivel de funil planejado: ' . ($funnel_level !== '' ? $funnel_level : '[nao definido]'),
-            'Tom planejado: ' . ($tone !== '' ? $tone : '[nao definido]'),
             'Dor principal planejada: ' . ($primary_pain !== '' ? $primary_pain : '[nao definida]'),
             'Conflito editorial planejado: ' . ($editorial_conflict !== '' ? $editorial_conflict : '[defina a partir da dor principal e da fonte]'),
             'Transformacao esperada do leitor: ' . ($reader_transformation !== '' ? $reader_transformation : '[defina o antes e o depois do leitor]'),
@@ -6659,9 +6646,6 @@ class Content_Rank_Generator_Helper
         if (!empty($outline_context['funnel_level'])) {
             $hidden_context[] = 'Nivel de funil definido no planejamento: ' . sanitize_text_field((string) $outline_context['funnel_level']);
         }
-        if (!empty($outline_context['tone'])) {
-            $hidden_context[] = 'Tom definido no planejamento: ' . sanitize_text_field((string) $outline_context['tone']);
-        }
         if (!empty($outline_context['primary_pain'])) {
             $hidden_context[] = 'Dor principal definida no planejamento: ' . sanitize_text_field((string) $outline_context['primary_pain']);
         }
@@ -6824,7 +6808,6 @@ class Content_Rank_Generator_Helper
             }
             $outline_context['content_type'] = 'review';
             $outline_context['funnel_level'] = 'mid';
-            $outline_context['tone'] = 'analytical';
             $outline_context['primary_pain'] = 'Comparar os produtos e decidir qual atende melhor a necessidade do leitor.';
             $outline_context['focus_keyword'] = $focus_keyword;
             $outline_context['recommended_prompt_model_key'] = 'review';
@@ -6998,6 +6981,13 @@ class Content_Rank_Generator_Helper
 
     public static function call_openai($generator, $item)
     {
+        $item = is_array($item) ? $item : array();
+        $tmdb_enabled = !empty($generator['tmdb_title_translation_enabled'])
+            || (!empty($generator['image_source_mode']) && sanitize_key((string) $generator['image_source_mode']) === 'tmdb_composite');
+        if ($tmdb_enabled && class_exists('Content_Rank_TMDB')) {
+            // Resolve localized movie titles before any AI stage sees the source.
+            Content_Rank_TMDB::localize_article_movie_titles($generator, $item, array(), false);
+        }
         $planning = self::prepare_generation_planning($generator, $item);
         if (is_wp_error($planning)) {
             return $planning;
