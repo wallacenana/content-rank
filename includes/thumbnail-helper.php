@@ -15,7 +15,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
             }
 
             $existing_thumbnail_id = intval(get_post_thumbnail_id($post_id));
-            if ($reuse_existing && $existing_thumbnail_id > 0) {
+            if ($reuse_existing && $existing_thumbnail_id > 0 && wp_attachment_is_image($existing_thumbnail_id)) {
                 return $existing_thumbnail_id;
             }
 
@@ -125,22 +125,31 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
 
         private static function get_cached_source_html($item)
         {
-            if (!empty($item['source_page_html'])) {
-                return (string) $item['source_page_html'];
-            }
-
+            $cached_html = !empty($item['source_page_html'])
+                ? (string) $item['source_page_html']
+                : '';
             $source_url = !empty($item['permalink'])
                 ? trim((string) $item['permalink'])
                 : (!empty($item['source_url']) ? trim((string) $item['source_url']) : '');
-            if ($source_url === '') {
-                return '';
+
+            // The article HTML may be filtered and therefore omit the page head.
+            // Fetch the raw cached page when the cached fragment has no OG image.
+            if ($cached_html !== '' && self::extract_og_image_url($cached_html, $source_url) !== '') {
+                return $cached_html;
             }
 
-            return (string) Content_Rank_Generator_Helper::fetch_source_page_html(
-                $source_url,
-                5,
-                'thumbnail_og'
-            );
+            if ($source_url !== '') {
+                $source_html = Content_Rank_Generator_Helper::fetch_source_page_html(
+                    $source_url,
+                    5,
+                    'thumbnail_og'
+                );
+                if ($source_html !== '') {
+                    return (string) $source_html;
+                }
+            }
+
+            return $cached_html;
         }
 
         private static function extract_og_image_url($html, $base_url = '')

@@ -42,7 +42,7 @@ if (!defined('CONTENT_RANK_GENERATOR_PEXELS_MEDIA_SCRIPT_URL')) {
 if (!function_exists('content_rank_generator_enqueue_assets')) {
     function content_rank_generator_enqueue_assets() {
         $page = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : '';
-        if ($page === '' || strpos($page, 'content-rank-') !== 0) {
+        if ($page === '' || ($page !== 'content-rank' && strpos($page, 'content-rank-') !== 0)) {
             return;
         }
 
@@ -93,7 +93,7 @@ if (!function_exists('content_rank_generator_enqueue_assets')) {
     }
 }
 
-add_action('admin_enqueue_scripts', 'content_rank_generator_enqueue_assets');
+add_action('admin_enqueue_scripts', 'content_rank_generator_enqueue_assets', 999);
 
 if (!function_exists('content_rank_generator_enqueue_pexels_media_assets')) {
     function content_rank_generator_enqueue_pexels_media_assets($hook_suffix) {
@@ -179,8 +179,8 @@ if (!function_exists('content_rank_generator_enqueue_review_card_styles')) {
     }
 }
 
-add_action('wp_enqueue_scripts', 'content_rank_generator_enqueue_review_card_styles');
-add_action('enqueue_block_assets', 'content_rank_generator_enqueue_review_card_styles');
-add_action('enqueue_block_editor_assets', 'content_rank_generator_enqueue_review_card_styles');
-add_action('admin_enqueue_scripts', 'content_rank_generator_enqueue_review_card_editor_styles');
+add_action('wp_enqueue_scripts', 'content_rank_generator_enqueue_review_card_styles', 999);
+add_action('enqueue_block_assets', 'content_rank_generator_enqueue_review_card_styles', 999);
+add_action('enqueue_block_editor_assets', 'content_rank_generator_enqueue_review_card_styles', 999);
+add_action('admin_enqueue_scripts', 'content_rank_generator_enqueue_review_card_editor_styles', 999);
 add_filter('block_editor_settings_all', 'content_rank_generator_add_review_card_editor_iframe_styles');

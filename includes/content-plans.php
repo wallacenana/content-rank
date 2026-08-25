@@ -27,6 +27,7 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             add_action('admin_post_content_rank_generate_content_plan', array($this, 'handle_generate_plan'));
             add_action('admin_post_content_rank_generate_content_satellites', array($this, 'handle_generate_satellites'));
             add_action('admin_post_content_rank_clear_content_plan', array($this, 'handle_clear_plan'));
+            add_action('transition_post_status', array($this, 'handle_satellite_publish_transition'), 20, 3);
         }
 
         public function admin_menu()
@@ -152,7 +153,7 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                 return $actions;
             }
 
-            $actions['content_rank_plan'] = '<a href="' . esc_url($plan_url) . '" aria-label="Lincagem automática" title="Lincagem automática">Lincagem automática</a>';
+            $actions['content_rank_plan'] = '<a href="' . esc_url($plan_url) . '" aria-label="Planejamento" title="Planejamento">Planejamento</a>';
             return $actions;
         }
 
@@ -347,30 +348,6 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             return trim((string) $text);
         }
 
-        private static function build_tavily_query($item, $planning_custom_prompt = '')
-        {
-            $item = is_array($item) ? $item : array();
-            $parts = array();
-
-            foreach (array('title', 'source_title', 'excerpt', 'source_page_excerpt') as $key) {
-                if (!empty($item[$key])) {
-                    $parts[] = self::limit_plain_text_words((string) $item[$key], 18);
-                }
-            }
-
-            if ($planning_custom_prompt !== '') {
-                $parts[] = self::limit_plain_text_words((string) $planning_custom_prompt, 18);
-            }
-
-            $parts = array_values(array_filter(array_map(array(__CLASS__, 'normalize_plain_text'), $parts), 'strlen'));
-            $query = trim(implode(' ', array_slice($parts, 0, 3)));
-            if ($query === '' && !empty($item['content'])) {
-                $query = self::limit_plain_text_words((string) $item['content'], 24);
-            }
-
-            return self::normalize_plain_text($query);
-        }
-
         private static function fetch_tavily_research($query, $max_results = 3)
         {
             $query = self::normalize_plain_text($query);
@@ -427,27 +404,6 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             }
 
             return self::limit_plain_text_words(implode("\n", $lines), 220);
-        }
-
-        private static function attach_tavily_context_to_item($item, $context)
-        {
-            $item = is_array($item) ? $item : array();
-            $context = is_array($context) ? $context : array();
-            $tavily_text = self::format_tavily_research_for_prompt($context);
-
-            $item['tavily_query'] = !empty($context['query']) ? self::normalize_plain_text((string) $context['query']) : '';
-            $item['tavily_context'] = $context;
-            $item['tavily_text'] = $tavily_text;
-
-            if ($tavily_text !== '') {
-                foreach (array('content', 'source_page_content', 'excerpt', 'source_page_excerpt') as $key) {
-                    if (!empty($item[$key])) {
-                        $item[$key] = trim((string) $item[$key]) . "\n\n" . 'Pesquisa externa auxiliar do Tavily: ' . $tavily_text;
-                    }
-                }
-            }
-
-            return $item;
         }
 
         private static function get_post_excerpt_text($post)
@@ -517,6 +473,8 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                 'source_page_title' => $source_page_title,
                 'source_page_excerpt' => $source_page_excerpt,
                 'source_page_content' => $source_page_content,
+                'source_page_content_html' => $source_page_content,
+                'post_content_html' => (string) $post->post_content,
                 'source_page_outline' => $source_page_outline,
                 'source_page_outline_sections' => array(),
                 'source_video_url' => (string) get_post_meta($post_id, '_content_rank_source_video_url', true),
@@ -556,29 +514,274 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             );
         }
 
-        private static function normalize_satellite_item($satellite, $index)
+        private static function get_pillar_subject_terms($pillar_title)
+        {
+            $pillar_title = html_entity_decode(wp_strip_all_tags((string) $pillar_title), ENT_QUOTES | ENT_HTML5, get_bloginfo('charset'));
+            $pillar_title = self::normalize_plain_text($pillar_title);
+            if ($pillar_title === '') {
+                return array();
+            }
+
+            $generic_terms = array(
+                'a', 'as', 'ao', 'aos', 'artigo', 'com', 'como', 'da', 'das', 'de', 'do', 'dos',
+                'em', 'filme', 'filmes', 'forma', 'formas', 'guia', 'jogo', 'jogos', 'lista',
+                'melhor', 'melhores', 'na', 'nas', 'no', 'nos', 'noticia', 'novo', 'novos',
+                'para', 'passo', 'passos', 'por', 'que', 'recompensa', 'recompensas', 'serie',
+                'series', 'sem', 'sobre', 'tutorial', 'um', 'uma', 'usar', 'uso', 'e', 'os',
+                'of', 'the', 'this', 'with', 'and', 'best', 'new', 'how', 'to', 'in', 'on',
+            );
+
+            preg_match_all('/[\p{L}\p{N}][\p{L}\p{N}_-]*/u', $pillar_title, $matches);
+            $terms = array();
+            foreach (!empty($matches[0]) ? $matches[0] : array() as $term) {
+                $term = trim((string) $term);
+                $normalized = function_exists('remove_accents') ? remove_accents($term) : $term;
+                $normalized = strtolower($normalized);
+                if ($normalized === '' || is_numeric($normalized) || strlen($normalized) < 4 || in_array($normalized, $generic_terms, true)) {
+                    continue;
+                }
+                $terms[$normalized] = $term;
+            }
+
+            return array_values($terms);
+        }
+
+        private static function satellite_matches_pillar_subject($satellite_title, $anchor_phrase, $pillar_title)
+        {
+            $subject_terms = self::get_pillar_subject_terms($pillar_title);
+            if (empty($subject_terms)) {
+                return true;
+            }
+
+            $satellite_context = (string) $satellite_title . ' ' . (string) $anchor_phrase;
+            $satellite_context = function_exists('remove_accents') ? remove_accents($satellite_context) : $satellite_context;
+            $satellite_context = strtolower($satellite_context);
+            foreach ($subject_terms as $term) {
+                $term = function_exists('remove_accents') ? remove_accents((string) $term) : (string) $term;
+                $term = strtolower($term);
+                if ($term !== '' && preg_match('/(?<![\p{L}\p{N}])' . preg_quote($term, '/') . '(?![\p{L}\p{N}])/u', $satellite_context)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static function normalize_satellite_item($satellite, $index, $source_post_id = 0, $source_content = '', $pillar_title = '')
         {
             $satellite = is_array($satellite) ? $satellite : array();
             $title = !empty($satellite['title']) ? sanitize_text_field((string) $satellite['title']) : ('Satélite ' . intval($index));
             $slug = !empty($satellite['slug']) ? sanitize_title((string) $satellite['slug']) : sanitize_title($title);
-            $suggestion = '';
-            foreach (array('suggestion', 'summary', 'brief', 'description') as $key) {
-                if (!empty($satellite[$key])) {
-                    $suggestion = sanitize_textarea_field((string) $satellite[$key]);
-                    break;
-                }
+            $focus_keyword = !empty($satellite['focus_keyword']) ? sanitize_text_field((string) $satellite['focus_keyword']) : '';
+            $focus_keyword = trim((string) preg_replace('/\s+/u', ' ', $focus_keyword));
+            $focus_keyword_word_count = $focus_keyword !== ''
+                ? count(preg_split('/\s+/u', $focus_keyword, -1, PREG_SPLIT_NO_EMPTY))
+                : 0;
+            if ($focus_keyword_word_count < 2 || $focus_keyword_word_count > 10 || preg_match('/[.!?;:]$/u', $focus_keyword)) {
+                $focus_keyword = '';
+            }
+            $candidate_anchor = !empty($satellite['anchor_phrase']) ? trim((string) $satellite['anchor_phrase']) : '';
+            $candidate_anchor = $candidate_anchor !== ''
+                ? trim((string) preg_replace('/\s+/u', ' ', wp_strip_all_tags($candidate_anchor)))
+                : '';
+            // Punctuation is not part of the anchor link. Keep the literal words
+            // and remove only terminal punctuation before matching the source.
+            $candidate_anchor = rtrim($candidate_anchor, ".!?;:");
+            $candidate_anchor_word_count = $candidate_anchor !== ''
+                ? count(preg_split('/\s+/u', $candidate_anchor, -1, PREG_SPLIT_NO_EMPTY))
+                : 0;
+            // An anchor is a short contextual phrase, never a complete paragraph.
+            // Keeping this boundary in PHP also protects the link stage when the
+            // model ignores the output instructions.
+            if (
+                $candidate_anchor_word_count < 3
+                || $candidate_anchor_word_count > 14
+                || preg_match('/[.!?](?:\s|$)/u', $candidate_anchor)
+                || strpos($candidate_anchor, "\n") !== false
+            ) {
+                $candidate_anchor = '';
+            }
+            $anchor_phrase = $candidate_anchor !== '' && $source_content !== ''
+                ? self::find_exact_source_anchor($source_content, $candidate_anchor)
+                : '';
+            if (
+                $focus_keyword !== ''
+                && !self::satellite_matches_pillar_subject(
+                    $title . ' ' . $focus_keyword,
+                    $anchor_phrase !== '' ? $anchor_phrase : $candidate_anchor,
+                    $pillar_title
+                )
+            ) {
+                $focus_keyword = '';
+                $anchor_phrase = '';
             }
 
             return array(
                 'index' => intval($index),
                 'title' => $title,
                 'slug' => $slug,
-                'focus_keyword' => !empty($satellite['focus_keyword']) ? sanitize_text_field((string) $satellite['focus_keyword']) : '',
-                'anchor_phrase' => !empty($satellite['anchor_phrase']) ? sanitize_text_field((string) $satellite['anchor_phrase']) : '',
-                'suggestion' => $suggestion,
-                'content_angle' => !empty($satellite['content_angle']) ? sanitize_text_field((string) $satellite['content_angle']) : '',
-                'reason' => !empty($satellite['reason']) ? sanitize_textarea_field((string) $satellite['reason']) : '',
+                'focus_keyword' => $focus_keyword,
+                'anchor_phrase' => $anchor_phrase,
+                'content_angle' => self::normalize_satellite_content_angle(isset($satellite['content_angle']) ? $satellite['content_angle'] : ''),
             );
+        }
+
+        private static function normalize_satellite_content_angle($value)
+        {
+            $value = sanitize_key((string) $value);
+            $allowed = array('lista', 'artigo', 'review', 'faq', 'tutorial', 'comparativo');
+            if (class_exists('Content_Rank_Generator')) {
+                foreach (Content_Rank_Generator::get_prompt_models() as $prompt_model) {
+                    if (!empty($prompt_model['key'])) {
+                        $prompt_model_key = sanitize_key((string) $prompt_model['key']);
+                        if ($prompt_model_key !== 'noticia') {
+                            $allowed[] = $prompt_model_key;
+                        }
+                    }
+                }
+            }
+            $allowed = array_values(array_unique($allowed));
+            return in_array($value, $allowed, true) ? $value : 'artigo';
+        }
+
+        /**
+         * Accept an anchor only when the exact phrase exists in readable source text.
+         * Headings and existing links are excluded so generated links never target
+         * a title or duplicate an existing link.
+         */
+        private static function find_exact_source_anchor($source_content, $candidate, $required_keyword = '')
+        {
+            $source_content = trim((string) $source_content);
+            $candidate = trim(wp_strip_all_tags((string) $candidate));
+            $required_keyword = trim(wp_strip_all_tags((string) $required_keyword));
+            if ($source_content === '' || $candidate === '' || !class_exists('DOMDocument') || !class_exists('DOMXPath')) {
+                return '';
+            }
+
+            $candidate_normalized = preg_replace('/\s+/u', ' ', $candidate);
+            $keyword_normalized = preg_replace('/\s+/u', ' ', $required_keyword);
+            if ($candidate_normalized === '') {
+                return '';
+            }
+            $candidate_word_count = count(preg_split('/\s+/u', $candidate_normalized, -1, PREG_SPLIT_NO_EMPTY));
+            if (
+                $candidate_word_count < 3
+                || $candidate_word_count > 14
+                || preg_match('/[.!?](?:\s|$)/u', $candidate_normalized)
+                || strpos($candidate_normalized, "\n") !== false
+            ) {
+                return '';
+            }
+
+            // The keyword identifies the target, but the link must use a wider
+            // contextual phrase that literally contains the complete keyword.
+            if ($keyword_normalized !== '' && function_exists('mb_stripos')) {
+                $candidate_search = function_exists('remove_accents') ? remove_accents($candidate_normalized) : $candidate_normalized;
+                $keyword_search = function_exists('remove_accents') ? remove_accents($keyword_normalized) : $keyword_normalized;
+                if (mb_stripos($candidate_search, $keyword_search, 0, 'UTF-8') === false) {
+                    return '';
+                }
+
+                $candidate_compare = mb_strtolower($candidate_search, 'UTF-8');
+                $keyword_compare = mb_strtolower($keyword_search, 'UTF-8');
+                if ($candidate_compare === $keyword_compare) {
+                    return '';
+                }
+            }
+
+            $dom = new DOMDocument('1.0', 'UTF-8');
+            $previous = libxml_use_internal_errors(true);
+            $loaded = $dom->loadHTML('<?xml encoding="UTF-8"><div id="content-rank-anchor-root">' . $source_content . '</div>');
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+            if (!$loaded) {
+                return '';
+            }
+
+            $xpath = new DOMXPath($dom);
+            // Keep the lead clean: the first two paragraphs are never anchor sources.
+            $query = '//*[@id="content-rank-anchor-root"]//p[count(preceding::p) >= 2 and not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]'
+                . ' | //*[@id="content-rank-anchor-root"]//li[not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]'
+                . ' | //*[@id="content-rank-anchor-root"]//blockquote[not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]';
+            $nodes = $xpath->query($query);
+            if (!$nodes) {
+                return '';
+            }
+
+            foreach ($nodes as $node) {
+                $text = preg_replace('/\s+/u', ' ', trim(self::get_readable_anchor_text($node)));
+                if ($text === '' || $candidate_normalized === '' || !function_exists('mb_stripos')) {
+                    continue;
+                }
+                $offset = mb_stripos($text, $candidate_normalized, 0, 'UTF-8');
+                if ($offset !== false) {
+                    return trim(mb_substr($text, $offset, mb_strlen($candidate_normalized, 'UTF-8'), 'UTF-8'));
+                }
+            }
+
+            return '';
+        }
+
+        private static function get_readable_anchor_text($node)
+        {
+            if (!$node instanceof DOMNode) {
+                return '';
+            }
+            if ($node->nodeType === XML_TEXT_NODE) {
+                return (string) $node->nodeValue;
+            }
+            if ($node->nodeType !== XML_ELEMENT_NODE) {
+                return '';
+            }
+
+            $tag_name = strtolower((string) $node->nodeName);
+            if (in_array($tag_name, array('a', 'script', 'style', 'pre', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'), true)) {
+                return '';
+            }
+
+            $text = '';
+            foreach ($node->childNodes as $child) {
+                $text .= self::get_readable_anchor_text($child);
+            }
+
+            return $text;
+        }
+
+        private static function build_anchor_source_text($source_content)
+        {
+            $source_content = trim((string) $source_content);
+            if ($source_content === '') {
+                return '';
+            }
+            if (!class_exists('DOMDocument') || !class_exists('DOMXPath') || strpos($source_content, '<') === false) {
+                return self::normalize_plain_text($source_content);
+            }
+
+            $dom = new DOMDocument('1.0', 'UTF-8');
+            $previous = libxml_use_internal_errors(true);
+            $loaded = $dom->loadHTML('<?xml encoding="UTF-8"><div id="content-rank-anchor-source">' . $source_content . '</div>');
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+            if (!$loaded) {
+                return self::normalize_plain_text($source_content);
+            }
+
+            $xpath = new DOMXPath($dom);
+            $query = '//*[@id="content-rank-anchor-source"]//p[count(preceding::p) >= 2 and not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]'
+                . ' | //*[@id="content-rank-anchor-source"]//li[not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]'
+                . ' | //*[@id="content-rank-anchor-source"]//blockquote[not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]';
+            $nodes = $xpath->query($query);
+            $parts = array();
+            if ($nodes) {
+                foreach ($nodes as $node) {
+                    $text = preg_replace('/\s+/u', ' ', trim(self::get_readable_anchor_text($node)));
+                    if ($text !== '') {
+                        $parts[] = $text;
+                    }
+                }
+            }
+
+            return self::limit_plain_text_words(implode("\n", $parts), self::MAX_PLANNING_SOURCE_WORDS);
         }
 
         private static function build_satellite_schedule_datetime($generator, $index, $total_count = 0)
@@ -645,8 +848,9 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             }
         }
 
-        private static function normalize_plan_response($plan, $satellite_count)
+        private static function normalize_plan_response($plan, $satellite_count, $source_post_id = 0, $source_content = '', $pillar_title = '')
         {
+            $plan = is_array($plan) ? $plan : array();
             $satellite_count = max(1, intval($satellite_count));
             $normalized = array(
                 'title' => !empty($plan['title']) ? sanitize_text_field((string) $plan['title']) : '',
@@ -655,67 +859,109 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             );
 
             $raw_satellites = array();
-            if (!empty($plan['satellites']) && is_array($plan['satellites'])) {
-                $raw_satellites = $plan['satellites'];
+            $satellite_sources = array($plan);
+            foreach (array('plan', 'data', 'result', 'content_plan') as $container_key) {
+                if (!empty($plan[$container_key]) && is_array($plan[$container_key])) {
+                    $satellite_sources[] = $plan[$container_key];
+                }
+            }
+            foreach ($satellite_sources as $satellite_source) {
+                foreach (array('satellites', 'suggestions', 'items') as $list_key) {
+                    if (!empty($satellite_source[$list_key]) && is_array($satellite_source[$list_key])) {
+                        $raw_satellites = $satellite_source[$list_key];
+                        break 2;
+                    }
+                }
             }
 
-            foreach (array_slice($raw_satellites, 0, $satellite_count) as $index => $satellite) {
-                $normalized['satellites'][] = self::normalize_satellite_item($satellite, $index + 1);
+            $used_anchor_phrases = array();
+            // Inspect the complete response. Invalid or duplicate candidates must
+            // not prevent later valid suggestions from reaching the requested count.
+            foreach ($raw_satellites as $index => $satellite) {
+                if (count($normalized['satellites']) >= $satellite_count) {
+                    break;
+                }
+                $normalized_satellite = self::normalize_satellite_item($satellite, $index + 1, $source_post_id, $source_content, $pillar_title);
+                if ($normalized_satellite['focus_keyword'] === '' || $normalized_satellite['anchor_phrase'] === '') {
+                    continue;
+                }
+                $anchor_key = function_exists('remove_accents')
+                    ? remove_accents($normalized_satellite['anchor_phrase'])
+                    : $normalized_satellite['anchor_phrase'];
+                $anchor_key = strtolower(trim((string) preg_replace('/\s+/u', ' ', $anchor_key)));
+                if ($anchor_key === '' || isset($used_anchor_phrases[$anchor_key])) {
+                    continue;
+                }
+                $used_anchor_phrases[$anchor_key] = true;
+                $normalized_satellite['index'] = count($normalized['satellites']) + 1;
+                $normalized['satellites'][] = $normalized_satellite;
             }
 
             return $normalized;
         }
 
-        private static function build_plan_prompt($generator, $item, $satellite_count, $outline_context = array(), $planning_custom_prompt = '')
+        private static function build_plan_prompt($generator, $item, $satellite_count, $planning_custom_prompt = '')
         {
             $satellite_count = max(1, intval($satellite_count));
-            $outline_context = is_array($outline_context) && !empty($outline_context)
-                ? $outline_context
-                : Content_Rank_Generator_Helper::build_outline_context_base($generator);
-            $outline_text = !empty($outline_context['outline_model_text']) ? (string) $outline_context['outline_model_text'] : '';
 
             $pillar_title = !empty($item['title']) ? self::normalize_plain_text($item['title']) : '';
-            $pillar_url = !empty($item['permalink']) ? esc_url_raw((string) $item['permalink']) : '';
-            $pillar_content = !empty($item['content']) ? self::limit_plain_text_words((string) $item['content'], self::MAX_PLANNING_SOURCE_WORDS) : '';
-            $pillar_categories = !empty($item['categories']) && is_array($item['categories']) ? implode(', ', array_map('sanitize_text_field', $item['categories'])) : '';
-            $pillar_tags = !empty($item['tags']) && is_array($item['tags']) ? implode(', ', array_map('sanitize_text_field', $item['tags'])) : '';
+            // Use the final pillar post as the anchor source. The reference page
+            // may be in another language or differ from the published content.
+            if (!empty($item['post_content_html'])) {
+                $pillar_source_content = (string) $item['post_content_html'];
+            } elseif (!empty($item['source_page_content_html'])) {
+                $pillar_source_content = (string) $item['source_page_content_html'];
+            } elseif (!empty($item['source_page_content'])) {
+                $pillar_source_content = (string) $item['source_page_content'];
+            } else {
+                $pillar_source_content = !empty($item['content']) ? (string) $item['content'] : '';
+            }
+            $pillar_content = self::limit_plain_text_words($pillar_source_content, self::MAX_PLANNING_SOURCE_WORDS);
+            $anchor_source_content = self::build_anchor_source_text($pillar_source_content);
             $generation_language = !empty($generator['generation_language']) ? Content_Rank_Generator::normalize_generation_language_value($generator['generation_language']) : Content_Rank_Generator::get_default_generation_language();
-            $available_prompt_models = class_exists('Content_Rank_Generator') ? Content_Rank_Generator::get_prompt_models($generator) : array();
-            $available_prompt_models_text = array();
-            foreach ($available_prompt_models as $available_prompt_model) {
-                if (!is_array($available_prompt_model)) {
-                    continue;
-                }
-                $available_prompt_models_text[] = Content_Rank_Generator::format_prompt_model_for_prompt($available_prompt_model);
-            }
-            $available_prompt_models_text = !empty($available_prompt_models_text) ? implode("\n\n---\n\n", $available_prompt_models_text) : '';
-            $recommended_prompt_model_key = !empty($outline_context['recommended_prompt_model_key']) ? sanitize_key((string) $outline_context['recommended_prompt_model_key']) : '';
-            $recommended_outline_model_key = !empty($outline_context['recommended_outline_model_key']) ? sanitize_key((string) $outline_context['recommended_outline_model_key']) : '';
-            $recommended_prompt_model = !empty($recommended_prompt_model_key) ? Content_Rank_Generator::get_prompt_model($recommended_prompt_model_key, $generator) : array();
-            $recommended_prompt_model_name = !empty($recommended_prompt_model['name']) ? (string) $recommended_prompt_model['name'] : '';
             $planning_custom_prompt = self::normalize_plain_text($planning_custom_prompt);
-            $tavily_text = '';
-            if (!empty($item['tavily_text'])) {
-                $tavily_text = self::normalize_plain_text((string) $item['tavily_text']);
-            } elseif (!empty($item['tavily_context']) && is_array($item['tavily_context'])) {
-                $tavily_text = self::format_tavily_research_for_prompt($item['tavily_context']);
+            $available_prompt_models = class_exists('Content_Rank_Generator') ? Content_Rank_Generator::get_prompt_models($generator) : array();
+            $available_prompt_model_lines = array();
+            foreach ($available_prompt_models as $prompt_model) {
+                if (is_array($prompt_model) && !empty($prompt_model['key']) && sanitize_key((string) $prompt_model['key']) !== 'noticia') {
+                    $available_prompt_model_lines[] = Content_Rank_Generator::format_prompt_model_for_prompt($prompt_model);
+                }
             }
+            $available_prompt_models_text = implode("\n", $available_prompt_model_lines);
 
             $lines = array(
-                'Voce é um estrategista editorial e arquiteto de links internos.',
-                'Analise o post abaixo e devolva somente JSON valido.',
-                'Escolha ' . $satellite_count . ' frases viáveis para se tornarem kw de um post satélite.',
-                'A resposta deve trazer as chaves: title, slug, satellites.',
-                'satellites deve ser um array com exatamente ' . $satellite_count . ' objetos.',
-                'Cada objeto deve ter: title, slug, focus_keyword, anchor_phrase, suggestion, content_angle, reason.',
-                'Cada anchor_phrase precisa ser uma frase natural que possa receber um link no post pilar.',
-                'Cada suggestion deve ser uma pauta editorial pronta, com 2 a 4 frases curtas, com sugestão do que o post pode abordar.',
-                'Use content_angle para classificar o tipo da sugestao, priorizando: critica, resumo, opiniao, guia, comparacao, curiosidades, spoilers, ranking, debate, analise, contexto, checklist, releitura.',
-                'Use o mesmo idioma final do gerador: ' . $generation_language . '.',
+                'Voce e um estrategista editorial que planeja novos conteudos a partir de um post pilar.',
+                'Idioma obrigatorio: gere todos os campos textuais em ' . $generation_language . '. Preserve outro idioma somente em nomes proprios, marcas, obras ou termos que precisem permanecer assim.',
+                'Use somente o titulo do pilar e o texto fornecido abaixo. Nao use conhecimento externo, pesquisa, memoria ou frases que nao estejam no texto elegivel.',
+                'PROCESSO OBRIGATORIO:',
+                '1. Identifique a intencao central do titulo do pilar e crie oportunidades que aprofundem exatamente esse assunto.',
+                '2. Para cada oportunidade, escolha primeiro uma frase existente no bloco elegivel abaixo.',
+                '3. Copie em anchor_phrase somente um trecho contextual curto dessa frase, com 3 a 14 palavras consecutivas. A sequencia deve ser continua e literal, sem juntar partes diferentes.',
+                '4. anchor_phrase nunca pode ser um paragrafo inteiro, o texto completo do post, duas frases, uma lista ou uma frase terminada em ponto. Nao traduza, resuma, corrija, complete, adapte ou reescreva o trecho.',
+                '5. Depois transforme a intencao da frase em uma focus_keyword que pareca uma busca real feita por uma pessoa. A KW pode ser diferente da anchor_phrase, mas deve manter o mesmo assunto, objeto e problema pratico.',
+                '6. Escolha exatamente ' . $satellite_count . ' oportunidades distintas e use uma anchor_phrase diferente em cada objeto. Se nao houver frases validas suficientes, retorne apenas as candidatas possiveis; nunca invente frases para completar a quantidade.',
+                'QUALIDADE EDITORIAL OBRIGATORIA:',
+                '- Crie pautas evergreen com uma pergunta, decisao, explicacao, comparacao, uso pratico, erro, impacto ou analise especifica.',
+                '- Nao crie uma pauta que apenas informe o status atual, diga que algo existe, recomende acompanhar ou monitorar fontes, avise que algo pode expirar ou diga que novos itens podem surgir.',
+                '- Nao transforme uma frase factual em uma noticia. O satelite deve desenvolver uma intencao de busca propria, mas sempre dentro do mesmo assunto do pilar.',
+                '- Evite titulos obvios ou vazios como "entenda que recompensas existem", "fique atento aos codigos" ou "acompanhe as novidades".',
+                '- A focus_keyword deve ser uma consulta especifica, com entidade e intencao. Ela precisa deixar claro o que a pessoa quer descobrir, fazer, comparar ou resolver.',
+                '- Nunca use como KW um rotulo abstrato ou amplo, como "checagem de codigos", "acompanhamento de fontes oficiais", "impacto das recompensas gratuitas", "momento de surgimento de codigos" ou apenas "recompensas gratuitas".',
+                '- Prefira consultas concretas como "como resgatar codigos TOUCHLINE no Roblox", "onde inserir codigo TOUCHLINE", "o que os codigos TOUCHLINE dao no Roblox" ou "como usar recompensas do TOUCHLINE no jogo".',
+                '- Se a KW puder servir para qualquer jogo, produto, plataforma ou assunto apenas trocando o nome, ela esta ampla demais. Torne a entidade, a acao e o problema especificos.',
+                '- Nao escolha FAQ apenas para variar os tipos. Use FAQ somente quando houver uma duvida objetiva. Use comparativo somente quando existirem dois objetos concretos para comparar. Use tutorial somente quando houver uma acao com etapas.',
+                '- content_angle nunca pode ser noticia. Use o modelo adequado ao tipo de busca, nao uma palavra generica ou um formato escolhido apenas para diversificar a lista.',
+                'A resposta deve trazer as chaves: title, satellites.',
+                'satellites deve ser um array com no maximo ' . $satellite_count . ' objetos.',
+                'Cada objeto deve ter: title, focus_keyword, anchor_phrase, content_angle.',
+                'Defina a focus_keyword de cada satélite como uma expressão de busca curta, natural e específica, com 2 a 10 palavras. Ela pode ser derivada da intenção da âncora, mas não pode ser genérica ou desconectada do assunto do pilar.',
+                'Se nao conseguir copiar uma frase literal do bloco elegivel, use anchor_phrase vazio. Nunca use frases do titulo, H1-H6, menus, links, rodape, pesquisa externa ou conhecimento geral.',
+                'Use content_angle somente com um dos modelos existentes abaixo, exceto noticia. Use o key exato, sem inventar categorias como "analise" ou "contexto", e nunca coloque o nome do modelo como prefixo artificial do title.',
+                'Apenas o texto entre INICIO DO TEXTO ELEGIVEL e FIM DO TEXTO ELEGIVEL pode ser usado como anchor_phrase.',
                 $planning_custom_prompt !== '' ? 'Prompt personalizado do usuario: ' . $planning_custom_prompt : '',
-                'URL do post pilar: ' . $pillar_url,
-                'Conteúdo de referência do post pilar: ' . $pillar_content,
-                $tavily_text !== '' ? 'Pesquisa externa auxiliar do Tavily: ' . $tavily_text : '',
+                'Titulo do post pilar: ' . $pillar_title,
+                "INICIO DO TEXTO ELEGIVEL PARA ANCHOR_PHRASE\n" . $anchor_source_content . "\nFIM DO TEXTO ELEGIVEL PARA ANCHOR_PHRASE",
+                'Modelos existentes para content_angle:' . ($available_prompt_models_text !== '' ? "\n" . $available_prompt_models_text : ' nenhum modelo configurado.'),
             );
 
             $lines = array_values(array_filter($lines, 'strlen'));
@@ -731,7 +977,123 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             }
 
             $plan = json_decode($raw, true);
-            return is_array($plan) ? $plan : array();
+            if (is_array($plan)) {
+                $pillar_post_id = !empty($plan['pillar_post_id']) ? intval($plan['pillar_post_id']) : intval($post_id);
+                $pillar_title = !empty($plan['pillar_title'])
+                    ? (string) $plan['pillar_title']
+                    : ($pillar_post_id > 0 ? get_the_title($pillar_post_id) : '');
+                $pillar_content = $pillar_post_id > 0 ? (string) get_post_field('post_content', $pillar_post_id) : '';
+                if (!empty($plan['satellites']) && is_array($plan['satellites'])) {
+                    $normalized = self::normalize_plan_response(
+                        $plan,
+                        count($plan['satellites']),
+                        $pillar_post_id,
+                        $pillar_content,
+                        $pillar_title
+                    );
+                    $plan['satellites'] = $normalized['satellites'];
+                }
+                return $plan;
+            }
+
+            return self::recover_plan_meta($raw);
+        }
+
+        /**
+         * Recovers the useful plan fields when an older Tavily payload contains invalid JSON.
+         */
+        private static function recover_plan_meta($raw)
+        {
+            $raw = (string) $raw;
+            $satellites_key = strpos($raw, '"satellites"');
+            if ($satellites_key === false) {
+                return array();
+            }
+
+            $array_start = strpos($raw, '[', $satellites_key);
+            if ($array_start === false) {
+                return array();
+            }
+
+            $depth = 0;
+            $in_string = false;
+            $escaped = false;
+            $array_end = null;
+            $length = strlen($raw);
+            for ($index = $array_start; $index < $length; $index++) {
+                $character = $raw[$index];
+                if ($in_string) {
+                    if ($escaped) {
+                        $escaped = false;
+                    } elseif ($character === '\\') {
+                        $escaped = true;
+                    } elseif ($character === '"') {
+                        $in_string = false;
+                    }
+                    continue;
+                }
+
+                if ($character === '"') {
+                    $in_string = true;
+                    continue;
+                }
+                if ($character === '[') {
+                    $depth++;
+                } elseif ($character === ']') {
+                    $depth--;
+                    if ($depth === 0) {
+                        $array_end = $index;
+                        break;
+                    }
+                }
+            }
+
+            if ($array_end === null) {
+                return array();
+            }
+
+            $satellites = json_decode(substr($raw, $array_start, $array_end - $array_start + 1), true);
+            if (!is_array($satellites)) {
+                return array();
+            }
+
+            $recovered = array('satellites' => $satellites);
+            foreach (array('title', 'slug', 'generated_at', 'pillar_post_id', 'generator_id', 'satellite_count') as $key) {
+                $pattern = '/"' . preg_quote($key, '/') . '"\s*:\s*("(?:\\\\.|[^"\\\\])*"|-?\d+(?:\.\d+)?)/';
+                if (!preg_match($pattern, $raw, $matches)) {
+                    continue;
+                }
+
+                $value = $matches[1];
+                if ($value !== '' && $value[0] === '"') {
+                    $decoded_value = json_decode($value, true);
+                    $recovered[$key] = is_string($decoded_value) ? $decoded_value : trim($value, '"');
+                } else {
+                    $recovered[$key] = strpos($value, '.') !== false ? (float) $value : (int) $value;
+                }
+            }
+
+            return $recovered;
+        }
+
+        private static function encode_plan_meta($plan)
+        {
+            $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+            if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) {
+                $flags |= JSON_INVALID_UTF8_SUBSTITUTE;
+            }
+
+            $encoded = wp_json_encode($plan, $flags);
+            if (is_string($encoded) && json_last_error() === JSON_ERROR_NONE) {
+                return $encoded;
+            }
+
+            // Do not let optional Tavily research invalidate the plan that renders the table.
+            $fallback = is_array($plan) ? $plan : array();
+            unset($fallback['tavily_context']);
+            $encoded = wp_json_encode($fallback, $flags);
+
+            return is_string($encoded) ? $encoded : '{}';
         }
 
         private static function render_notice()
@@ -798,20 +1160,7 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             $generator = $context['generator'];
             $item = $context['item'];
             $item = self::limit_item_for_planning($item, self::MAX_PLANNING_SOURCE_WORDS);
-            $global_settings = class_exists('Content_Rank_Generator') ? Content_Rank_Generator::get_settings() : array();
-            $tavily_query = '';
-            $tavily_context = array();
-            if (!empty($global_settings['tavily_enabled'])) {
-                $tavily_query = self::build_tavily_query($item, $planning_custom_prompt);
-                $tavily_max_results = !empty($global_settings['tavily_max_results']) ? intval($global_settings['tavily_max_results']) : 3;
-                $tavily_context = self::fetch_tavily_research($tavily_query, $tavily_max_results);
-            }
-            if (!empty($tavily_context)) {
-                $item = self::attach_tavily_context_to_item($item, $tavily_context);
-            }
-            $outline_base_context = Content_Rank_Generator_Helper::build_outline_context_base($generator);
-            $outline_context = Content_Rank_Generator_Helper::build_outline_context_from_source($generator, $item, array(), $outline_base_context);
-            $prompt = self::build_plan_prompt($generator, $item, $satellite_count, $outline_context, $planning_custom_prompt);
+            $prompt = self::build_plan_prompt($generator, $item, $satellite_count, $planning_custom_prompt);
             $plan = Content_Rank_Generator::request_openai_json($generator, $prompt, array(
                 'stage' => 'content_plan',
                 'source_type' => !empty($generator['source_type']) ? $generator['source_type'] : 'rss',
@@ -821,6 +1170,31 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                 'allow_missing_content_html' => 1,
                 'source_context_enriched' => 1,
                 'satellite_count' => $satellite_count,
+                'response_schema_name' => 'content_rank_satellite_plan',
+                'response_schema_description' => 'Planejamento de conteudos satelites relacionado ao mesmo assunto central do post pilar.',
+                'response_schema' => array(
+                    'type' => 'object',
+                    'additionalProperties' => false,
+                    'properties' => array(
+                        'title' => array('type' => 'string'),
+                        'slug' => array('type' => 'string'),
+                        'satellites' => array(
+                            'type' => 'array',
+                            'items' => array(
+                                'type' => 'object',
+                                'additionalProperties' => false,
+                                'properties' => array(
+                                    'title' => array('type' => 'string'),
+                                    'focus_keyword' => array('type' => 'string'),
+                                    'anchor_phrase' => array('type' => 'string'),
+                                    'content_angle' => array('type' => 'string'),
+                                ),
+                                'required' => array('title', 'focus_keyword', 'anchor_phrase', 'content_angle'),
+                            ),
+                        ),
+                    ),
+                    'required' => array('title', 'slug', 'satellites'),
+                ),
             ));
 
             if (is_wp_error($plan)) {
@@ -834,7 +1208,13 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                 exit;
             }
 
-            $normalized_plan = self::normalize_plan_response($plan, $satellite_count);
+            $normalized_plan = self::normalize_plan_response(
+                $plan,
+                $satellite_count,
+                $post_id,
+                (string) get_post_field('post_content', $post_id),
+                !empty($item['title']) ? (string) $item['title'] : ''
+            );
             $normalized_plan['pillar_post_id'] = $post_id;
             $normalized_plan['generator_id'] = intval($generator['id']);
             $normalized_plan['satellite_count'] = $satellite_count;
@@ -846,19 +1226,15 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             $normalized_plan['content_model_type'] = !empty($item['content_model_type']) ? Content_Rank_Generator::normalize_content_model_type($item['content_model_type']) : 'pillar';
             $normalized_plan['content_model_label'] = Content_Rank_Generator::get_content_model_label($normalized_plan['content_model_type']);
             $normalized_plan['planning_custom_prompt'] = $planning_custom_prompt;
-            $normalized_plan['tavily_query'] = $tavily_query;
-            $normalized_plan['tavily_context'] = !empty($tavily_context) ? $tavily_context : array();
-            $normalized_plan['tavily_text'] = !empty($item['tavily_text']) ? $item['tavily_text'] : '';
-            $normalized_plan['recommended_prompt_model_key'] = !empty($outline_context['recommended_prompt_model_key']) ? sanitize_key((string) $outline_context['recommended_prompt_model_key']) : '';
-            $normalized_plan['recommended_outline_model_key'] = !empty($outline_context['recommended_outline_model_key']) ? sanitize_key((string) $outline_context['recommended_outline_model_key']) : '';
-            $normalized_plan['outline_context'] = $outline_context;
+            $normalized_plan['tavily_query'] = '';
+            $normalized_plan['tavily_context'] = array();
+            $normalized_plan['tavily_text'] = '';
+            $normalized_plan['recommended_prompt_model_key'] = '';
+            $normalized_plan['recommended_outline_model_key'] = '';
+            $normalized_plan['outline_context'] = array();
 
-            update_post_meta($post_id, self::META_PLAN_JSON, wp_json_encode($normalized_plan, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-            update_post_meta($post_id, self::META_PLAN_TAVILY_JSON, wp_json_encode(array(
-                'query' => $tavily_query,
-                'context' => !empty($tavily_context) ? $tavily_context : array(),
-                'text' => !empty($item['tavily_text']) ? $item['tavily_text'] : '',
-            ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            update_post_meta($post_id, self::META_PLAN_JSON, self::encode_plan_meta($normalized_plan));
+            delete_post_meta($post_id, self::META_PLAN_TAVILY_JSON);
             update_post_meta($post_id, self::META_PLAN_GENERATED_AT, current_time('mysql'));
             update_post_meta($post_id, self::META_PLAN_GENERATOR_ID, intval($generator['id']));
             update_post_meta($post_id, self::META_PLAN_PILLAR_POST_ID, $post_id);
@@ -911,11 +1287,11 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             exit;
         }
 
-        private static function build_satellite_generation_item($context, $plan, $satellite)
+        private static function build_satellite_generation_item($context, $plan, $satellite, $tavily_context = array())
         {
             $context = is_array($context) ? $context : array();
             $plan = is_array($plan) ? $plan : array();
-            $satellite = self::normalize_satellite_item($satellite, isset($satellite['index']) ? intval($satellite['index']) : 1);
+            $tavily_context = is_array($tavily_context) ? $tavily_context : array();
 
             $generator = !empty($context['generator']) && is_array($context['generator']) ? $context['generator'] : array();
             $post = !empty($context['post']) && $context['post'] instanceof WP_Post ? $context['post'] : null;
@@ -944,23 +1320,25 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                 $pillar_content = self::normalize_plain_text((string) $post->post_content);
             }
 
-            $suggestion = !empty($satellite['suggestion']) ? self::normalize_plain_text((string) $satellite['suggestion']) : '';
+            // Preserve the validated plan data while rebuilding the generation item.
+            // Re-normalizing without the pillar context would erase valid anchors.
+            $satellite = self::normalize_satellite_item(
+                $satellite,
+                isset($satellite['index']) ? intval($satellite['index']) : 1,
+                $pillar_post_id,
+                $pillar_content,
+                $pillar_title
+            );
+
             $content_angle = !empty($satellite['content_angle']) ? self::normalize_plain_text((string) $satellite['content_angle']) : '';
-            $reason = !empty($satellite['reason']) ? self::normalize_plain_text((string) $satellite['reason']) : '';
             $anchor_phrase = !empty($satellite['anchor_phrase']) ? self::normalize_plain_text((string) $satellite['anchor_phrase']) : '';
-            $tavily_text = '';
-            if (!empty($plan['tavily_text'])) {
-                $tavily_text = self::normalize_plain_text((string) $plan['tavily_text']);
-            } elseif (!empty($plan['tavily_context']) && is_array($plan['tavily_context'])) {
-                $tavily_text = self::format_tavily_research_for_prompt($plan['tavily_context']);
-            }
+            $tavily_query = !empty($tavily_context['query']) ? self::normalize_plain_text((string) $tavily_context['query']) : '';
+            $tavily_text = self::format_tavily_research_for_prompt($tavily_context);
             $source_content = implode("\n", array_filter(array(
                 'Pilar: ' . $pillar_title,
                 $pillar_content !== '' ? 'Conteúdo do pilar: ' . $pillar_content : '',
                 $tavily_text !== '' ? 'Pesquisa externa auxiliar: ' . $tavily_text : '',
-                $suggestion !== '' ? 'Sugestão editorial: ' . $suggestion : '',
                 $content_angle !== '' ? 'Tipo de conteúdo: ' . $content_angle : '',
-                $reason !== '' ? 'Motivo do satélite: ' . $reason : '',
                 $anchor_phrase !== '' ? 'Âncora planejada: ' . $anchor_phrase : '',
             )));
 
@@ -971,7 +1349,7 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                 'keyword' => !empty($satellite['focus_keyword']) ? $satellite['focus_keyword'] : $satellite['title'],
                 'permalink' => '',
                 'source_url' => $pillar_url,
-                'excerpt' => $suggestion,
+                'excerpt' => '',
                 'content' => $source_content,
                 'feed_title' => !empty($generator['name']) ? (string) $generator['name'] : get_bloginfo('name'),
                 'date' => self::build_satellite_schedule_datetime($generator, intval($satellite['index']), !empty($plan['satellites']) && is_array($plan['satellites']) ? count($plan['satellites']) : 0),
@@ -983,6 +1361,9 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                 'source_page_outline' => '',
                 'source_page_outline_sections' => array(),
                 'source_context_enriched' => 1,
+                'tavily_query' => $tavily_query,
+                'tavily_context' => $tavily_context,
+                'tavily_text' => $tavily_text,
                 'content_model_type' => 'satellite',
                 'final_slug' => !empty($satellite['slug']) ? $satellite['slug'] : sanitize_title($satellite['title']),
                 'content_plan_pillar_post_id' => $pillar_post_id,
@@ -993,9 +1374,7 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                 'content_plan_satellite_slug' => !empty($satellite['slug']) ? $satellite['slug'] : sanitize_title($satellite['title']),
                 'content_plan_satellite_anchor_phrase' => $anchor_phrase,
                 'content_plan_satellite_focus_keyword' => !empty($satellite['focus_keyword']) ? $satellite['focus_keyword'] : '',
-                'content_plan_satellite_suggestion' => $suggestion,
                 'content_plan_satellite_content_angle' => $content_angle,
-                'content_plan_satellite_reason' => $reason,
                 'content_plan_satellite' => $satellite,
                 'content_plan_backlink_links' => array(
                     array(
@@ -1015,8 +1394,6 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                 return false;
             }
 
-            $current_content = (string) get_post_field('post_content', $pillar_post_id);
-            $pillar_links = array();
             $satellite_ids = array();
             foreach ($generated_satellite_posts as $generated) {
                 if (empty($generated['post_id'])) {
@@ -1027,15 +1404,11 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                     continue;
                 }
                 $satellite_ids[] = $post_id;
-                $pillar_links[] = array(
-                    'title' => !empty($generated['title']) ? $generated['title'] : get_the_title($post_id),
-                    'url' => !empty($generated['url']) ? $generated['url'] : get_permalink($post_id),
-                    'anchor_phrase' => !empty($generated['anchor_phrase']) ? $generated['anchor_phrase'] : '',
-                    'slug' => !empty($generated['slug']) ? $generated['slug'] : get_post_field('post_name', $post_id),
-                );
             }
 
-            if (!empty($pillar_links)) {
+            // Legacy immediate-link block intentionally remains unreachable. Links
+            // are now applied only by handle_satellite_publish_transition().
+            if (false) {
                 $current_content = Content_Rank_Generator_Helper::inject_content_plan_links_into_content(
                     $current_content,
                     $pillar_links,
@@ -1053,7 +1426,7 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             if (is_array($plan) && !empty($plan)) {
                 $plan['generated_satellite_post_ids'] = $satellite_ids;
                 $plan['generated_satellite_posts'] = $generated_satellite_posts;
-                update_post_meta($pillar_post_id, self::META_PLAN_JSON, wp_json_encode($plan, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                update_post_meta($pillar_post_id, self::META_PLAN_JSON, self::encode_plan_meta($plan));
             }
 
             return true;
@@ -1103,10 +1476,32 @@ if (!class_exists('Content_Rank_Content_Plans')) {
 
             $generated_posts = array();
             $errors = array();
+            $global_settings = class_exists('Content_Rank_Generator') ? Content_Rank_Generator::get_settings() : array();
+            $tavily_enabled = !empty($global_settings['tavily_enabled']);
+            $tavily_max_results = !empty($global_settings['tavily_max_results']) ? intval($global_settings['tavily_max_results']) : 3;
 
             foreach ($satellites as $satellite) {
-                $normalized_satellite = self::normalize_satellite_item($satellite, isset($satellite['index']) ? intval($satellite['index']) : (count($generated_posts) + 1));
-                $item = self::build_satellite_generation_item($context, $plan, $normalized_satellite);
+                $normalized_satellite = self::normalize_satellite_item(
+                    $satellite,
+                    isset($satellite['index']) ? intval($satellite['index']) : (count($generated_posts) + 1),
+                    $post_id,
+                    (string) get_post_field('post_content', $post_id),
+                    !empty($plan['pillar_title']) ? (string) $plan['pillar_title'] : get_the_title($post_id)
+                );
+                if ($normalized_satellite['focus_keyword'] === '') {
+                    $errors[] = 'A sugestao foi descartada porque nao manteve o assunto principal do post-pilar.';
+                    continue;
+                }
+                $satellite_tavily_context = array();
+                if ($tavily_enabled) {
+                    $satellite_query = !empty($normalized_satellite['focus_keyword'])
+                        ? self::normalize_plain_text((string) $normalized_satellite['focus_keyword'])
+                        : self::normalize_plain_text((string) $normalized_satellite['title']);
+                    if ($satellite_query !== '') {
+                        $satellite_tavily_context = self::fetch_tavily_research($satellite_query, $tavily_max_results);
+                    }
+                }
+                $item = self::build_satellite_generation_item($context, $plan, $normalized_satellite, $satellite_tavily_context);
                 if (!Content_Rank_Generator::claim_item_processing_slot($satellite_generator['id'], $item)) {
                     $errors[] = 'Item já estava em processamento.';
                     continue;
@@ -1144,6 +1539,88 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             $redirect = add_query_arg($redirect_args, admin_url('admin.php'));
             wp_safe_redirect($redirect);
             exit;
+        }
+
+        public function handle_satellite_publish_transition($new_status, $old_status, $post)
+        {
+            if ($new_status !== 'publish' || $old_status === 'publish' || !($post instanceof WP_Post)) {
+                return;
+            }
+
+            if (intval(get_post_meta($post->ID, 'content_plan_pillar_post_id', true)) > 0) {
+                self::apply_satellite_link_when_published($post->ID);
+            }
+
+            $pending_satellites = get_posts(array(
+                'post_type' => 'any',
+                'post_status' => 'publish',
+                'posts_per_page' => 50,
+                'fields' => 'ids',
+                'meta_query' => array(
+                    array(
+                        'key' => 'content_plan_pillar_post_id',
+                        'value' => $post->ID,
+                        'compare' => '=',
+                    ),
+                ),
+            ));
+            foreach ($pending_satellites as $satellite_id) {
+                self::apply_satellite_link_when_published($satellite_id);
+            }
+        }
+
+        private static function apply_satellite_link_when_published($satellite_post_id)
+        {
+            $satellite_post_id = intval($satellite_post_id);
+            $pillar_post_id = intval(get_post_meta($satellite_post_id, 'content_plan_pillar_post_id', true));
+            $anchor_phrase = trim((string) get_post_meta($satellite_post_id, 'content_plan_satellite_anchor_phrase', true));
+            if ($satellite_post_id <= 0 || $pillar_post_id <= 0 || $anchor_phrase === '') {
+                if ($satellite_post_id > 0) {
+                    update_post_meta($satellite_post_id, 'content_plan_link_status', $anchor_phrase === '' ? 'no_exact_anchor' : 'pending');
+                }
+                return false;
+            }
+
+            $pillar = get_post($pillar_post_id);
+            if (!$pillar || $pillar->post_status !== 'publish') {
+                update_post_meta($satellite_post_id, 'content_plan_link_status', 'pending_pillar');
+                return false;
+            }
+
+            $pillar_content = (string) $pillar->post_content;
+            $exact_anchor = self::find_exact_source_anchor($pillar_content, $anchor_phrase);
+            if ($exact_anchor === '') {
+                update_post_meta($satellite_post_id, 'content_plan_link_status', 'no_exact_anchor');
+                return false;
+            }
+
+            $updated_content = Content_Rank_Generator_Helper::inject_content_plan_links_into_content(
+                $pillar_content,
+                array(array(
+                    'anchor_phrase' => $exact_anchor,
+                    'url' => get_permalink($satellite_post_id),
+                )),
+                'pillar',
+                ''
+            );
+            if ($updated_content === $pillar_content) {
+                update_post_meta($satellite_post_id, 'content_plan_link_status', 'already_linked_or_not_applied');
+                return false;
+            }
+
+            $result = wp_update_post(array(
+                'ID' => $pillar_post_id,
+                'post_content' => $updated_content,
+            ), true);
+            if (is_wp_error($result)) {
+                update_post_meta($satellite_post_id, 'content_plan_link_status', 'error');
+                return false;
+            }
+
+            update_post_meta($satellite_post_id, 'content_plan_link_status', 'applied');
+            update_post_meta($satellite_post_id, 'content_plan_link_anchor', $exact_anchor);
+            update_post_meta($satellite_post_id, 'content_plan_link_target_url', esc_url_raw(get_permalink($satellite_post_id)));
+            return true;
         }
 
         private static function render_picker_post_button($item, $selected_post_id = 0)
@@ -1256,12 +1733,11 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             echo '<table class="min-w-full divide-y divide-slate-200">';
             echo '<thead class="bg-slate-50">';
             echo '<tr>';
-            echo '<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">#</th>';
-            echo '<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Título do satélite</th>';
-            echo '<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Âncora</th>';
-            echo '<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">KW</th>';
-            echo '<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Tipo</th>';
-            echo '<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Sugestão editorial</th>';
+            echo '<th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">#</th>';
+            echo '<th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Título do satélite</th>';
+            echo '<th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Âncora</th>';
+            echo '<th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">KW</th>';
+             echo '<th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Tipo</th>';
             echo '</tr>';
             echo '</thead>';
             echo '<tbody class="divide-y divide-slate-100 bg-white">';
@@ -1272,12 +1748,11 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                 echo '<td class="px-4 py-4 text-sm font-semibold text-slate-900">' . esc_html(isset($satellite['title']) ? $satellite['title'] : '-') . '</td>';
                 echo '<td class="px-4 py-4 text-sm text-slate-700">' . esc_html(isset($satellite['anchor_phrase']) ? $satellite['anchor_phrase'] : '-') . '</td>';
                 echo '<td class="px-4 py-4 text-sm text-slate-700">' . esc_html(isset($satellite['focus_keyword']) ? $satellite['focus_keyword'] : '-') . '</td>';
-                echo '<td class="px-4 py-4 text-sm text-slate-700">' . esc_html(isset($satellite['content_angle']) ? $satellite['content_angle'] : '-') . '</td>';
-                echo '<td class="px-4 py-4 text-sm text-slate-700">' . esc_html(isset($satellite['suggestion']) ? $satellite['suggestion'] : '-') . '</td>';
+                 echo '<td class="px-4 py-4 text-sm text-slate-700">' . esc_html(isset($satellite['content_angle']) ? $satellite['content_angle'] : '-') . '</td>';
                 echo '</tr>';
             }
             if (empty($satellites)) {
-                echo '<tr><td colspan="6" class="px-4 py-6 text-center text-sm text-slate-500">O plano não trouxe satélites.</td></tr>';
+                 echo '<tr><td colspan="5" class="px-4 py-6 text-center text-sm text-slate-500">O plano não trouxe satélites.</td></tr>';
             }
             echo '</tbody>';
             echo '</table>';
@@ -1360,7 +1835,7 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             <div class="wrap">
                 <div class="mb-6">
                     <p class="text-xs font-semibold text-indigo-500">Content Rank</p>
-                    <h1 class="text-3xl font-semibold tracking-tight text-slate-950">Lincagem automática</h1>
+                    <h1 class="text-3xl font-semibold text-slate-950">Planejamento</h1>
                 </div>
 
                 <?php self::render_notice(); ?>
@@ -1383,22 +1858,12 @@ if (!class_exists('Content_Rank_Content_Plans')) {
 
                                     <div class="grid gap-4 sm:grid-cols-2">
                                         <div>
-                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Qtd. satélites</label>
+                                            <label class="mb-1 block text-xs font-semibold text-slate-500">Qtd. satélites</label>
                                             <input type="number" min="1" max="12" name="satellite_count" value="<?php echo esc_attr(isset($plan['satellite_count']) ? intval($plan['satellite_count']) : 5); ?>" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
                                         </div>
                                     </div>
 
-                                    <details class="group rounded-2xl border border-slate-200 bg-slate-50">
-                                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-700">
-                                            <span>Prompt personalizado</span>
-                                            <span class="text-slate-400 transition group-open:rotate-180">⌄</span>
-                                        </summary>
-                                        <div class="border-t border-slate-200 px-4 py-4">
-                                            <textarea name="planning_custom_prompt" rows="5" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" placeholder="Instruções extras para a IA, se precisar."><?php echo esc_textarea(isset($plan['planning_custom_prompt']) ? $plan['planning_custom_prompt'] : ''); ?></textarea>
-                                        </div>
-                                    </details>
-
-                                    <button type="submit" class="inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-500">Gerar lincagem</button>
+                                    <button type="submit" class="inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-500">Criar planejamento</button>
                                 </form>
 
                                 <?php if (!empty($plan)): ?>

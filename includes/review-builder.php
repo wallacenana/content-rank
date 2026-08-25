@@ -734,7 +734,7 @@ if (!class_exists('Content_Rank_Review_Builder')) {
             $rating = !empty($product['rating']) ? esc_html($product['rating']) : '';
             $rating_html = $rating !== '' ? '<div class="rc-stars-row"><span class="rc-stars">★★★★★</span><span class="rc-number">' . $rating . ' <span class="rc-gray">/ 10</span></span></div>' : '';
 
-            return '<div class="rc-container"><div class="rc-card"><div class="rc-badge d-none"><span class="rc-icon">&#127942;</span> &#127942; NOSSA ESCOLHA / MELHOR GERAL</div><div class="rc-grid"><div class="rc-img-sec">' . $image_html . '</div><div class="rc-info"><div class="brand-meta"><span class="brand-name">#' . esc_html(str_pad((string) $number, 2, '0', STR_PAD_LEFT)) . '</span></div><h3 class="rc-title">' . esc_html($title) . '</h3>' . $description_html . $rating_html . '<div class="rc-price-cta"><div class="rc-price">' . $old_html . $current_html . $installment_html . '</div>' . $link_html . '</div></div></div></div></div>';
+            return '<div class="rc-container content-rank-review-card"><div class="rc-card"><div class="rc-badge d-none"><span class="rc-icon">&#127942;</span> &#127942; NOSSA ESCOLHA / MELHOR GERAL</div><div class="rc-grid"><div class="rc-img-sec">' . $image_html . '</div><div class="rc-info"><div class="brand-meta"><span class="brand-name">#' . esc_html(str_pad((string) $number, 2, '0', STR_PAD_LEFT)) . '</span></div><h3 class="rc-title">' . esc_html($title) . '</h3>' . $description_html . $rating_html . '<div class="rc-price-cta"><div class="rc-price">' . $old_html . $current_html . $installment_html . '</div>' . $link_html . '</div></div></div></div></div>';
         }
     }
 }

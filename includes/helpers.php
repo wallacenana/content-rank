@@ -5603,6 +5603,12 @@ class Content_Rank_Generator_Helper
             $available_prompt_models_text[] = Content_Rank_Generator::format_prompt_model_for_prompt($available_prompt_model);
         }
         $available_prompt_models_text = implode("\n\n---\n\n", $available_prompt_models_text);
+        $selected_prompt_model_key = !empty($generator['prompt_model_key'])
+            ? Content_Rank_Generator::normalize_prompt_model_key((string) $generator['prompt_model_key'])
+            : '';
+        $selected_prompt_model = $selected_prompt_model_key !== ''
+            ? Content_Rank_Generator::get_prompt_model($selected_prompt_model_key, $generator)
+            : array();
         $selected_tags = Content_Rank_Generator::get_generator_selected_tags($generator);
 
         $prompt = array(
@@ -5630,6 +5636,9 @@ class Content_Rank_Generator_Helper
             'Uma keyword ampla e informativa, sem sinal claro de noticia, review, comparacao ou tutorial, deve preferir artigo.',
             'A frase chave deve ser fluida e natural, não crie uma kw parecendo tags e não deve ser longa também',
             'Escolha recommended_prompt_model_key usando somente uma das chaves validas do modelo base abaixo.',
+            !empty($selected_prompt_model)
+                ? 'MODELO FIXADO PELO GERADOR: use obrigatoriamente a chave "' . $selected_prompt_model_key . '" (' . (string) $selected_prompt_model['name'] . '). Nao classifique para outro modelo.'
+                : 'MODELO AUTOMATICO: escolha a chave mais adequada entre os modelos disponiveis abaixo.',
             'Varra o HTML inteiro, do inicio ao fim. Nao pare na introducao e nao transforme os primeiros fatos em um resumo do restante.',
             'Se o titulo ou a estrutura indicar uma quantidade de itens, identifique todos os itens citados na fonte. Crie pelo menos um bullet especifico para cada item, com o nome exato e os fatos correspondentes, antes de incluir contexto historico ou fatos gerais.',
             'Nunca substitua uma lista completa de itens por uma frase dizendo que existem varios itens. Preserve os nomes e a ordem em que aparecem na fonte.',
@@ -5984,6 +5993,19 @@ class Content_Rank_Generator_Helper
     public static function build_outline_context_from_source($generator, $item, $seo_article = array(), $outline_context = array())
     {
         $outline_context = is_array($outline_context) && !empty($outline_context) ? $outline_context : self::build_outline_context_base($generator);
+        $selected_prompt_model_key = !empty($generator['prompt_model_key'])
+            ? Content_Rank_Generator::normalize_prompt_model_key((string) $generator['prompt_model_key'])
+            : '';
+        $selected_prompt_model = $selected_prompt_model_key !== ''
+            ? Content_Rank_Generator::get_prompt_model($selected_prompt_model_key, $generator)
+            : array();
+        if (!empty($selected_prompt_model)) {
+            $outline_context['selected_prompt_model_key'] = $selected_prompt_model_key;
+            $outline_context['recommended_prompt_model_key'] = $selected_prompt_model_key;
+            $outline_context['recommended_outline_model_key'] = !empty($selected_prompt_model['outline_model_key'])
+                ? sanitize_key((string) $selected_prompt_model['outline_model_key'])
+                : '';
+        }
         $outline_model_hint_key = self::infer_outline_model_key_from_source_context($generator, $item, $seo_article, $outline_context);
         if (empty($outline_context['outline_model_hint_key'])) {
             $outline_context['outline_model_hint_key'] = $outline_model_hint_key;
@@ -6063,9 +6085,18 @@ class Content_Rank_Generator_Helper
         } else {
             $outline_context = self::normalize_outline_analysis_context($outline_response, $outline_context);
 
+            // A manual model selection must not be replaced by the classifier response.
+            if (!empty($selected_prompt_model)) {
+                $outline_context['content_type'] = $selected_prompt_model_key;
+                $outline_context['recommended_prompt_model_key'] = $selected_prompt_model_key;
+                $outline_context['recommended_outline_model_key'] = !empty($selected_prompt_model['outline_model_key'])
+                    ? sanitize_key((string) $selected_prompt_model['outline_model_key'])
+                    : '';
+            }
+
             // A clear list signal in the title is deterministic. Do not let
             // an incomplete source page make the planner switch it to article.
-            if ($outline_model_hint_key === 'list_article') {
+            if (empty($selected_prompt_model) && $outline_model_hint_key === 'list_article') {
                 $outline_context['content_type'] = 'lista';
                 $outline_context['recommended_outline_model_key'] = 'list_article';
                 $outline_context['recommended_prompt_model_key'] = 'lista';
@@ -7269,27 +7300,32 @@ class Content_Rank_Generator_Helper
         return $attrs;
     }
 
-    protected static function apply_internal_link_rules_to_dom($dom, $xpath, $root, $rules, &$applied_count, $remaining_total_links = null)
+    protected static function apply_internal_link_rules_to_dom($dom, $xpath, $root, $rules, &$applied_count, $remaining_total_links = null, $skip_leading_paragraphs = 0)
     {
         $rules = is_array($rules) ? $rules : array();
+        $skip_leading_paragraphs = max(0, intval($skip_leading_paragraphs));
         if (empty($rules) || !$xpath || !$root) {
             return;
         }
 
-        $text_nodes_query = './/p//text()[normalize-space(.) != "" and not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//li//text()[normalize-space(.) != "" and not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//blockquote//text()[normalize-space(.) != "" and not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//td//text()[normalize-space(.) != "" and not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//th//text()[normalize-space(.) != "" and not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//figcaption//text()[normalize-space(.) != "" and not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//summary//text()[normalize-space(.) != "" and not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]';
-        $fallback_elements_query = './/p[not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//li[not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//blockquote[not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//td[not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//th[not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//figcaption[not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]'
-            . ' | .//summary[not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::pre) and not(ancestor::code)]';
+        $paragraph_filter = $skip_leading_paragraphs > 0
+            ? '[count(preceding::p) >= ' . $skip_leading_paragraphs . ']'
+            : '';
+        $body_exclusion = ' and not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)';
+        $text_nodes_query = './/p' . $paragraph_filter . '//text()[normalize-space(.) != ""' . $body_exclusion . ']'
+            . ' | .//li//text()[normalize-space(.) != ""' . $body_exclusion . ']'
+            . ' | .//blockquote//text()[normalize-space(.) != ""' . $body_exclusion . ']'
+            . ' | .//td//text()[normalize-space(.) != ""' . $body_exclusion . ']'
+            . ' | .//th//text()[normalize-space(.) != ""' . $body_exclusion . ']'
+            . ' | .//figcaption//text()[normalize-space(.) != ""' . $body_exclusion . ']'
+            . ' | .//summary//text()[normalize-space(.) != ""' . $body_exclusion . ']';
+        $fallback_elements_query = './/p' . $paragraph_filter . '[not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]'
+            . ' | .//li[not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]'
+            . ' | .//blockquote[not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]'
+            . ' | .//td[not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]'
+            . ' | .//th[not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]'
+            . ' | .//figcaption[not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]'
+            . ' | .//summary[not(ancestor-or-self::a) and not(ancestor-or-self::h1) and not(ancestor-or-self::h2) and not(ancestor-or-self::h3) and not(ancestor-or-self::h4) and not(ancestor-or-self::h5) and not(ancestor-or-self::h6) and not(ancestor-or-self::script) and not(ancestor-or-self::style) and not(ancestor-or-self::pre) and not(ancestor-or-self::code)]';
 
         foreach ($rules as $rule) {
             if ($remaining_total_links !== null && $remaining_total_links <= 0) {
@@ -7517,6 +7553,9 @@ class Content_Rank_Generator_Helper
             }
         }
         $max_total_links = isset($generator['internal_links_count']) ? max(0, intval($generator['internal_links_count'])) : 0;
+        $skip_leading_paragraphs = !empty($context['skip_leading_paragraphs'])
+            ? max(0, intval($context['skip_leading_paragraphs']))
+            : 0;
 
         if ($content === '') {
             return $content;
@@ -7549,9 +7588,9 @@ class Content_Rank_Generator_Helper
         $applied_count = 0;
 
         if ($max_total_links > 0 && !empty($rules)) {
-            self::apply_internal_link_rules_to_dom($dom, $xpath, $root, $rules, $applied_count, $max_total_links);
+            self::apply_internal_link_rules_to_dom($dom, $xpath, $root, $rules, $applied_count, $max_total_links, $skip_leading_paragraphs);
         }
-        self::apply_internal_link_rules_to_dom($dom, $xpath, $root, $global_rules, $applied_count, null);
+        self::apply_internal_link_rules_to_dom($dom, $xpath, $root, $global_rules, $applied_count, null, 0);
 
         $output = '';
         foreach ($root->childNodes as $child) {
@@ -7617,6 +7656,7 @@ class Content_Rank_Generator_Helper
         $context = array(
             'plan_type' => $plan_type,
             'intro_label' => $intro_label,
+            'skip_leading_paragraphs' => 2,
         );
 
         return self::apply_internal_links_to_content($content, $generator, $context);

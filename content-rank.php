@@ -4,7 +4,7 @@ Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
 Version: 1.9.51
 Author: Wallace Tavares e Codex
-Plugin URI: http://content-rank.com/
+Plugin URI: https://content-rank.com/
 License: GPLv2 or later
 Text Domain: content-rank
 */
@@ -57,6 +57,7 @@ require_once __DIR__ . '/includes/related-posts.php';
 require_once __DIR__ . '/includes/prompt-settings.php';
 require_once __DIR__ . '/includes/updater.php';
 require_once __DIR__ . '/includes/review-builder.php';
+require_once __DIR__ . '/includes/license-client.php';
 
 if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
@@ -199,6 +200,9 @@ if (!class_exists('Content_Rank_Generator')) {
             }
             if (class_exists('Content_Rank_Review_Builder')) {
                 new Content_Rank_Review_Builder();
+            }
+            if (class_exists('Content_Rank_License_Client')) {
+                Content_Rank_License_Client::init();
             }
             add_action('admin_menu', array($this, 'admin_menu'));
             add_action('admin_menu', array(new Content_Rank_Generator_Admin(), 'admin_menu_late'), 999);
@@ -1455,6 +1459,15 @@ if (!class_exists('Content_Rank_Generator')) {
         {
             $generator = is_array($generator) ? $generator : array();
             $outline_context = is_array($outline_context) ? $outline_context : array();
+
+            // A model selected in the generator is explicit; automatic mode is represented by an empty key.
+            if (!empty($generator['prompt_model_key'])) {
+                $explicit_prompt_model_key = self::normalize_prompt_model_key($generator['prompt_model_key']);
+                $explicit_prompt_model = self::get_prompt_model($explicit_prompt_model_key, $generator);
+                if (!empty($explicit_prompt_model)) {
+                    return $explicit_prompt_model;
+                }
+            }
 
             $prompt_model_key = '';
             if (!empty($outline_context['recommended_prompt_model_key'])) {
@@ -3449,6 +3462,18 @@ if (!class_exists('Content_Rank_Generator')) {
                 $payload['content_prompt_template'] = self::get_default_content_prompt_template_visible();
             }
             $payload['prompt_model_key'] = isset($raw['prompt_model_key']) ? sanitize_key(wp_unslash($raw['prompt_model_key'])) : '';
+            $available_prompt_models = self::get_prompt_models();
+            $available_prompt_model_keys = array();
+            foreach ($available_prompt_models as $prompt_model) {
+                if (!empty($prompt_model['key'])) {
+                    $available_prompt_model_keys[] = self::normalize_prompt_model_key((string) $prompt_model['key']);
+                }
+            }
+            if ($payload['prompt_model_key'] !== '' && !in_array(self::normalize_prompt_model_key($payload['prompt_model_key']), $available_prompt_model_keys, true)) {
+                $payload['prompt_model_key'] = '';
+            } else {
+                $payload['prompt_model_key'] = self::normalize_prompt_model_key($payload['prompt_model_key']);
+            }
             $payload['prompt_models_json'] = '';
             $payload['outline_model_key'] = isset($raw['outline_model_key']) ? sanitize_key(wp_unslash($raw['outline_model_key'])) : self::get_default_outline_model_key();
             $available_outline_models = self::get_outline_models();
@@ -3953,7 +3978,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 $body['prompt_cache_retention'] = $prompt_cache_retention;
             }
 
-            // error_log("prompt: " . $prompt);
+            error_log("prompt: " . $prompt);
             $response = wp_remote_post($use_responses_api ? 'https://api.openai.com/v1/responses' : 'https://api.openai.com/v1/chat/completions', array(
                 'timeout' => 240,
                 'headers' => array(
@@ -4005,7 +4030,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 $text = trim((string) $data['choices'][0]['message']['content']);
             }
 
-            // error_log("response: " . print_r($text, true));
+            error_log("response: " . print_r($text, true));
             return self::parse_ai_json($text, $context);
         }
 
@@ -4519,6 +4544,18 @@ if (!class_exists('Content_Rank_Generator')) {
                 if ($first_brace !== false && $last_brace !== false && $last_brace > $first_brace) {
                     $maybe_json = trim(substr($text, $first_brace, $last_brace - $first_brace + 1));
                     $data = json_decode($maybe_json, true);
+                    if (is_array($data)) {
+                        return self::normalize_generated_article($data, $context);
+                    }
+                }
+            }
+
+            // Planning responses occasionally contain only a trailing comma.
+            // Repair that narrow case without changing arbitrary model output.
+            if (!is_array($data) && !empty($context['stage']) && $context['stage'] === 'content_plan') {
+                $repaired_text = preg_replace('/,\s*([}\]])/u', '$1', $text);
+                if (is_string($repaired_text) && $repaired_text !== $text) {
+                    $data = json_decode($repaired_text, true);
                     if (is_array($data)) {
                         return self::normalize_generated_article($data, $context);
                     }
@@ -6441,8 +6478,8 @@ if (!class_exists('Content_Rank_Generator')) {
                 return false;
             }
 
-            if (!function_exists('imagecreatetruecolor')) {
-                return false;
+            if (!function_exists('imagecreatetruecolor') || !function_exists('imagepng')) {
+                return self::create_svg_placeholder_image_attachment($post_id, $title, $source_label, $query, $credit);
             }
 
             if (!function_exists('wp_tempnam')) {
@@ -6502,7 +6539,7 @@ if (!class_exists('Content_Rank_Generator')) {
             $temp_file = wp_tempnam($file_name);
             if ($temp_file === false || $temp_file === '') {
                 imagedestroy($image);
-                return false;
+                return self::create_svg_placeholder_image_attachment($post_id, $title, $source_label, $query, $credit);
             }
 
             $saved = imagepng($image, $temp_file);
@@ -6511,7 +6548,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 if (file_exists($temp_file)) {
                     wp_delete_file($temp_file);
                 }
-                return false;
+                return self::create_svg_placeholder_image_attachment($post_id, $title, $source_label, $query, $credit);
             }
 
             $attachment_id = media_handle_sideload(array(
@@ -6523,11 +6560,74 @@ if (!class_exists('Content_Rank_Generator')) {
                 if (file_exists($temp_file)) {
                     wp_delete_file($temp_file);
                 }
-                return false;
+                return self::create_svg_placeholder_image_attachment($post_id, $title, $source_label, $query, $credit);
             }
 
             $attachment_url = wp_get_attachment_url($attachment_id);
             return self::apply_featured_image_attachment($post_id, $attachment_id, $headline, $source_label, $query, $credit, $attachment_url ? $attachment_url : '');
+        }
+
+        private static function create_svg_placeholder_image_attachment($post_id, $title, $source_label = 'fallback', $query = '', $credit = '')
+        {
+            if (!function_exists('wp_upload_bits')) {
+                require_once ABSPATH . 'wp-admin/includes/file.php';
+            }
+
+            $headline = trim(wp_strip_all_tags((string) $title));
+            if ($headline === '') {
+                $headline = 'Content Rank';
+            }
+            $headline = wp_trim_words($headline, 12, '...');
+
+            $seed = md5((string) $headline . '|' . (string) $source_label . '|' . get_bloginfo('name'));
+            $background = '#' . substr($seed, 0, 6);
+            $accent = '#' . substr($seed, 6, 6);
+            $svg_headline = htmlspecialchars($headline, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+            $svg = '<?xml version="1.0" encoding="UTF-8"?>'
+                . '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">'
+                . '<rect width="1200" height="630" fill="' . $background . '"/>'
+                . '<path d="M0 0h1200v630H0z" fill="' . $accent . '" opacity=".28"/>'
+                . '<circle cx="1010" cy="120" r="190" fill="#ffffff" opacity=".16"/>'
+                . '<circle cx="160" cy="570" r="250" fill="#ffffff" opacity=".12"/>'
+                . '<rect y="440" width="1200" height="190" fill="#000000" opacity=".34"/>'
+                . '<text x="70" y="150" fill="#ffffff" font-family="Arial, sans-serif" font-size="42" font-weight="700">Content Rank</text>'
+                . '<text x="70" y="525" fill="#ffffff" font-family="Arial, sans-serif" font-size="30">' . $svg_headline . '</text>'
+                . '</svg>';
+
+            $file_name = 'content-rank-fallback-' . substr($seed, 0, 12) . '.svg';
+            $upload = wp_upload_bits($file_name, null, $svg);
+            if (!empty($upload['error']) || empty($upload['file'])) {
+                return false;
+            }
+
+            $attachment_id = wp_insert_attachment(array(
+                'post_mime_type' => 'image/svg+xml',
+                'post_title' => $headline,
+                'post_content' => '',
+                'post_status' => 'inherit',
+            ), $upload['file'], $post_id, true);
+
+            if (is_wp_error($attachment_id) || intval($attachment_id) <= 0) {
+                wp_delete_file($upload['file']);
+                return false;
+            }
+
+            update_post_meta($attachment_id, '_wp_attachment_metadata', array(
+                'width' => 1200,
+                'height' => 630,
+                'file' => wp_basename($upload['file']),
+                'sizes' => array(),
+            ));
+
+            return self::apply_featured_image_attachment(
+                $post_id,
+                $attachment_id,
+                $headline,
+                $source_label,
+                $query,
+                $credit,
+                !empty($upload['url']) ? $upload['url'] : ''
+            );
         }
 
         public static function get_rss_items($feed_url, $limit = 10, $include_media = true, $video_selector_class = '', $image_selector_class = '', $link_selector_class = '')
@@ -8210,6 +8310,12 @@ if (!class_exists('Content_Rank_Generator')) {
             if (!empty($generator['generation_mode'])) {
                 update_post_meta($post_id, '_content_rank_generation_mode', self::normalize_generation_mode((string) $generator['generation_mode']));
             }
+            if (!empty($item['content_plan_pillar_post_id'])) {
+                update_post_meta($post_id, 'content_plan_pillar_post_id', intval($item['content_plan_pillar_post_id']));
+                update_post_meta($post_id, 'content_plan_satellite_index', intval(isset($item['content_plan_satellite_index']) ? $item['content_plan_satellite_index'] : 0));
+                update_post_meta($post_id, 'content_plan_satellite_anchor_phrase', !empty($item['content_plan_satellite_anchor_phrase']) ? sanitize_text_field((string) $item['content_plan_satellite_anchor_phrase']) : '');
+                update_post_meta($post_id, 'content_plan_link_status', !empty($item['content_plan_satellite_anchor_phrase']) ? 'pending_publish' : 'no_exact_anchor');
+            }
             if (!empty($item['guid']) && strpos((string) $item['guid'], 'post:') === 0) {
                 $source_post_id = intval(substr((string) $item['guid'], 5));
                 if ($source_post_id > 0) {
@@ -8806,12 +8912,13 @@ if (!class_exists('Content_Rank_Generator')) {
             foreach ($pending_posts as $post_id) {
                 $state = get_post_meta($post_id, self::GENERATION_PIPELINE_META, true);
                 $stage = is_array($state) && !empty($state['stage']) ? sanitize_key((string) $state['stage']) : 'planning';
+                $pipeline_status = (string) get_post_meta($post_id, '_content_rank_generation_pipeline_status', true);
                 $initial_items[] = array(
                     'post_id' => intval($post_id),
                     'title' => get_the_title($post_id),
                     'stage' => $stage,
-                    'status' => 'processing',
-                    'error_message' => '',
+                    'status' => $pipeline_status === 'failed' ? 'failed' : 'processing',
+                    'error_message' => (string) get_post_meta($post_id, '_content_rank_generation_pipeline_error', true),
                     'edit_url' => self::get_post_edit_link($post_id),
                 );
             }
@@ -8860,12 +8967,39 @@ if (!class_exists('Content_Rank_Generator')) {
                     var stageOrder = ['planning', 'seo', 'content_outline', 'content'];
                     var stageNames = { planning: 'Planejamento', seo: 'SEO', content_outline: 'Esboço', content: 'Conteúdo' };
                     var timer;
+                    var dismissed = false;
+                    var toastKey = '';
+                    var toastStoragePrefix = 'content_rank_generation_toast_closed_';
                     var closeButton = toast.querySelector('.content-rank-staged-generation-toast__close');
                     var titleNode = toast.querySelector('.content-rank-staged-generation-toast__title');
                     var postNode = toast.querySelector('.content-rank-staged-generation-toast__post');
                     var stageNode = toast.querySelector('.content-rank-staged-generation-toast__stage');
                     var trackNode = toast.querySelector('.content-rank-staged-generation-toast__track span');
                     var linkNode = toast.querySelector('.content-rank-staged-generation-toast__link');
+
+                    function getToastKey(ids) {
+                        var normalized = Array.isArray(ids) ? ids.map(function (id) { return String(id); }).filter(Boolean).sort() : [];
+                        return toastStoragePrefix + (normalized.length ? normalized.join('_') : 'unknown');
+                    }
+
+                    function setToastContext(ids, resetDismissal) {
+                        var nextKey = getToastKey(ids);
+                        if (resetDismissal) {
+                            dismissed = false;
+                            try {
+                                window.sessionStorage.removeItem(nextKey);
+                            } catch (error) {
+                                // Storage can be unavailable in private browsing modes.
+                            }
+                        } else {
+                            try {
+                                dismissed = window.sessionStorage.getItem(nextKey) === '1';
+                            } catch (error) {
+                                dismissed = false;
+                            }
+                        }
+                        toastKey = nextKey;
+                    }
 
                     function render(item) {
                         var stageIndex = stageOrder.indexOf(item.stage);
@@ -8926,6 +9060,7 @@ if (!class_exists('Content_Rank_Generator')) {
                                 edit_url: ''
                             }];
                         }
+                        setToastContext(postIds, true);
                         toast.style.display = 'block';
                         render(items[0]);
                         poll();
@@ -8938,6 +9073,9 @@ if (!class_exists('Content_Rank_Generator')) {
                     window.ContentRankGenerationToast.start = showGenerationToast;
 
                     function poll() {
+                        if (dismissed) {
+                            return;
+                        }
                         var body = new URLSearchParams();
                         body.append('action', 'content_rank_get_staged_generation_status');
                         body.append('nonce', <?php echo wp_json_encode($nonce); ?>);
@@ -8965,6 +9103,7 @@ if (!class_exists('Content_Rank_Generator')) {
                                 if (!payload.data.items.length) return;
                                 items = payload.data.items;
                                 postIds = items.map(function (item) { return String(item.post_id); });
+                                if (dismissed) return;
                                 toast.style.display = 'block';
                                 var current = items.find(function (item) { return item.status === 'processing'; });
                                 if (current) {
@@ -8977,18 +9116,30 @@ if (!class_exists('Content_Rank_Generator')) {
                                 timer = null;
                             })
                             .catch(function (error) {
+                                if (dismissed) return;
                                 showPollingError(error && error.message ? error.message : 'falha de comunicação com o servidor');
                                 window.clearInterval(timer);
                                 timer = null;
                             });
                     }
 
-                    closeButton.addEventListener('click', function () { window.clearInterval(timer); timer = null; toast.style.display = 'none'; });
-                    if (items.length) {
+                    closeButton.addEventListener('click', function () {
+                        dismissed = true;
+                        try {
+                            window.sessionStorage.setItem(toastKey || getToastKey(postIds), '1');
+                        } catch (error) {
+                            // Storage can be unavailable in private browsing modes.
+                        }
+                        window.clearInterval(timer);
+                        timer = null;
+                        toast.style.display = 'none';
+                    });
+                    setToastContext(postIds, false);
+                    if (items.length && !dismissed) {
                         render(items[0]);
+                        poll();
+                        timer = window.setInterval(poll, 4000);
                     }
-                    poll();
-                    timer = window.setInterval(poll, 4000);
                 }());
             </script>
             <?php

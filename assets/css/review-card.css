@@ -279,3 +279,222 @@
         text-align: center;
     }
 }
+
+/* Content Rank review cards must win over theme and WordPress block defaults. */
+.content-rank-review-card.rc-container {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 20px 0 !important;
+    box-sizing: border-box !important;
+    font-family: 'Inter', sans-serif !important;
+}
+
+.content-rank-review-card .rc-card {
+    display: block !important;
+    width: 100% !important;
+    max-width: 900px !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    border: 2px solid #e5e7eb !important;
+    border-radius: 16px !important;
+    background: #ffffff !important;
+}
+
+.content-rank-review-card .rc-grid {
+    display: grid !important;
+    grid-template-columns: 240px minmax(0, 1fr) !important;
+    gap: 24px !important;
+    align-items: center !important;
+    width: 100% !important;
+    padding: 25px !important;
+    box-sizing: border-box !important;
+}
+
+.content-rank-review-card .rc-img-sec {
+    display: flex !important;
+    width: 240px !important;
+    height: 240px !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 12px !important;
+    background: #f9fafb !important;
+}
+
+.content-rank-review-card .rc-img-sec img,
+.content-rank-review-card .rc-img-sec img.review-product-image {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    object-fit: cover !important;
+    object-position: center !important;
+}
+
+.content-rank-review-card .rc-info {
+    display: flex !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex-direction: column !important;
+}
+
+.content-rank-review-card .rc-title,
+.content-rank-review-card h3.rc-title {
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #111827 !important;
+    font-size: 20px !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+}
+
+.content-rank-review-card .rc-desc {
+    margin: 0 !important;
+    color: #4b5563 !important;
+    font-size: 13.5px !important;
+    line-height: 1.5 !important;
+}
+
+.content-rank-review-card .rc-price-cta {
+    display: flex !important;
+    width: 100% !important;
+    margin: 5px 0 0 !important;
+    padding: 0 !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 15px !important;
+}
+
+.content-rank-review-card .rc-price-cta .wp-block-buttons,
+.content-rank-review-card .rc-price-cta .wp-block-button {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.content-rank-review-card .rc-price-cta .wp-block-button__link,
+.content-rank-review-card .rc-price-cta a.wp-element-button {
+    display: inline-flex !important;
+    width: auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 12px 20px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    background: linear-gradient(135deg, #9333ea, #7e22ce) !important;
+    color: #ffffff !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    text-decoration: none !important;
+    box-shadow: 0 4px 10px rgba(147, 51, 234, 0.3) !important;
+}
+
+@media (max-width: 768px) {
+    .content-rank-review-card .rc-grid {
+        grid-template-columns: 1fr !important;
+        padding: 15px !important;
+    }
+
+    .content-rank-review-card .rc-img-sec {
+        width: 100% !important;
+        height: 180px !important;
+    }
+
+    .content-rank-review-card .rc-price-cta {
+        align-items: stretch !important;
+        flex-direction: column !important;
+        text-align: center !important;
+    }
+}
+
+/* Compatibility for cards saved before the wrapper class was added. */
+.rc-container .rc-card {
+    width: 100% !important;
+    max-width: 900px !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+}
+
+.rc-container .rc-grid {
+    display: grid !important;
+    grid-template-columns: 240px minmax(0, 1fr) !important;
+    gap: 24px !important;
+    width: 100% !important;
+    padding: 25px !important;
+    box-sizing: border-box !important;
+}
+
+.rc-container .rc-img-sec {
+    width: 240px !important;
+    height: 240px !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+}
+
+.rc-container .rc-img-sec img,
+.rc-container .rc-img-sec img.review-product-image {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    object-fit: cover !important;
+    object-position: center !important;
+}
+
+.rc-container h3.rc-title {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 20px !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+}
+
+.rc-container .rc-price-cta .wp-block-button__link,
+.rc-container .rc-price-cta a.wp-element-button {
+    display: inline-flex !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 12px 20px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    background: linear-gradient(135deg, #9333ea, #7e22ce) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    text-decoration: none !important;
+}
+
+@media (max-width: 768px) {
+    .rc-container .rc-grid {
+        grid-template-columns: 1fr !important;
+        padding: 15px !important;
+    }
+
+    .rc-container .rc-img-sec {
+        width: 100% !important;
+        height: 180px !important;
+    }
+}

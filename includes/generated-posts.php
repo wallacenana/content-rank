@@ -520,7 +520,7 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
                 $generator,
                 $item,
                 $article,
-                false
+                true
             );
             if (is_wp_error($thumbnail_result)) {
                 Content_Rank_Generator::force_generated_post_draft($post_id, $thumbnail_result->get_error_message());

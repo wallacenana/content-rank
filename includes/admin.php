@@ -78,6 +78,7 @@ class Content_Rank_Generator_Admin
         $keyword_lists = Content_Rank_Generator::get_keyword_lists(200);
         $edit_id = isset($_GET['edit']) ? intval($_GET['edit']) : 0;
         $editing_generator = $edit_id > 0 ? Content_Rank_Generator::get_generator($edit_id) : array();
+        $prompt_models = Content_Rank_Generator::get_prompt_models($editing_generator);
 
         $users = Content_Rank_Generator::get_content_author_users();
         $categories = get_categories(array('hide_empty' => false));
@@ -468,6 +469,17 @@ class Content_Rank_Generator_Admin
                                         <option value="satellite" <?php selected(isset($editing_generator['generation_mode']) ? $editing_generator['generation_mode'] : '', 'satellite'); ?>>Satélite</option>
                                     </select>
                                 </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Modelo de conteúdo</label>
+                                    <select name="prompt_model_key" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                        <option value="" <?php selected(isset($editing_generator['prompt_model_key']) ? $editing_generator['prompt_model_key'] : '', ''); ?>>Automático</option>
+                                        <?php foreach ($prompt_models as $prompt_model): ?>
+                                            <?php if (empty($prompt_model['key'])) { continue; } ?>
+                                            <option value="<?php echo esc_attr($prompt_model['key']); ?>" <?php selected(isset($editing_generator['prompt_model_key']) ? $editing_generator['prompt_model_key'] : '', $prompt_model['key']); ?>><?php echo esc_html($prompt_model['name']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <p class="mt-1 text-xs text-slate-500">Automático deixa o planejamento escolher; os demais fixam o modelo deste gerador.</p>
+                                </div>
                                 <div <?php echo (!empty($editing_generator['generation_mode']) && Content_Rank_Generator::normalize_generation_mode((string) $editing_generator['generation_mode']) === 'satellite') ? 'class="hidden"' : ''; ?>>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Fonte do gerador</label>
                                     <select name="source_type" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
@@ -808,6 +820,7 @@ class Content_Rank_Generator_Admin
                                         'feed_url' => '',
                                         'source_type' => 'keyword_list',
                                         'generation_mode' => 'pillar',
+                                        'prompt_model_key' => '',
                                         'list_id' => '0',
                                         'keyword_list_mode' => 'keywords',
                                         'tavily_enabled' => '0',
@@ -1626,6 +1639,7 @@ class Content_Rank_Generator_Admin
                         setValue('name', defaults.name);
                         setValue('feed_url', defaults.feed_url);
                         setValue('generation_mode', defaults.generation_mode);
+                        setValue('prompt_model_key', defaults.prompt_model_key);
                         setValue('source_type', defaults.source_type);
                         setValue('list_id', defaults.list_id);
                         setValue('keyword_list_mode', defaults.keyword_list_mode);
@@ -1685,6 +1699,7 @@ class Content_Rank_Generator_Admin
                         setValue('name', generator.name);
                         setValue('feed_url', generator.feed_url);
                         setValue('generation_mode', generator.generation_mode || defaults.generation_mode);
+                        setValue('prompt_model_key', typeof generator.prompt_model_key !== 'undefined' ? generator.prompt_model_key : defaults.prompt_model_key);
                         setValue('source_type', generator.source_type || defaults.source_type);
                         setValue('list_id', typeof generator.list_id !== 'undefined' ? String(generator.list_id) : defaults.list_id);
                         setValue('keyword_list_mode', generator.keyword_list_mode || defaults.keyword_list_mode);
