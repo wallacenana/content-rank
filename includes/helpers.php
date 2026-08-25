@@ -5691,7 +5691,9 @@ class Content_Rank_Generator_Helper
             'Liste reader_questions com as principais perguntas que uma pessoa faria sobre esta pauta.',
             'Título da fonte: ' . ($source_title !== '' ? $source_title : '[sem título disponível]'),
             $source_item_count > 0 ? 'Quantidade de itens indicada pelo titulo: ' . $source_item_count . '. A resposta deve cobrir todos os itens encontrados.' : '',
-            $source_outline_titles !== '' ? 'Titulos e subtitulos extraidos da fonte, preserve os nomes e a ordem:' . "\n" . $source_outline_titles : '',
+            $tmdb_movies_prompt !== ''
+                ? $tmdb_movies_prompt . "\nUse exclusivamente os titulos localizados pelo TMDB para nomear os filmes. Os nomes de filmes encontrados no HTML sao apenas referencia bruta e nao podem substituir esta lista."
+                : ($source_outline_titles !== '' ? 'Titulos e subtitulos extraidos da fonte, preserve os nomes e a ordem:' . "\n" . $source_outline_titles : ''),
             'Keyword da pauta: ' . ($keyword !== '' ? $keyword : '[sem keyword disponivel]'),
             !empty($existing_keyword_post_titles)
                 ? "Posts ja gerados para esta mesma keyword:\n- " . implode("\n- ", $existing_keyword_post_titles) . "\nNao repita a mesma intencao de busca, promessa ou angulo; escolha uma intencao diferente."
