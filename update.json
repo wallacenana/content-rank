@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.54",
+  "version": "1.9.55",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-25",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Adicionado gerador experimental de post a partir de um termo.</li><li>Adicionada thumbnail composta sem texto usando posters encontrados no TMDB.</li><li>O post experimental e criado como rascunho.</li></ul>",
+  "changelog": "<ul><li>Incluidos no esboco e no conteudo os filmes selecionados pelo TMDB.</li><li>Adicionados titulo brasileiro, titulo original, ano e sinopse como contexto factual.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

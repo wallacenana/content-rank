@@ -5057,6 +5057,42 @@ class Content_Rank_Generator_Helper
         );
     }
 
+    public static function build_tmdb_movies_prompt_block($item)
+    {
+        $movies = !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? array_slice($item['tmdb_movies'], 0, 10) : array();
+        if (empty($movies)) {
+            return '';
+        }
+        $lines = array(
+            'FILMES SELECIONADOS PELO TMDB:',
+            'Use exatamente estes filmes no esboco e no conteudo. Nao invente substitutos nem trate apenas o termo generico.',
+        );
+        foreach ($movies as $index => $movie) {
+            if (!is_array($movie)) {
+                continue;
+            }
+            $title = !empty($movie['title']) ? self::normalize_plain_text((string) $movie['title']) : '';
+            $original_title = !empty($movie['original_title']) ? self::normalize_plain_text((string) $movie['original_title']) : '';
+            $year = !empty($movie['year']) ? sanitize_text_field((string) $movie['year']) : '';
+            $overview = !empty($movie['overview']) ? self::limit_plain_text_words(self::normalize_plain_text((string) $movie['overview']), 70) : '';
+            if ($title === '' && $original_title === '') {
+                continue;
+            }
+            $line = ($index + 1) . '. ' . ($title !== '' ? $title : $original_title);
+            if ($original_title !== '' && $original_title !== $title) {
+                $line .= ' | titulo original: ' . $original_title;
+            }
+            if ($year !== '') {
+                $line .= ' | ano: ' . $year;
+            }
+            $lines[] = $line;
+            if ($overview !== '') {
+                $lines[] = '   Sinopse/base: ' . $overview;
+            }
+        }
+        return count($lines) > 2 ? implode("\n", $lines) : '';
+    }
+
     public static function build_source_context_block($generator, $item, $options = array())
     {
         $options = is_array($options) ? $options : array();
@@ -5108,6 +5144,10 @@ class Content_Rank_Generator_Helper
 
         if ($source_title !== '') {
             $lines[] = 'Titulo da fonte: ' . $source_title;
+        }
+        $tmdb_movies_prompt = self::build_tmdb_movies_prompt_block($item);
+        if ($tmdb_movies_prompt !== '') {
+            $lines[] = $tmdb_movies_prompt;
         }
         if ($source_type === 'keyword_list') {
             $lines[] = 'Nome do gerador: ' . (!empty($generator_editorial_context['name']) ? $generator_editorial_context['name'] : '[sem nome definido]');
@@ -5590,6 +5630,7 @@ class Content_Rank_Generator_Helper
         $existing_keyword_post_titles = !empty($item['existing_keyword_post_titles']) && is_array($item['existing_keyword_post_titles'])
             ? array_values(array_filter(array_map('strval', $item['existing_keyword_post_titles']), 'strlen'))
             : array();
+        $tmdb_movies_prompt = self::build_tmdb_movies_prompt_block($item);
         $available_prompt_models = Content_Rank_Generator::get_prompt_models($generator);
         $available_prompt_model_keys = array();
         $available_prompt_models_text = array();
@@ -5740,6 +5781,7 @@ class Content_Rank_Generator_Helper
             'Use content_type e recommended_prompt_model_key somente com as chaves validas abaixo.',
             'Liste semantic_terms com termos e entidades relevantes para a keyword, sem repetir a keyword de forma artificial.',
             'Keyword da pauta: ' . ($keyword !== '' ? $keyword : '[sem keyword]'),
+            $tmdb_movies_prompt !== '' ? $tmdb_movies_prompt : '',
             'Nome do gerador: ' . $generator_name,
             'Categoria editorial: ' . $generator_category,
             'Use o nome do gerador e a categoria editorial para interpretar o contexto da keyword. Nao imponha um nicho diferente apenas porque a keyword e ampla.',

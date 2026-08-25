@@ -239,6 +239,7 @@ final class Content_Rank_TMDB
                 'title' => (string) ($movie['title'] ?? ''),
                 'original_title' => (string) ($movie['original_title'] ?? ''),
                 'year' => $release_date !== '' ? substr($release_date, 0, 4) : '',
+                'overview' => (string) ($movie['overview'] ?? ''),
                 'poster_url' => !empty($movie['poster_path']) ? 'https://image.tmdb.org/t/p/w780' . $movie['poster_path'] : '',
             );
         }
@@ -383,7 +384,7 @@ final class Content_Rank_TMDB
         $results = array();
         foreach (array_slice((array) ($body['results'] ?? array()), 0, 10) as $movie) {
             $release_date = !empty($movie['release_date']) ? (string) $movie['release_date'] : '';
-            $results[] = array('id' => intval($movie['id'] ?? 0), 'title' => (string) ($movie['title'] ?? ''), 'original_title' => (string) ($movie['original_title'] ?? ''), 'year' => $release_date !== '' ? substr($release_date, 0, 4) : '', 'poster_url' => !empty($movie['poster_path']) ? 'https://image.tmdb.org/t/p/w342' . $movie['poster_path'] : '');
+            $results[] = array('id' => intval($movie['id'] ?? 0), 'title' => (string) ($movie['title'] ?? ''), 'original_title' => (string) ($movie['original_title'] ?? ''), 'year' => $release_date !== '' ? substr($release_date, 0, 4) : '', 'overview' => (string) ($movie['overview'] ?? ''), 'poster_url' => !empty($movie['poster_path']) ? 'https://image.tmdb.org/t/p/w342' . $movie['poster_path'] : '');
         }
         return array('results' => $results);
     }
