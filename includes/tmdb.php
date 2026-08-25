@@ -160,23 +160,49 @@ final class Content_Rank_TMDB
         }
 
         $service = new self();
+        $language = self::tmdb_language_from_generator($generator);
         $movies = array();
         foreach (array_slice($extracted['movies'], 0, $movie_limit) as $entity) {
             $query = !empty($entity['query']) ? sanitize_text_field((string) $entity['query']) : '';
             if ($query === '') {
                 continue;
             }
-            $search = $service->search_movies($query, self::tmdb_language_from_generator($generator));
+            $search = $service->search_movies($query, $language);
             if (empty($search['results'][0])) {
                 continue;
             }
             $movie = $search['results'][0];
+            if (!empty($movie['id'])) {
+                $details = $service->get_movie_details(intval($movie['id']), $language);
+                if (is_array($details)) {
+                    $movie = array_merge($movie, array_filter(array(
+                        'title' => isset($details['title']) ? (string) $details['title'] : '',
+                        'original_title' => isset($details['original_title']) ? (string) $details['original_title'] : '',
+                        'overview' => isset($details['overview']) ? (string) $details['overview'] : '',
+                        'year' => !empty($details['release_date']) ? substr((string) $details['release_date'], 0, 4) : '',
+                        'poster_url' => !empty($details['poster_path']) ? 'https://image.tmdb.org/t/p/w342' . $details['poster_path'] : '',
+                    ), function ($value) {
+                        return $value !== '';
+                    }));
+                }
+            }
             $movie['source_query'] = $query;
             $movies[] = $movie;
         }
         if (!empty($movies)) {
             $item['tmdb_movies'] = $movies;
         }
+        error_log('[Content Rank][tmdb] resolved movies ' . wp_json_encode(array(
+            'language' => $language,
+            'movies' => array_map(function ($movie) {
+                return array(
+                    'query' => isset($movie['source_query']) ? $movie['source_query'] : '',
+                    'title' => isset($movie['title']) ? $movie['title'] : '',
+                    'original_title' => isset($movie['original_title']) ? $movie['original_title'] : '',
+                    'tmdb_id' => isset($movie['id']) ? intval($movie['id']) : 0,
+                );
+            }, $movies),
+        ), JSON_UNESCAPED_UNICODE));
         return $item;
     }
 
@@ -203,6 +229,20 @@ final class Content_Rank_TMDB
             $search = $service->search_movies($query, $language);
             if (!empty($search['results'][0]) && is_array($search['results'][0])) {
                 $localized = $search['results'][0];
+                if (!empty($localized['id'])) {
+                    $details = $service->get_movie_details(intval($localized['id']), $language);
+                    if (is_array($details)) {
+                        $localized = array_merge($localized, array_filter(array(
+                            'title' => isset($details['title']) ? (string) $details['title'] : '',
+                            'original_title' => isset($details['original_title']) ? (string) $details['original_title'] : '',
+                            'overview' => isset($details['overview']) ? (string) $details['overview'] : '',
+                            'year' => !empty($details['release_date']) ? substr((string) $details['release_date'], 0, 4) : '',
+                            'poster_url' => !empty($details['poster_path']) ? 'https://image.tmdb.org/t/p/w342' . $details['poster_path'] : '',
+                        ), function ($value) {
+                            return $value !== '';
+                        }));
+                    }
+                }
                 $localized['source_query'] = $query;
                 $movies[] = $localized;
             } else {
@@ -530,5 +570,18 @@ final class Content_Rank_TMDB
             $results[] = array('id' => intval($movie['id'] ?? 0), 'title' => (string) ($movie['title'] ?? ''), 'original_title' => (string) ($movie['original_title'] ?? ''), 'year' => $release_date !== '' ? substr($release_date, 0, 4) : '', 'overview' => (string) ($movie['overview'] ?? ''), 'poster_url' => !empty($movie['poster_path']) ? 'https://image.tmdb.org/t/p/w342' . $movie['poster_path'] : '');
         }
         return array('results' => $results);
+    }
+
+    private function get_movie_details($movie_id, $language = 'pt-BR')
+    {
+        $movie_id = absint($movie_id);
+        if ($movie_id <= 0) {
+            return array();
+        }
+        $result = $this->tmdb_request('movie/' . $movie_id, array(
+            'language' => sanitize_text_field($language),
+            'region' => 'BR',
+        ));
+        return is_array($result) ? $result : array();
     }
 }
