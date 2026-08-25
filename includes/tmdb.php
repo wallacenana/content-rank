@@ -162,7 +162,7 @@ final class Content_Rank_TMDB
             if ($query === '') {
                 continue;
             }
-            $search = $service->search_movies($query);
+            $search = $service->search_movies($query, self::tmdb_language_from_generator($generator));
             if (empty($search['results'][0])) {
                 continue;
             }
@@ -175,6 +175,27 @@ final class Content_Rank_TMDB
             $item['tmdb_movies'] = $movies;
         }
         return $item;
+    }
+
+    private static function tmdb_language_from_generator($generator)
+    {
+        $language = !empty($generator['generation_language']) ? strtolower(remove_accents((string) $generator['generation_language'])) : '';
+        if (strpos($language, 'ingles') !== false || strpos($language, 'english') !== false) {
+            return 'en-US';
+        }
+        if (strpos($language, 'espanhol') !== false || strpos($language, 'spanish') !== false) {
+            return 'es-ES';
+        }
+        if (strpos($language, 'frances') !== false || strpos($language, 'french') !== false) {
+            return 'fr-FR';
+        }
+        if (strpos($language, 'italiano') !== false || strpos($language, 'italian') !== false) {
+            return 'it-IT';
+        }
+        if (strpos($language, 'alemao') !== false || strpos($language, 'german') !== false) {
+            return 'de-DE';
+        }
+        return 'pt-BR';
     }
 
     private function generate_post_from_term($term)
@@ -431,7 +452,7 @@ final class Content_Rank_TMDB
         return $attachment_id;
     }
 
-    private function search_movies($query)
+    private function search_movies($query, $language = 'pt-BR')
     {
         $query = trim((string) $query);
         $settings = Content_Rank_Generator::get_settings();
@@ -443,7 +464,7 @@ final class Content_Rank_TMDB
         if ($query === '') {
             return array('error' => 'Informe um titulo para pesquisar.');
         }
-        $query_args = array('query' => $query, 'language' => 'pt-BR', 'region' => 'BR', 'include_adult' => 'false', 'page' => 1);
+        $query_args = array('query' => $query, 'language' => sanitize_text_field($language), 'region' => 'BR', 'include_adult' => 'false', 'page' => 1);
         $headers = array('Accept' => 'application/json');
         if ($read_access_token !== '') {
             $headers['Authorization'] = 'Bearer ' . $read_access_token;
