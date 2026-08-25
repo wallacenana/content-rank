@@ -601,12 +601,12 @@ class Content_Rank_Generator_Admin
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="mb-1 block text-sm font-medium text-slate-700">Extrair tÃ­tulos de filmes via IA</label>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Localizar tÃ­tulos de filmes via TMDB</label>
                                     <select name="tmdb_title_translation_enabled" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                                         <option value="0">NÃ£o</option>
                                         <option value="1">Sim (experimental)</option>
                                     </select>
-                                    <p class="mt-1 text-xs text-slate-500">Nesta etapa apenas extrai os nomes originais. A traduÃ§Ã£o pelo TMDB serÃ¡ adicionada depois.</p>
+                                    <p class="mt-1 text-xs text-slate-500">Usa os tÃ­tulos encontrados na estrutura da fonte e substitui os nomes no artigo final.</p>
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Consulta no Pexels</label>

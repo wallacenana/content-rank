@@ -4,109 +4,153 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * Experimental movie-title extraction boundary.
- *
- * This first version only asks the AI for literal source titles. TMDB
- * localization is intentionally a separate step to be added later.
- */
 final class Content_Rank_TMDB
 {
-    public static function extract_item_movie_titles($generator, $item)
+    public static function localize_article_movie_titles($generator, $item, $article)
     {
         $generator = is_array($generator) ? $generator : array();
         $item = is_array($item) ? $item : array();
-        if (empty($item) || !empty($item['tmdb_movie_queries'])) {
-            return $item;
+        $article = is_array($article) ? $article : array();
+
+        $source_titles = Content_Rank_Generator_Helper::build_source_outline_titles_for_prompt($item, 10);
+        if ($source_titles === '') {
+            return $article;
         }
 
-        $source_text = '';
-        foreach (array('source_page_content', 'source_page_content_html', 'source_page_html', 'content', 'excerpt', 'title') as $key) {
-            if (empty($item[$key])) {
+        $language = self::language_from_generator($generator);
+        $replacements = array();
+        foreach (preg_split('/\R/u', $source_titles) as $source_title) {
+            $query = self::normalize_source_title($source_title);
+            if ($query === '') {
                 continue;
             }
-            $source_text = wp_strip_all_tags((string) $item[$key]);
-            $source_text = trim(preg_replace('/\s+/u', ' ', $source_text));
-            if ($source_text !== '') {
-                break;
+
+            $search = self::search_movie($query, $language);
+            if (empty($search['results'][0]) && preg_match('/\s[-|:–—]\s/u', $query)) {
+                $short_query = trim((string) preg_replace('/\s[-|:–—]\s.*$/u', '', $query));
+                if ($short_query !== '' && $short_query !== $query) {
+                    $search = self::search_movie($short_query, $language);
+                    $query = $short_query;
+                }
+            }
+            if (empty($search['results'][0]) && $language !== 'en-US') {
+                $search = self::search_movie($query, 'en-US');
+            }
+            if (empty($search['results'][0]) || empty($search['results'][0]['id'])) {
+                error_log('[Content Rank][tmdb] titulo nao localizado ' . wp_json_encode(array(
+                    'query' => $query,
+                    'language' => $language,
+                    'error' => isset($search['error']) ? $search['error'] : 'no results',
+                ), JSON_UNESCAPED_UNICODE));
+                continue;
+            }
+
+            $result = $search['results'][0];
+            $details = self::movie_details(intval($result['id']), $language);
+            $localized_title = !empty($details['title']) ? (string) $details['title'] : (string) $result['title'];
+            if ($localized_title === '' || strcasecmp($query, $localized_title) === 0) {
+                continue;
+            }
+
+            $replacements[$query] = $localized_title;
+            if (!empty($result['original_title'])) {
+                $replacements[(string) $result['original_title']] = $localized_title;
             }
         }
 
-        if ($source_text === '') {
-            return $item;
+        if (empty($replacements)) {
+            return $article;
         }
 
-        $source_text = function_exists('mb_substr')
-            ? mb_substr($source_text, 0, 14000, 'UTF-8')
-            : substr($source_text, 0, 14000);
-        $movie_limit = 10;
-        $normalized_source = function_exists('remove_accents') ? remove_accents($source_text) : $source_text;
-        if (preg_match('/\b(10|[1-9])\b.{0,40}\bfilmes?\b/i', $normalized_source, $matches)) {
-            $movie_limit = min(10, max(1, intval($matches[1])));
+        foreach (array('title', 'excerpt', 'meta_description', 'content_html') as $field) {
+            if (empty($article[$field]) || !is_string($article[$field])) {
+                continue;
+            }
+            $article[$field] = self::replace_titles($article[$field], $replacements);
         }
 
-        $schema = array(
-            'type' => 'object',
-            'additionalProperties' => false,
-            'properties' => array(
-                'movies' => array(
-                    'type' => 'array',
-                    'items' => array(
-                        'type' => 'object',
-                        'additionalProperties' => false,
-                        'properties' => array(
-                            'query' => array('type' => 'string'),
-                        ),
-                        'required' => array('query'),
-                    ),
-                ),
-            ),
-            'required' => array('movies'),
-        );
+        error_log('[Content Rank][tmdb] titulos substituidos ' . wp_json_encode($replacements, JSON_UNESCAPED_UNICODE));
+        return $article;
+    }
 
-        $prompt = 'Extraia somente os titulos de filmes realmente escritos no conteudo abaixo. '
-            . 'Esta e uma etapa tecnica anterior a uma busca no TMDB. '
-            . 'O campo query deve copiar literalmente o nome encontrado na fonte. '
-            . 'Nao traduza, nao corrija, nao localize e nao substitua por outro idioma. '
-            . 'Nao retorne evidence, descricoes, atores, personagens, series ou plataformas. '
-            . 'Ignore termos genericos como "filmes da Netflix". Preserve a ordem e retorne no maximo '
-            . $movie_limit . ' itens. Retorne somente o JSON solicitado.'
-            . "\n\nCONTEUDO:\n" . $source_text;
+    private static function normalize_source_title($title)
+    {
+        $title = trim(wp_strip_all_tags((string) $title));
+        $title = preg_replace('/^\s*\d{1,3}\s*[.):-]\s*/u', '', $title);
+        $title = preg_replace('/\s*\((?:19|20)\d{2}\)\s*/u', ' ', $title);
+        $title = trim($title, " \t\n\r\0\x0B'\"“”‘’");
+        return trim($title);
+    }
 
-        $extracted = Content_Rank_Generator::request_openai_json($generator, $prompt, array(
-            'stage' => 'tmdb_movie_title_extraction',
-            'source_type' => !empty($generator['source_type']) ? $generator['source_type'] : 'rss',
-            'item_guid' => !empty($item['guid']) ? $item['guid'] : '',
-            'item_title' => !empty($item['title']) ? $item['title'] : '',
-            'skip_language_instruction' => 1,
-            'response_schema' => $schema,
-            'response_schema_name' => 'tmdb_movie_title_extraction',
+    private static function replace_titles($text, $replacements)
+    {
+        foreach ($replacements as $source => $localized) {
+            $pattern = '/(?<![\p{L}\p{N}])' . preg_quote($source, '/') . '(?![\p{L}\p{N}])/iu';
+            $text = preg_replace($pattern, $localized, $text);
+        }
+        return $text;
+    }
+
+    private static function language_from_generator($generator)
+    {
+        $language = !empty($generator['generation_language']) ? strtolower(remove_accents((string) $generator['generation_language'])) : '';
+        if (strpos($language, 'ingles') !== false || strpos($language, 'english') !== false) {
+            return 'en-US';
+        }
+        if (strpos($language, 'espanhol') !== false || strpos($language, 'spanish') !== false) {
+            return 'es-ES';
+        }
+        return 'pt-BR';
+    }
+
+    private static function search_movie($query, $language)
+    {
+        return self::request('search/movie', array(
+            'query' => $query,
+            'language' => $language,
+            'region' => 'BR',
+            'include_adult' => 'false',
+            'page' => 1,
         ));
+    }
 
-        if (is_wp_error($extracted) || empty($extracted['movies']) || !is_array($extracted['movies'])) {
-            return $item;
+    private static function movie_details($movie_id, $language)
+    {
+        return self::request('movie/' . absint($movie_id), array(
+            'language' => $language,
+            'region' => 'BR',
+        ));
+    }
+
+    private static function request($path, $query_args = array())
+    {
+        $settings = Content_Rank_Generator::get_settings();
+        $token = trim((string) ($settings['tmdb_read_access_token'] ?? ''));
+        $api_key = trim((string) ($settings['tmdb_api_key'] ?? ''));
+        if ($token === '' && $api_key === '') {
+            return array('error' => 'Configure o token ou a API key do TMDB.');
         }
 
-        $queries = array();
-        foreach (array_slice($extracted['movies'], 0, $movie_limit) as $movie) {
-            $query = is_array($movie) && !empty($movie['query'])
-                ? sanitize_text_field((string) $movie['query'])
-                : '';
-            if ($query === '' || in_array($query, $queries, true)) {
-                continue;
-            }
-            $queries[] = $query;
+        $headers = array('Accept' => 'application/json');
+        if ($token !== '') {
+            $headers['Authorization'] = 'Bearer ' . $token;
+        } else {
+            $query_args['api_key'] = $api_key;
         }
 
-        if (!empty($queries)) {
-            $item['tmdb_movie_queries'] = $queries;
+        $response = wp_remote_get(add_query_arg($query_args, 'https://api.themoviedb.org/3/' . ltrim($path, '/')), array(
+            'timeout' => 15,
+            'headers' => $headers,
+        ));
+        if (is_wp_error($response)) {
+            return array('error' => $response->get_error_message());
         }
 
-        error_log('[Content Rank][tmdb-extraction] ' . wp_json_encode(array(
-            'item_guid' => !empty($item['guid']) ? $item['guid'] : '',
-            'queries' => $queries,
-        ), JSON_UNESCAPED_UNICODE));
-
-        return $item;
+        $status = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if ($status < 200 || $status >= 300 || !is_array($body)) {
+            return array('error' => 'TMDB retornou HTTP ' . intval($status) . '.');
+        }
+        return $body;
     }
 }
