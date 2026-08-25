@@ -5577,7 +5577,7 @@ class Content_Rank_Generator_Helper
             'Voce e um classificador editorial interno.',
             'Idioma da resposta: ' . $generation_language . '.',
             'Analise o titulo, a keyword e o HTML completo da fonte. Ignore rodape, sidebar, widgets e navegacao.',
-            'Retorne somente JSON valido com: content_type, funnel_level, primary_pain, focus_keyword, recommended_prompt_model_key.',
+            'Retorne somente JSON valido com: content_type, funnel_level, primary_pain, focus_keyword, recommended_prompt_model_key. funnel_level deve ser top, mid ou bottom, nunca numero.',
             'Escolha lista para pautas numeradas ou com quantidade; noticia para acontecimento pontual; review para avaliacao; comparativo para duas opcoes; tutorial para passo a passo; artigo para os demais temas evergreen.',
             'Siga primeiro o titulo e a intencao da pauta; use o HTML apenas para confirmar o contexto.',
             'A focus_keyword deve ser curta, natural e coerente com a pauta.',
@@ -5670,7 +5670,7 @@ class Content_Rank_Generator_Helper
             'Escolha comparativo quando houver versus, vs, comparar ou duas opcoes claras.',
             'Escolha tutorial quando houver como fazer, passo a passo ou instrucoes.',
             'Escolha noticia somente quando a keyword indicar acontecimento, anuncio, estreia, lancamento ou atualizacao pontual.',
-            'Retorne somente JSON valido com estas chaves: content_type, funnel_level, primary_pain, focus_keyword, recommended_prompt_model_key.',
+            'Retorne somente JSON valido com estas chaves: content_type, funnel_level, primary_pain, focus_keyword, recommended_prompt_model_key. funnel_level deve ser top, mid ou bottom.',
             'Use content_type e recommended_prompt_model_key somente com as chaves validas abaixo.',
             'Keyword da pauta: ' . ($keyword !== '' ? $keyword : '[sem keyword]'),
             'Nome do gerador: ' . $generator_name,
@@ -5699,7 +5699,12 @@ class Content_Rank_Generator_Helper
             : (!empty($outline_context['content_type'])
                 ? Content_Rank_Generator::normalize_prompt_model_key((string) $outline_context['content_type'])
                 : 'artigo');
-        $outline_context['funnel_level'] = !empty($analysis['funnel_level']) ? sanitize_key((string) $analysis['funnel_level']) : (!empty($outline_context['funnel_level']) ? sanitize_key((string) $outline_context['funnel_level']) : 'mid');
+        $raw_funnel_level = isset($analysis['funnel_level']) ? $analysis['funnel_level'] : (isset($outline_context['funnel_level']) ? $outline_context['funnel_level'] : 'mid');
+        if (is_numeric($raw_funnel_level)) {
+            $raw_funnel_level = array(1 => 'top', 2 => 'mid', 3 => 'bottom')[(int) $raw_funnel_level] ?? 'mid';
+        }
+        $raw_funnel_level = sanitize_key((string) $raw_funnel_level);
+        $outline_context['funnel_level'] = in_array($raw_funnel_level, array('top', 'mid', 'bottom'), true) ? $raw_funnel_level : 'mid';
         $outline_context['primary_pain'] = !empty($analysis['primary_pain']) ? sanitize_textarea_field((string) $analysis['primary_pain']) : (!empty($outline_context['primary_pain']) ? sanitize_textarea_field((string) $outline_context['primary_pain']) : '');
         $outline_context['focus_keyword'] = !empty($analysis['focus_keyword']) ? sanitize_text_field((string) $analysis['focus_keyword']) : (!empty($outline_context['focus_keyword']) ? sanitize_text_field((string) $outline_context['focus_keyword']) : '');
         foreach (array('editorial_conflict', 'reader_transformation', 'main_promise', 'reader_intent') as $narrative_key) {
@@ -6570,7 +6575,6 @@ class Content_Rank_Generator_Helper
         $generated_focus_keyword = isset($seo_article['focus_keyword']) ? $seo_article['focus_keyword'] : '';
         $generated_meta_description = isset($seo_article['meta_description']) ? $seo_article['meta_description'] : '';
         $generated_title_outline_count = self::extract_outline_target_h2_count_from_title($generated_title, $source_title);
-        $source_page_outline_titles = self::build_source_outline_titles_for_prompt($item, 10);
         $row_data = isset($item['row_data']) && is_array($item['row_data'])
             ? wp_json_encode($item['row_data'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
             : '';
@@ -6585,9 +6589,6 @@ class Content_Rank_Generator_Helper
         $normalized_prompt_model_key = Content_Rank_Generator::normalize_prompt_model_key($prompt_model_key);
         $is_list_content = in_array($content_type, array('lista', 'list', 'list_article'), true)
             || in_array($normalized_prompt_model_key, array('lista', 'list', 'list_article'), true);
-        if (!$is_list_content) {
-            $source_page_outline_titles = '';
-        }
         $tavily_context_text = '';
         if (!empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'keyword_list' && !empty($item['tavily_context']) && is_array($item['tavily_context'])) {
             $tavily_context_text = self::format_tavily_context_for_prompt($item['tavily_context']);
@@ -6672,20 +6673,6 @@ class Content_Rank_Generator_Helper
             $hidden_context[] = 'Nome do gerador: ' . (!empty($generator_editorial_context['name']) ? $generator_editorial_context['name'] : '[sem nome definido]');
             $hidden_context[] = 'Categoria editorial: ' . (!empty($generator_editorial_context['category_text']) ? $generator_editorial_context['category_text'] : '[sem categoria definida]');
         }
-        if ($is_list_content && $source_page_outline_titles !== '') {
-            $hidden_context[] = 'Estrutura da pagina de origem, na ordem obrigatoria:';
-            $hidden_context[] = '{{source_page_outline_titles}}';
-            $hidden_context[] = 'Nunca altere a ordem dos itens desta estrutura, nunca pule itens e nunca substitua ou invente itens.';
-            if ($generated_title_outline_count > 0) {
-                $hidden_context[] = sprintf(
-                    'O titulo gerado pede exatamente %d itens. Use somente os primeiros %d itens da estrutura, na mesma ordem, e pare nesse ponto.',
-                    $generated_title_outline_count,
-                    $generated_title_outline_count
-                );
-            } else {
-                $hidden_context[] = 'Se o artigo usar estes itens, comece sempre pelo primeiro e avance sequencialmente na ordem apresentada.';
-            }
-        }
 
         $template = $visible_template . "
 
@@ -6718,7 +6705,6 @@ class Content_Rank_Generator_Helper
             '{{generated_focus_keyword}}' => $generated_focus_keyword,
             '{{generated_meta_description}}' => $generated_meta_description,
             '{{generated_title_outline_count}}' => $generated_title_outline_count,
-            '{{source_page_outline_titles}}' => $source_page_outline_titles,
             '{{outline_model_name}}' => $outline_model_name,
             '{{prompt_model_name}}' => $prompt_model_name,
             '{{prompt_model_key}}' => $prompt_model_key,
