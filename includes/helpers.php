@@ -5187,7 +5187,9 @@ class Content_Rank_Generator_Helper
         $titles = array();
 
         $source_html = '';
-        foreach (array('source_page_content_html', 'source_page_html', 'content_html') as $candidate_key) {
+        // The filtered content may be intentionally shortened. Use the full
+        // source HTML first so every H2 item remains available to TMDB.
+        foreach (array('source_page_html', 'source_page_content_html', 'content_html') as $candidate_key) {
             if (!empty($item[$candidate_key])) {
                 $source_html = (string) $item[$candidate_key];
                 break;
@@ -5298,6 +5300,8 @@ class Content_Rank_Generator_Helper
         if (empty($titles)) {
             return '';
         }
+
+        error_log('[Content Rank][tmdb-outline] titulos brutos extraidos: ' . count($titles));
 
         $formatted = array();
         foreach ($titles as $index => $title) {
