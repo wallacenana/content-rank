@@ -343,7 +343,7 @@ final class Content_Rank_TMDB
                 }
             }
         }
-        $gap = $is_single ? 0 : 6;
+        $gap = $is_single || in_array($layout, array('skew', 'skew_alt'), true) ? 0 : 6;
         $available_width = $width - ($gap * ($movie_count - 1));
         $panel_widths = array_fill(0, $movie_count, (int) floor($available_width / $movie_count));
         if ($layout === 'center_focus' && $movie_count >= 3) {
