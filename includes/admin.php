@@ -9,7 +9,6 @@ class Content_Rank_Generator_Admin
     public function __construct()
     {
         add_action('admin_notices', array(__CLASS__, 'render_notice'));
-        add_action('admin_post_content_rank_test_tmdb_thumbnail', array($this, 'handle_test_tmdb_thumbnail'));
     }
 
     public function admin_menu()
@@ -61,15 +60,6 @@ class Content_Rank_Generator_Admin
             'content-rank-global-settings',
             array($this, 'render_global_settings_page'),
             999
-        );
-        add_submenu_page(
-            'content-rank',
-            'Teste de thumbnail TMDB',
-            'Teste de thumbnail TMDB',
-            'manage_options',
-            'content-rank-tmdb-thumbnail-test',
-            array($this, 'render_tmdb_thumbnail_test_page'),
-            998
         );
     }
 
