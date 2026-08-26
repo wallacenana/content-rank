@@ -104,6 +104,7 @@ final class Content_Rank_TMDB
                 'original_title' => !empty($details['original_title']) ? $details['original_title'] : (!empty($result['original_title']) ? $result['original_title'] : ''),
                 'year' => !empty($details['release_date']) ? substr((string) $details['release_date'], 0, 4) : (!empty($result['release_date']) ? substr((string) $result['release_date'], 0, 4) : ''),
                 'poster_url' => $poster_path !== '' ? 'https://image.tmdb.org/t/p/w780' . $poster_path : '',
+                'thumbnail_url' => $poster_path !== '' ? 'https://image.tmdb.org/t/p/w342' . $poster_path : '',
                 'source_query' => $source_query,
             );
             if ($localized_title === '' || self::titles_match($query, $localized_title)) {
@@ -145,6 +146,30 @@ final class Content_Rank_TMDB
 
         error_log('[Content Rank][tmdb] titulos substituidos ' . wp_json_encode($replacements, JSON_UNESCAPED_UNICODE));
         return $article;
+    }
+
+    public static function build_content_image_sections($movies)
+    {
+        $sections = array();
+        foreach ((array) $movies as $movie) {
+            if (!is_array($movie) || empty($movie['title'])) {
+                continue;
+            }
+            $image_url = !empty($movie['thumbnail_url'])
+                ? (string) $movie['thumbnail_url']
+                : (!empty($movie['poster_url']) ? (string) $movie['poster_url'] : '');
+            if ($image_url === '') {
+                continue;
+            }
+            $sections[] = array(
+                'h2' => (string) $movie['title'],
+                'images' => array(array(
+                    'url' => esc_url_raw($image_url),
+                    'alt' => (string) $movie['title'],
+                )),
+            );
+        }
+        return $sections;
     }
 
     public static function create_composite_thumbnail_for_post($post_id, $term, $movies, $bg_color = '#c91414')
