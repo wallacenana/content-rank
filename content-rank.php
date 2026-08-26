@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.87
+Version: 1.9.88
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.87');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.88');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.87';
+        const VERSION = '1.9.88';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -8844,7 +8844,7 @@ if (!class_exists('Content_Rank_Generator')) {
             }
 
             delete_transient('content_rank_staged_generation_token_' . $post_id);
-            $this->process_staged_generation($post_id);
+            self::process_staged_generation($post_id);
             wp_die('ok');
         }
 
@@ -9234,7 +9234,6 @@ if (!class_exists('Content_Rank_Generator')) {
         {
             $generator = is_array($generator) ? $generator : array();
             $existing_post_id = intval($existing_post_id);
-            error_log('[Content Rank][pipeline] enfileirando existing_post=' . $existing_post_id . ' generator=' . (!empty($generator['id']) ? intval($generator['id']) : 0));
             if ($existing_post_id > 0 && !get_post($existing_post_id)) {
                 return new WP_Error('content_rank_generation_post_missing', 'Post da regeneracao nao encontrado.');
             }
@@ -9347,9 +9346,7 @@ if (!class_exists('Content_Rank_Generator')) {
                     'stage' => 'planning',
                 ),
             ), $post_id, !empty($item['guid']) ? $item['guid'] : '', !empty($item['permalink']) ? $item['permalink'] : '');
-            // Execute the first stage immediately. Local XAMPP installations
-            // may block the admin-ajax loopback and leave jobs stuck in planning.
-            self::instance()->process_staged_generation($post_id);
+            self::schedule_staged_generation_stage($post_id, 1);
 
             return array(
                 'queued' => 1,
@@ -9363,7 +9360,9 @@ if (!class_exists('Content_Rank_Generator')) {
         {
             $post_id = intval($post_id);
             if ($post_id <= 0 || self::$staged_generation_request_processed) {
-                error_log('[Content Rank][pipeline] chamada duplicada ignorada post=' . $post_id);
+                if ($post_id > 0 && self::$staged_generation_request_processed) {
+                    self::schedule_staged_generation_stage($post_id, 60);
+                }
                 return;
             }
             self::$staged_generation_request_processed = true;
@@ -9391,7 +9390,6 @@ if (!class_exists('Content_Rank_Generator')) {
 
             try {
                 $stage = sanitize_key((string) $state['stage']);
-                error_log('[Content Rank][pipeline] iniciando post=' . $post_id . ' stage=' . $stage);
                 if ($stage === 'planning') {
                     $result = Content_Rank_Generator_Helper::prepare_generation_planning($generator, $item);
                     if (is_wp_error($result)) {
@@ -9408,7 +9406,6 @@ if (!class_exists('Content_Rank_Generator')) {
                         $state['outline_context']['outline_model_key'] = 'guide_long';
                     }
                     $state['stage'] = 'seo';
-                    error_log('[Content Rank][pipeline] transicao post=' . $post_id . ' planning->seo');
                 } elseif ($stage === 'seo') {
                     $result = Content_Rank_Generator_Helper::generate_seo_article_stage(
                         $generator,
@@ -9424,7 +9421,6 @@ if (!class_exists('Content_Rank_Generator')) {
                     $state['outline_context']['outline_text'] = '';
                     $state['outline_context']['outline_sections'] = array();
                     $state['stage'] = 'content';
-                    error_log('[Content Rank][pipeline] transicao post=' . $post_id . ' seo->content');
                 } elseif ($stage === 'content_outline') {
                     // Compatibility for jobs created before the outline pass
                     // was disabled. Do not call the old AI outline endpoint.
@@ -9470,7 +9466,6 @@ if (!class_exists('Content_Rank_Generator')) {
                     delete_post_meta($post_id, self::GENERATION_PIPELINE_META);
                     delete_post_meta($post_id, '_content_rank_generation_pipeline_error');
                     update_post_meta($post_id, '_content_rank_generation_pipeline_status', 'completed');
-                    error_log('[Content Rank][pipeline] concluido post=' . $post_id . ' status=' . get_post_status($post_id));
                     self::insert_run_log($generator['id'], 'success', 'Pipeline de geracao concluida', array(
                         'request' => array('post_id' => $post_id, 'stage' => 'content'),
                         'response' => array('post_id' => $post_id),
@@ -9488,7 +9483,6 @@ if (!class_exists('Content_Rank_Generator')) {
                 ), $post_id, !empty($item['guid']) ? $item['guid'] : '', !empty($item['permalink']) ? $item['permalink'] : '');
                 self::schedule_staged_generation_stage($post_id, 1);
             } catch (Throwable $error) {
-                error_log('[Content Rank][pipeline] falhou post=' . $post_id . ' erro=' . $error->getMessage());
                 self::fail_staged_generation($post_id, $state, $error);
             } finally {
                 delete_transient($lock_key);

@@ -62,7 +62,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     'movies_count' => !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? count($item['tmdb_movies']) : 0,
                 ));
                 error_log('[Content Rank][thumbnail] TMDB posters=' . (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? count($item['tmdb_movies']) : 0));
-                $composite_result = self::create_tmdb_composite_thumbnail(
+                $composite_result = Content_Rank_TMDB::create_composite_thumbnail_for_post(
                     $post_id,
                     $title,
                     !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? $item['tmdb_movies'] : array(),
@@ -169,107 +169,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
             error_log('[Content Rank][thumbnail] fallback attachment=' . intval($fallback_id));
 
             return intval($fallback_id) > 0 ? intval($fallback_id) : false;
-        }
-
-        private static function create_tmdb_composite_thumbnail($post_id, $term, $movies, $bg_color = '#c91414')
-        {
-            error_log('[Content Rank][thumbnail] editor TMDB iniciado');
-            if (!function_exists('imagecreatetruecolor') || !function_exists('imagecreatefromstring')) {
-                return new WP_Error('content_rank_tmdb_gd_missing', 'A extensao GD do PHP nao esta disponivel para montar a thumbnail.');
-            }
-
-            $movies = array_values(array_filter(array_slice((array) $movies, 0, 5), function ($movie) {
-                return is_array($movie) && !empty($movie['poster_url']);
-            }));
-            if (empty($movies)) {
-                return new WP_Error('content_rank_tmdb_no_posters', 'Nenhum poster do TMDB foi encontrado para montar a thumbnail.');
-            }
-
-            $width = 1200;
-            $height = 675;
-            $band_height = min(202, (int) floor($height * 0.30));
-            $canvas = imagecreatetruecolor($width, $height);
-            $bg_color = Content_Rank_Generator::normalize_hex_color($bg_color);
-            $red = hexdec(substr($bg_color, 1, 2));
-            $green = hexdec(substr($bg_color, 3, 2));
-            $blue = hexdec(substr($bg_color, 5, 2));
-            $base_color = imagecolorallocate($canvas, $red, $green, $blue);
-            imagefill($canvas, 0, 0, $base_color);
-            $panel_width = (int) floor($width / count($movies));
-            $loaded = 0;
-
-            foreach ($movies as $index => $movie) {
-                $poster_url = esc_url_raw((string) $movie['poster_url']);
-                error_log('[Content Rank][thumbnail] editor baixando ' . ($index + 1) . '/' . count($movies) . ' ' . $poster_url);
-                $response = wp_remote_get($poster_url, array('timeout' => 20));
-                if (is_wp_error($response)) {
-                    error_log('[Content Rank][thumbnail] editor download falhou ' . $response->get_error_message());
-                    continue;
-                }
-                $image = @imagecreatefromstring(wp_remote_retrieve_body($response));
-                if (!$image) {
-                    error_log('[Content Rank][thumbnail] editor poster invalido');
-                    continue;
-                }
-
-                $target_width = $index === count($movies) - 1 ? $width - ($panel_width * $index) : $panel_width;
-                $source_width = imagesx($image);
-                $source_height = imagesy($image);
-                $target_ratio = $target_width / $height;
-                $source_ratio = $source_width / max(1, $source_height);
-                if ($source_ratio > $target_ratio) {
-                    $crop_height = $source_height;
-                    $crop_width = (int) floor($source_height * $target_ratio);
-                    $source_x = (int) floor(($source_width - $crop_width) / 2);
-                    $source_y = 0;
-                } else {
-                    $crop_width = $source_width;
-                    $crop_height = (int) floor($source_width / $target_ratio);
-                    $source_x = 0;
-                    $source_y = (int) floor(($source_height - $crop_height) / 2);
-                }
-                imagecopyresampled($canvas, $image, $panel_width * $index, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
-                imagedestroy($image);
-                $loaded++;
-            }
-
-            if ($loaded === 0) {
-                imagedestroy($canvas);
-                return new WP_Error('content_rank_tmdb_thumbnail_failed', 'Nao foi possivel baixar os posters do TMDB.');
-            }
-
-            imagealphablending($canvas, true);
-            for ($step = 0; $step < 50; $step++) {
-                $alpha = 100 - (int) floor(($step / 50) * 75);
-                $shadow = imagecolorallocatealpha($canvas, $red, $green, $blue, $alpha);
-                imagefilledrectangle($canvas, 0, $height - $band_height - 50 + $step, $width, $height - $band_height - 49 + $step, $shadow);
-            }
-            imagefilledrectangle($canvas, 0, $height - $band_height, $width, $height, $base_color);
-
-            if (!function_exists('wp_tempnam')) {
-                require_once ABSPATH . 'wp-admin/includes/file.php';
-            }
-            $tmp = function_exists('wp_tempnam') ? wp_tempnam('content-rank-tmdb-thumbnail.jpg') : tempnam(sys_get_temp_dir(), 'content-rank-tmdb-');
-            if (!$tmp || !imagejpeg($canvas, $tmp, 88)) {
-                imagedestroy($canvas);
-                return new WP_Error('content_rank_tmdb_thumbnail_save_failed', 'Nao foi possivel salvar a thumbnail composta.');
-            }
-            imagedestroy($canvas);
-
-            require_once ABSPATH . 'wp-admin/includes/media.php';
-            require_once ABSPATH . 'wp-admin/includes/image.php';
-            $attachment_id = media_handle_sideload(array(
-                'name' => sanitize_title($term) . '-tmdb-thumbnail.jpg',
-                'type' => 'image/jpeg',
-                'tmp_name' => $tmp,
-                'error' => 0,
-                'size' => filesize($tmp),
-            ), intval($post_id), 'Thumbnail composta TMDB - ' . $term);
-            error_log('[Content Rank][thumbnail] editor sideload=' . (is_wp_error($attachment_id) ? $attachment_id->get_error_message() : intval($attachment_id)));
-            if (is_wp_error($attachment_id)) {
-                @unlink($tmp);
-            }
-            return $attachment_id;
         }
 
         private static function get_cached_source_html($item)
