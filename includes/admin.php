@@ -604,6 +604,19 @@ class Content_Rank_Generator_Admin
                                 <div data-tmdb-thumbnail-field class="hidden">
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Cor da faixa inferior</label>
                                     <input type="color" name="tmdb_thumbnail_bg_color" value="#c91414" class="h-11 w-20 cursor-pointer rounded-lg border border-slate-300 bg-white p-1" />
+                                    <script>
+                                    document.addEventListener('DOMContentLoaded', function () {
+                                        var tmdbTranslation = document.querySelector('select[name="tmdb_title_translation_enabled"]');
+                                        if (!tmdbTranslation) return;
+                                        var field = tmdbTranslation.closest('div');
+                                        var label = field ? field.querySelector('label') : null;
+                                        var description = field ? field.querySelector('p') : null;
+                                        if (label) label.textContent = 'Localizar títulos de filmes via TMDB';
+                                        var noOption = tmdbTranslation.querySelector('option[value="0"]');
+                                        if (noOption) noOption.textContent = 'Não';
+                                        if (description) description.textContent = 'Usa os títulos encontrados na estrutura da fonte e substitui os nomes no artigo final.';
+                                    });
+                                    </script>
                                     <p class="mt-1 text-xs text-slate-500">A faixa ocupa no mÃ¡ximo 30% da thumbnail. A sombra usa a mesma cor.</p>
                                 </div>
                                 <div>
