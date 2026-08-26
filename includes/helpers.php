@@ -387,6 +387,41 @@ class Content_Rank_Generator_Helper
         return serialize_blocks($output_blocks);
     }
 
+    public static function inject_tmdb_media_sections_into_content($content, $sections, $post_id = 0, $image_size = 'medium')
+    {
+        $content = (string) $content;
+        if ($content === '' || !is_array($sections) || empty($sections) || !function_exists('parse_blocks') || !function_exists('serialize_blocks')) {
+            return $content;
+        }
+        $blocks = parse_blocks($content);
+        if (!is_array($blocks) || empty($blocks)) {
+            return $content;
+        }
+        $sections = array_values(array_filter($sections, 'is_array'));
+        $output = array();
+        $h2_index = -1;
+        foreach ($blocks as $block) {
+            $is_h2 = is_array($block) && ($block['blockName'] ?? '') === 'core/heading' && intval($block['attrs']['level'] ?? 2) === 2;
+            if ($is_h2) {
+                $h2_index++;
+            }
+            $output[] = $block;
+            if (!$is_h2 || empty($sections[$h2_index])) {
+                continue;
+            }
+            $section = $sections[$h2_index];
+            if (!empty($section['videos'])) {
+                $output = array_merge($output, self::build_source_video_blocks_for_section($section, $content));
+            } elseif (!empty($section['images'])) {
+                $image_html = self::build_outline_section_image_html($section, intval($post_id), $image_size, array(), $h2_index, array(), array());
+                if ($image_html !== '') {
+                    $output[] = array('blockName' => 'core/html', 'attrs' => array(), 'innerBlocks' => array(), 'innerContent' => array($image_html));
+                }
+            }
+        }
+        return serialize_blocks($output);
+    }
+
     private static function build_source_video_blocks_for_section($section, $serialized_content)
     {
         $blocks = array();

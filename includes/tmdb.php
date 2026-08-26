@@ -194,6 +194,38 @@ final class Content_Rank_TMDB
         return array();
     }
 
+    public static function build_content_media_sections($movies)
+    {
+        $sections = array();
+        foreach ((array) $movies as $movie) {
+            if (!is_array($movie) || empty($movie['title'])) {
+                continue;
+            }
+            $video = !empty($movie['id']) ? self::find_movie_trailer((int) $movie['id']) : array();
+            if (!empty($video['key'])) {
+                $sections[] = array(
+                    'h2' => (string) $movie['title'],
+                    'videos' => array(array(
+                        'video_url' => 'https://www.youtube.com/watch?v=' . rawurlencode((string) $video['key']),
+                        'video_embed_html' => '',
+                        'video_source' => 'youtube',
+                    )),
+                );
+                continue;
+            }
+            $image_url = !empty($movie['backdrop_url'])
+                ? (string) $movie['backdrop_url']
+                : (!empty($movie['thumbnail_url']) ? (string) $movie['thumbnail_url'] : (string) ($movie['poster_url'] ?? ''));
+            if ($image_url !== '') {
+                $sections[] = array(
+                    'h2' => (string) $movie['title'],
+                    'images' => array(array('url' => esc_url_raw($image_url), 'alt' => (string) $movie['title'])),
+                );
+            }
+        }
+        return $sections;
+    }
+
     private static function find_movie_trailer($movie_id)
     {
         $languages = array('pt-BR', 'en-US');
