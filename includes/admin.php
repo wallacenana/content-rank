@@ -100,6 +100,7 @@ class Content_Rank_Generator_Admin
                 <p><label for="content-rank-tmdb-genre"><strong>Gênero TMDB</strong></label><br /><select id="content-rank-tmdb-genre" name="genre_id" class="regular-text"><option value="0">Qualquer gênero</option><option value="16">Animação</option><option value="10751">Família</option><option value="12">Aventura</option><option value="35">Comédia</option><option value="14">Fantasia</option><option value="28">Ação</option><option value="18">Drama</option><option value="10749">Romance</option><option value="878">Ficção científica</option></select></p>
                 <p><label for="content-rank-tmdb-limit"><strong>Quantidade</strong></label><br /><input id="content-rank-tmdb-limit" type="number" name="limit" value="5" min="1" max="5" /></p>
                 <p><label for="content-rank-tmdb-color"><strong>Cor da faixa</strong></label><br /><input id="content-rank-tmdb-color" type="color" name="bg_color" value="#0f2d80" /></p>
+                <p><label for="content-rank-tmdb-layout"><strong>Estilo da composição</strong></label><br /><select id="content-rank-tmdb-layout" name="layout" class="regular-text"><option value="standard">Painéis padrão</option><option value="skew">Painéis skew</option><option value="center_focus">Filme central maior</option></select></p>
                 <p><button type="submit" class="button button-primary">Gerar thumbnail</button></p>
             </form>
         </div>
@@ -116,13 +117,15 @@ class Content_Rank_Generator_Admin
         $genre_id = isset($_POST['genre_id']) ? absint($_POST['genre_id']) : 0;
         $limit = isset($_POST['limit']) ? min(5, max(1, absint($_POST['limit']))) : 5;
         $bg_color = isset($_POST['bg_color']) ? Content_Rank_Generator::normalize_hex_color(wp_unslash($_POST['bg_color']), '#0f2d80') : '#0f2d80';
+        $layout = isset($_POST['layout']) ? sanitize_key(wp_unslash($_POST['layout'])) : 'standard';
+        $layout = in_array($layout, array('standard', 'skew', 'center_focus'), true) ? $layout : 'standard';
         $movies = class_exists('Content_Rank_TMDB') ? Content_Rank_TMDB::find_movies_for_thumbnail($query, $genre_id, $limit) : array();
         if (empty($movies)) {
             $url = add_query_arg(array('page' => 'content-rank-tmdb-thumbnail-test', 'tmdb_error' => 'Nenhum filme com poster foi encontrado no TMDB.'), admin_url('admin.php'));
             wp_safe_redirect($url);
             exit;
         }
-        $attachment_id = Content_Rank_TMDB::create_composite_thumbnail_for_post(0, $query !== '' ? $query : 'tmdb-teste', $movies, $bg_color);
+        $attachment_id = Content_Rank_TMDB::create_composite_thumbnail_for_post(0, $query !== '' ? $query : 'tmdb-teste', $movies, $bg_color, $layout);
         if (is_wp_error($attachment_id)) {
             $url = add_query_arg(array('page' => 'content-rank-tmdb-thumbnail-test', 'tmdb_error' => $attachment_id->get_error_message()), admin_url('admin.php'));
             wp_safe_redirect($url);

@@ -232,7 +232,7 @@ final class Content_Rank_TMDB
         return $movies;
     }
 
-    public static function create_composite_thumbnail_for_post($post_id, $term, $movies, $bg_color = '#c91414')
+    public static function create_composite_thumbnail_for_post($post_id, $term, $movies, $bg_color = '#c91414', $layout = 'rotate')
     {
         if (!function_exists('imagecreatetruecolor') || !function_exists('imagecreatefromstring')) {
             return new WP_Error('content_rank_tmdb_gd_missing', 'A extensao GD do PHP nao esta disponivel para montar a thumbnail.');
@@ -253,9 +253,27 @@ final class Content_Rank_TMDB
         $base_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
         imagefill($canvas, 0, 0, $base_color);
         $is_single = count($movies) === 1;
-        $gap = $is_single ? 0 : 4;
-        $panel_width = (int) floor(($width - ($gap * (count($movies) - 1))) / count($movies));
+        $movie_count = count($movies);
+        $layout = sanitize_key((string) $layout);
+        if ($layout === 'rotate') {
+            $layouts = array('standard', 'skew', 'center_focus');
+            $layout = $post_id > 0 ? $layouts[$post_id % count($layouts)] : 'standard';
+        }
+        if (!in_array($layout, array('standard', 'skew', 'center_focus'), true) || $is_single) {
+            $layout = 'standard';
+        }
+        $gap = $is_single ? 0 : 6;
+        $available_width = $width - ($gap * ($movie_count - 1));
+        $panel_widths = array_fill(0, $movie_count, (int) floor($available_width / $movie_count));
+        if ($layout === 'center_focus' && $movie_count >= 3) {
+            $center = (int) floor($available_width * 0.30);
+            $side_width = (int) floor(($available_width - $center) / ($movie_count - 1));
+            $panel_widths = array_fill(0, $movie_count, $side_width);
+            $panel_widths[(int) floor($movie_count / 2)] = $center;
+            $panel_widths[$movie_count - 1] += $available_width - array_sum($panel_widths);
+        }
         $loaded = 0;
+        $cursor_x = 0;
 
         foreach ($movies as $index => $movie) {
             $image_url = $is_single && !empty($movie['backdrop_url'])
@@ -272,8 +290,8 @@ final class Content_Rank_TMDB
                 error_log('[Content Rank][thumbnail] TMDB resposta nao e imagem');
                 continue;
             }
-            $target_x = ($panel_width + $gap) * $index;
-            $target_width = $index === count($movies) - 1 ? $width - $target_x : $panel_width;
+            $target_x = $cursor_x;
+            $target_width = $panel_widths[$index];
             $source_width = imagesx($image);
             $source_height = imagesy($image);
             $target_ratio = $target_width / $height;
@@ -292,6 +310,7 @@ final class Content_Rank_TMDB
             imagecopyresampled($canvas, $image, $target_x, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
             imagedestroy($image);
             $loaded++;
+            $cursor_x += $target_width + $gap;
         }
 
         if ($loaded === 0) {
@@ -314,6 +333,21 @@ final class Content_Rank_TMDB
             $gd_alpha = 127 - (int) round($opacity * 127);
             $shadow = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], max(0, min(127, $gd_alpha)));
             imagefilledrectangle($canvas, 0, $gradient_start + $step, $width, $gradient_start + $step, $shadow);
+        }
+
+        if ($layout === 'skew') {
+            $skew = 14;
+            $edge_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
+            $cursor_x = 0;
+            foreach ($panel_widths as $index => $panel_width) {
+                $left = $cursor_x;
+                $right = $cursor_x + $panel_width;
+                imagepolygon($canvas, array($left, 0, $left + $skew, 0, $left, $skew), 3, $edge_color);
+                imagepolygon($canvas, array($right, 0, $right - $skew, 0, $right, $skew), 3, $edge_color);
+                imagepolygon($canvas, array($left, $height, $left + $skew, $height, $left, $height - $skew), 3, $edge_color);
+                imagepolygon($canvas, array($right, $height, $right - $skew, $height, $right, $height - $skew), 3, $edge_color);
+                $cursor_x += $panel_width + $gap;
+            }
         }
         if (!function_exists('wp_tempnam')) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
