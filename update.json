@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.119",
+  "version": "1.9.120",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-26",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Removido o skew alternado e corrigidas as linhas extras do layout skew, mantendo o espacamento de 6 px.</li><li>O seletor manual de cor agora some quando a extracao automatica esta ativa.</li><li>Mantido o padrao halftone com blur moderado no fundo.</li></ul>",
+  "changelog": "<ul><li>Removidos os logs operacionais de TMDB, thumbnails, pipeline, licenca e diagnostico.</li><li>Mantidos apenas os logs de prompt e response no call OpenAI.</li><li>O seletor manual de cor agora some quando a extracao automatica esta ativa.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

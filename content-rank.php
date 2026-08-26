@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.119
+Version: 1.9.120
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.119');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.120');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.119';
+        const VERSION = '1.9.120';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -9223,7 +9223,6 @@ if (!class_exists('Content_Rank_Generator')) {
             ));
 
             if (is_wp_error($response)) {
-                error_log('[content-rank] staged generation async dispatch failed: ' . $response->get_error_message());
                 return false;
             }
 
@@ -9655,7 +9654,6 @@ if (!class_exists('Content_Rank_Generator')) {
             $tmdb_content_image_sections = ($use_tmdb_thumbnail && class_exists('Content_Rank_TMDB') && !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']))
                 ? Content_Rank_TMDB::build_content_image_sections($item['tmdb_movies'])
                 : array();
-            error_log('[Content Rank][thumbnail] secoes TMDB para conteudo=' . count($tmdb_content_image_sections));
 
             if (!empty($article['content_html']) && !empty($generator['random_bolds_enabled'])) {
                 $focus_keyword = !empty($article['focus_keyword'])
@@ -9784,7 +9782,6 @@ if (!class_exists('Content_Rank_Generator')) {
                     array()
                 );
                 $images_after = preg_match_all('/<img\b/i', (string) $article['content_html']);
-                error_log('[Content Rank][thumbnail] imagens TMDB no conteudo antes=' . intval($images_before) . ' depois=' . intval($images_after));
             }
             $content_media_sections = !empty($item['source_page_outline_sections']) && is_array($item['source_page_outline_sections'])
                 ? $item['source_page_outline_sections']

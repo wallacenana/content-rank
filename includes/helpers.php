@@ -5165,7 +5165,6 @@ class Content_Rank_Generator_Helper
                 );
             }
             if (!empty($localized_titles)) {
-                error_log('[Content Rank][tmdb-outline] reutilizando ' . count($localized_titles) . ' titulos localizados');
                 return implode("\n", $localized_titles);
             }
         }
@@ -5178,10 +5177,8 @@ class Content_Rank_Generator_Helper
                 if (!empty($translation_cache[$cache_key]['movies'])) {
                     $item['tmdb_movies'] = $translation_cache[$cache_key]['movies'];
                 }
-                error_log('[Content Rank][tmdb-outline] usando cache da traducao');
                 return (string) $translation_cache[$cache_key]['titles'];
             }
-            error_log('[Content Rank][tmdb-outline] traduzindo titulos extraidos dos H2');
             $translated_titles = Content_Rank_TMDB::translate_source_outline_titles($generator, $item, $raw_titles);
             $translation_cache[$cache_key] = array(
                 'titles' => $translated_titles,
@@ -5306,7 +5303,6 @@ class Content_Rank_Generator_Helper
             return '';
         }
 
-        error_log('[Content Rank][tmdb-outline] titulos brutos extraidos: ' . count($titles));
 
         $formatted = array();
         foreach ($titles as $index => $title) {

@@ -11,7 +11,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
             $article = is_array($article) ? $article : array();
 
             if ($post_id <= 0) {
-                error_log('[Content Rank][thumbnail] abortado: post_id invalido');
                 return false;
             }
 
@@ -33,7 +32,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
             );
             $existing_thumbnail_id = intval(get_post_thumbnail_id($post_id));
             if ($reuse_existing && $existing_thumbnail_id > 0 && wp_attachment_is_image($existing_thumbnail_id)) {
-                error_log('[Content Rank][thumbnail] reutilizando anexo existente=' . $existing_thumbnail_id);
                 return $existing_thumbnail_id;
             }
             $title = !empty($article['title'])
@@ -45,13 +43,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 'image_source_mode' => $image_source_mode,
                 'generator_image_source_mode' => isset($generator['image_source_mode']) ? (string) $generator['image_source_mode'] : '',
             ));
-            error_log('[Content Rank][thumbnail] inicio ' . wp_json_encode(array(
-                'post_id' => $post_id,
-                'mode' => $image_source_mode,
-                'generator_id' => !empty($generator['id']) ? intval($generator['id']) : 0,
-                'title' => $title,
-                'existing_id' => $existing_thumbnail_id,
-            ), JSON_UNESCAPED_UNICODE));
 
             if ($image_source_mode === 'tmdb_composite') {
                 if (!class_exists('Content_Rank_TMDB')) {
@@ -68,7 +59,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     }
                 }
                 if (!$has_posters) {
-                    error_log('[Content Rank][thumbnail] TMDB sem posters; resolvendo novamente');
                     Content_Rank_TMDB::localize_article_movie_titles($generator, $item, $article, false);
                     $tmdb_movies = !empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])
                         ? $item['tmdb_movies']
@@ -81,9 +71,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                         return is_array($movie) && !empty($movie['poster_url']);
                     })),
                 ));
-                error_log('[Content Rank][thumbnail] TMDB posters=' . count(array_filter($tmdb_movies, function ($movie) {
-                    return is_array($movie) && !empty($movie['poster_url']);
-                })));
                 $composite_result = Content_Rank_TMDB::create_composite_thumbnail_for_post(
                     $post_id,
                     $title,
@@ -97,13 +84,11 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     $composite_id = intval($composite_result);
                     $thumbnail_set = set_post_thumbnail($post_id, $composite_id);
                     $assigned_id = intval(get_post_thumbnail_id($post_id));
-                    error_log('[Content Rank][thumbnail] TMDB concluida attachment=' . $composite_id . ' set=' . ($thumbnail_set ? '1' : '0') . ' assigned=' . $assigned_id);
                     if ($assigned_id !== $composite_id) {
                         return new WP_Error('content_rank_tmdb_thumbnail_assign_failed', 'A thumbnail TMDB foi criada, mas nao foi vinculada ao post.');
                     }
                     return $composite_id;
                 }
-                error_log('[Content Rank][thumbnail] TMDB falhou ' . (is_wp_error($composite_result) ? $composite_result->get_error_message() : 'resultado invalido'));
                 Content_Rank_Generator::log_image_debug('thumbnail_helper_tmdb_failed', array(
                     'post_id' => $post_id,
                     'error' => is_wp_error($composite_result) ? $composite_result->get_error_message() : 'unknown',
@@ -123,11 +108,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     !empty($item['permalink']) ? (string) $item['permalink'] : ''
                 );
             }
-            error_log('[Content Rank][thumbnail] fontes ' . wp_json_encode(array(
-                'source_url' => $source_image_url,
-                'use_pexels' => $use_pexels ? 1 : 0,
-                'use_dalle' => $use_dalle ? 1 : 0,
-            ), JSON_UNESCAPED_UNICODE));
 
             Content_Rank_Generator::log_image_debug('thumbnail_helper_start', array(
                 'post_id' => $post_id,
@@ -148,7 +128,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     ''
                 );
                 if (!is_wp_error($source_result) && intval($source_result) > 0) {
-                    error_log('[Content Rank][thumbnail] fonte concluida attachment=' . intval($source_result));
                     update_post_meta($post_id, '_content_rank_source_image_url', esc_url_raw($source_image_url));
                     Content_Rank_Generator::log_image_debug('thumbnail_helper_source_done', array(
                         'post_id' => $post_id,
@@ -167,7 +146,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     $is_keyword_list
                 );
                 if (!is_wp_error($pexels_result) && intval($pexels_result) > 0) {
-                    error_log('[Content Rank][thumbnail] Pexels concluida attachment=' . intval($pexels_result));
                     return intval($pexels_result);
                 }
             } elseif ($use_dalle) {
@@ -179,7 +157,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     $is_keyword_list
                 );
                 if (!is_wp_error($dalle_result) && intval($dalle_result) > 0) {
-                    error_log('[Content Rank][thumbnail] Dall-e concluida attachment=' . intval($dalle_result));
                     return intval($dalle_result);
                 }
             }
@@ -197,7 +174,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 'attachment_id' => intval($fallback_id),
                 'image_source_mode' => $image_source_mode,
             ));
-            error_log('[Content Rank][thumbnail] fallback attachment=' . intval($fallback_id));
 
             return intval($fallback_id) > 0 ? intval($fallback_id) : false;
         }

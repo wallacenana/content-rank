@@ -183,7 +183,6 @@ class Content_Rank_License_Client
 
         $email_log = (string) $settings['email'];
         $email_log = $email_log !== '' ? substr($email_log, 0, 2) . '***' : '';
-        error_log('[content-rank-license-client] request | action=' . $action . ' | domain=' . self::current_domain() . ' | email=' . $email_log);
 
         $response = wp_remote_post(trailingslashit($settings['api_url']) . ltrim($action, '/'), array(
             'timeout' => 20,
@@ -204,13 +203,11 @@ class Content_Rank_License_Client
             )),
         ));
         if (is_wp_error($response)) {
-            error_log('[content-rank-license-client] transport_error | action=' . $action . ' | message=' . $response->get_error_message());
             return $response;
         }
 
         $code = (int) wp_remote_retrieve_response_code($response);
         $raw = (string) wp_remote_retrieve_body($response);
-        error_log('[content-rank-license-client] response | action=' . $action . ' | status=' . $code . ' | body=' . substr(preg_replace('/\s+/', ' ', $raw), 0, 500));
         $data = json_decode($raw, true);
         if ($code < 200 || $code >= 300 || !is_array($data) || empty($data['valid'])) {
             $message = !empty($data['message']) ? $data['message'] : 'Nao foi possivel validar a licenca.';

@@ -16,7 +16,6 @@ final class Content_Rank_TMDB
         }
 
         self::localize_article_movie_titles($generator, $item, array(), false, $source_titles);
-        error_log('[Content Rank][tmdb-outline] resultados TMDB: ' . (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? count($item['tmdb_movies']) : 0));
         $localized_by_source = array();
         foreach (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? $item['tmdb_movies'] : array() as $movie) {
             if (!empty($movie['source_query']) && !empty($movie['title'])) {
@@ -77,11 +76,6 @@ final class Content_Rank_TMDB
                 $search = self::search_movie($query, 'en-US', $source_year);
             }
             if (empty($search['results'][0]) || empty($search['results'][0]['id'])) {
-                error_log('[Content Rank][tmdb] titulo nao localizado ' . wp_json_encode(array(
-                    'query' => $query,
-                    'language' => $language,
-                    'error' => isset($search['error']) ? $search['error'] : 'no results',
-                ), JSON_UNESCAPED_UNICODE));
                 continue;
             }
 
@@ -145,7 +139,6 @@ final class Content_Rank_TMDB
             $article[$field] = self::replace_titles($article[$field], $replacements);
         }
 
-        error_log('[Content Rank][tmdb] titulos substituidos ' . wp_json_encode($replacements, JSON_UNESCAPED_UNICODE));
         return $article;
     }
 
@@ -370,15 +363,12 @@ final class Content_Rank_TMDB
             $image_url = $is_single && $layout !== 'blur_background' && !empty($movie['backdrop_url'])
                 ? (string) $movie['backdrop_url']
                 : (string) $movie['poster_url'];
-            error_log('[Content Rank][thumbnail] TMDB baixando ' . ($is_single && !empty($movie['backdrop_url']) ? 'backdrop' : 'poster') . ' ' . ($index + 1) . '/' . count($movies) . ' ' . esc_url_raw($image_url));
             $response = wp_remote_get(esc_url_raw($image_url), array('timeout' => 20));
             if (is_wp_error($response)) {
-                error_log('[Content Rank][thumbnail] TMDB download falhou ' . $response->get_error_message());
                 continue;
             }
             $image = @imagecreatefromstring(wp_remote_retrieve_body($response));
             if (!$image) {
-                error_log('[Content Rank][thumbnail] TMDB resposta nao e imagem');
                 continue;
             }
             $target_x = $cursor_x;
@@ -479,7 +469,6 @@ final class Content_Rank_TMDB
             'error' => 0,
             'size' => filesize($tmp),
         ), intval($post_id), 'Thumbnail composta TMDB - ' . $term);
-        error_log('[Content Rank][thumbnail] TMDB sideload result=' . (is_wp_error($attachment_id) ? $attachment_id->get_error_message() : intval($attachment_id)));
         if (is_wp_error($attachment_id)) {
             @unlink($tmp);
         }
