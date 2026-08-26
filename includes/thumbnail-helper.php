@@ -25,14 +25,12 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
             $is_url_reference = Content_Rank_Generator::generator_uses_keyword_list_url_reference_mode($generator);
             $treat_like_rss = !$is_keyword_list || $is_url_reference;
 
-            $image_source_mode = !empty($generator['image_source_mode'])
-                ? sanitize_key((string) $generator['image_source_mode'])
-                : Content_Rank_Generator::normalize_image_source_mode(
-                    $source_type,
-                    '',
-                    isset($generator['pexels_enabled']) ? !empty($generator['pexels_enabled']) : null,
-                    $keyword_list_mode
-                );
+            $image_source_mode = Content_Rank_Generator::normalize_image_source_mode(
+                $source_type,
+                isset($generator['image_source_mode']) ? (string) $generator['image_source_mode'] : '',
+                isset($generator['pexels_enabled']) ? !empty($generator['pexels_enabled']) : null,
+                $keyword_list_mode
+            );
             $existing_thumbnail_id = intval(get_post_thumbnail_id($post_id));
             if ($reuse_existing && $image_source_mode !== 'tmdb_composite' && $existing_thumbnail_id > 0 && wp_attachment_is_image($existing_thumbnail_id)) {
                 return $existing_thumbnail_id;
@@ -49,23 +47,46 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
             error_log('[Content Rank][thumbnail] inicio ' . wp_json_encode(array(
                 'post_id' => $post_id,
                 'mode' => $image_source_mode,
+                'generator_id' => !empty($generator['id']) ? intval($generator['id']) : 0,
                 'title' => $title,
                 'existing_id' => $existing_thumbnail_id,
             ), JSON_UNESCAPED_UNICODE));
 
-            if ($image_source_mode === 'tmdb_composite' && class_exists('Content_Rank_TMDB')) {
-                if (empty($item['tmdb_movies']) || !is_array($item['tmdb_movies'])) {
+            if ($image_source_mode === 'tmdb_composite') {
+                if (!class_exists('Content_Rank_TMDB')) {
+                    return new WP_Error('content_rank_tmdb_unavailable', 'A integracao com o TMDB nao esta disponivel.');
+                }
+                $tmdb_movies = !empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])
+                    ? $item['tmdb_movies']
+                    : array();
+                $has_posters = false;
+                foreach ($tmdb_movies as $tmdb_movie) {
+                    if (is_array($tmdb_movie) && !empty($tmdb_movie['poster_url'])) {
+                        $has_posters = true;
+                        break;
+                    }
+                }
+                if (!$has_posters) {
+                    error_log('[Content Rank][thumbnail] TMDB sem posters; resolvendo novamente');
                     Content_Rank_TMDB::localize_article_movie_titles($generator, $item, $article, false);
+                    $tmdb_movies = !empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])
+                        ? $item['tmdb_movies']
+                        : array();
                 }
                 Content_Rank_Generator::log_image_debug('thumbnail_helper_tmdb_start', array(
                     'post_id' => $post_id,
-                    'movies_count' => !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? count($item['tmdb_movies']) : 0,
+                    'movies_count' => count($tmdb_movies),
+                    'poster_count' => count(array_filter($tmdb_movies, function ($movie) {
+                        return is_array($movie) && !empty($movie['poster_url']);
+                    })),
                 ));
-                error_log('[Content Rank][thumbnail] TMDB posters=' . (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? count($item['tmdb_movies']) : 0));
+                error_log('[Content Rank][thumbnail] TMDB posters=' . count(array_filter($tmdb_movies, function ($movie) {
+                    return is_array($movie) && !empty($movie['poster_url']);
+                })));
                 $composite_result = Content_Rank_TMDB::create_composite_thumbnail_for_post(
                     $post_id,
                     $title,
-                    !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? $item['tmdb_movies'] : array(),
+                    $tmdb_movies,
                     !empty($generator['tmdb_thumbnail_bg_color']) ? $generator['tmdb_thumbnail_bg_color'] : '#c91414'
                 );
                 if (!is_wp_error($composite_result) && intval($composite_result) > 0) {
