@@ -105,7 +105,7 @@ class Content_Rank_Generator_Admin
                 document.addEventListener('DOMContentLoaded', function () {
                     var layout = document.querySelector('select[name="layout"]');
                     if (!layout) return;
-                    var options = { rotate: 'Aleatório', skew_alt: 'Skew alternado', spotlight: 'Filme em destaque', blur_background: 'Fundo desfocado' };
+                    var options = { rotate: 'Aleatório', spotlight: 'Filme em destaque', blur_background: 'Fundo desfocado' };
                     Object.keys(options).forEach(function (value) {
                         if (!layout.querySelector('option[value="' + value + '"]')) {
                             var option = document.createElement('option');
@@ -135,7 +135,7 @@ class Content_Rank_Generator_Admin
         $auto_color = !empty($_POST['auto_color']);
         $bg_color = $auto_color ? 'auto' : (isset($_POST['bg_color']) ? Content_Rank_Generator::normalize_hex_color(wp_unslash($_POST['bg_color']), '#0f2d80') : '#0f2d80');
         $layout = isset($_POST['layout']) ? sanitize_key(wp_unslash($_POST['layout'])) : 'standard';
-        $layout = in_array($layout, array('rotate', 'standard', 'skew', 'skew_alt', 'center_focus', 'spotlight', 'blur_background'), true) ? $layout : 'rotate';
+        $layout = in_array($layout, array('rotate', 'standard', 'skew', 'center_focus', 'spotlight', 'blur_background'), true) ? $layout : 'rotate';
         $movies = class_exists('Content_Rank_TMDB') ? Content_Rank_TMDB::find_movies_for_thumbnail($query, $genre_id, $limit) : array();
         if (empty($movies)) {
             $url = add_query_arg(array('page' => 'content-rank-tmdb-thumbnail-test', 'tmdb_error' => 'Nenhum filme com poster foi encontrado no TMDB.'), admin_url('admin.php'));
@@ -694,20 +694,28 @@ class Content_Rank_Generator_Admin
                                 </div>
                                 <div data-tmdb-thumbnail-field class="hidden">
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Cor da faixa inferior</label>
-                                    <input type="color" name="tmdb_thumbnail_bg_color" value="#c91414" class="h-11 w-20 cursor-pointer rounded-lg border border-slate-300 bg-white p-1" />
+                                    <div data-tmdb-color-picker><input type="color" name="tmdb_thumbnail_bg_color" value="#c91414" class="h-11 w-20 cursor-pointer rounded-lg border border-slate-300 bg-white p-1" /></div>
                                     <label class="mt-2 block text-sm text-slate-600"><input type="checkbox" name="tmdb_thumbnail_auto_color" value="1" class="mr-2" /> Extrair a cor automaticamente da imagem principal</label>
                                     <label class="mt-3 mb-1 block text-sm font-medium text-slate-700">Estilo da thumbnail</label>
                                     <select name="tmdb_thumbnail_layout" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                                         <option value="rotate">Aleatório</option>
                                         <option value="standard">Painéis uniformes</option>
                                         <option value="skew">Skew para a direita</option>
-                                        <option value="skew_alt">Skew alternado</option>
                                         <option value="center_focus">Destaque central</option>
                                         <option value="spotlight">Destaque no primeiro filme</option>
                                         <option value="blur_background">Fundo desfocado</option>
                                     </select>
                                     <script>
                                     document.addEventListener('DOMContentLoaded', function () {
+                                        var tmdbAutoColor = document.querySelector('input[name="tmdb_thumbnail_auto_color"]');
+                                        var tmdbColorPicker = document.querySelector('[data-tmdb-color-picker]');
+                                        if (tmdbAutoColor && tmdbColorPicker) {
+                                            var syncTmdbColorPicker = function () {
+                                                tmdbColorPicker.style.display = tmdbAutoColor.checked ? 'none' : '';
+                                            };
+                                            tmdbAutoColor.addEventListener('change', syncTmdbColorPicker);
+                                            syncTmdbColorPicker();
+                                        }
                                         var tmdbTranslation = document.querySelector('select[name="tmdb_title_translation_enabled"]');
                                         if (!tmdbTranslation) return;
                                         var field = tmdbTranslation.closest('div');

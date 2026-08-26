@@ -252,7 +252,7 @@ final class Content_Rank_TMDB
         $movie_count = count($movies);
         $layout = sanitize_key((string) $layout);
         if ($layout === 'rotate') {
-            $layouts = array('standard', 'skew', 'skew_alt', 'center_focus', 'spotlight', 'blur_background');
+            $layouts = array('standard', 'skew', 'center_focus', 'spotlight', 'blur_background');
             $layout = function_exists('wp_rand')
                 ? $layouts[wp_rand(0, count($layouts) - 1)]
                 : $layouts[array_rand($layouts)];
@@ -266,7 +266,7 @@ final class Content_Rank_TMDB
             $movie_count = count($movies);
             $is_single = $movie_count === 1;
         }
-        if (!in_array($layout, array('standard', 'skew', 'skew_alt', 'center_focus', 'spotlight', 'blur_background'), true) || ($is_single && !in_array($layout, array('spotlight', 'blur_background'), true))) {
+        if (!in_array($layout, array('standard', 'skew', 'center_focus', 'spotlight', 'blur_background'), true) || ($is_single && !in_array($layout, array('spotlight', 'blur_background'), true))) {
             $layout = 'standard';
         }
         $canvas = imagecreatetruecolor($width, $height);
@@ -289,7 +289,7 @@ final class Content_Rank_TMDB
         );
         $border_highlight = imagecolorallocatealpha($canvas, 255, 255, 255, 72);
         imagefill($canvas, 0, 0, $base_color);
-        if (in_array($layout, array('skew', 'skew_alt', 'blur_background'), true) && !empty($movies[0])) {
+        if (in_array($layout, array('skew', 'blur_background'), true) && !empty($movies[0])) {
             $background_url = $layout === 'blur_background'
                 ? (string) $movies[0]['poster_url']
                 : (!empty($movies[0]['backdrop_url'])
@@ -398,16 +398,16 @@ final class Content_Rank_TMDB
                 $source_x = 0;
                 $source_y = (int) floor(($source_height - $crop_height) / 2);
             }
-            if ($layout === 'skew' || $layout === 'skew_alt' || $layout === 'blur_background') {
+            if ($layout === 'skew' || $layout === 'blur_background') {
                 $panel = imagecreatetruecolor($target_width, $height);
                 imagecopyresampled($panel, $image, 0, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
                 $skew = $layout === 'blur_background' ? 42 : 22;
                 // The alternate layout is the same composition mirrored to the left.
-                $skew_direction = $layout === 'skew_alt' ? -1 : 1;
+                $skew_direction = 1;
                 for ($row = 0; $row < $height; $row++) {
                     $offset = $skew_direction * (int) round($skew * (1 - ($row / max(1, $height - 1))));
                     imagecopy($canvas, $panel, $target_x + $offset, $row, 0, $row, $target_width, 1);
-                    if ($gap > 0 && $index < count($movies) - 1 && ($layout === 'skew' || $layout === 'skew_alt')) {
+                    if ($gap > 0 && $index < count($movies) - 1 && $layout === 'skew') {
                         $separator_start = $target_x + $offset + $target_width;
                         imagefilledrectangle(
                             $canvas,
@@ -458,19 +458,6 @@ final class Content_Rank_TMDB
             imagefilledrectangle($canvas, 0, $gradient_start + $step, $width, $gradient_start + $step, $shadow);
         }
 
-        if ($layout === 'skew' || $layout === 'skew_alt') {
-            $skew = 22;
-            $edge_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
-            $cursor_x = 0;
-            foreach ($panel_widths as $index => $panel_width) {
-                $left = $cursor_x;
-                $right = $cursor_x + $panel_width;
-                $skew_direction = $layout === 'skew_alt' && $index % 2 === 1 ? -1 : 1;
-                imageline($canvas, $left + ($skew * $skew_direction), 0, $left, $height, $edge_color);
-                imageline($canvas, $right + ($skew * $skew_direction), 0, $right, $height, $edge_color);
-                $cursor_x += $panel_width + $gap;
-            }
-        }
         if (!function_exists('wp_tempnam')) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
         }
