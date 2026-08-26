@@ -227,6 +227,16 @@
     font-weight: 600;
 }
 
+.content-rank-action-icon {
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+}
+
 .content-rank-generator-actions form {
     display: inline-flex;
     margin: 0;

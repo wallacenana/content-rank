@@ -311,7 +311,11 @@ class Content_Rank_Generator_Admin
                                                         <input type="hidden" name="action" value="content_rank_toggle_generator" />
                                                         <input type="hidden" name="generator_id" value="<?php echo esc_attr($generator['id']); ?>" />
                                                         <button type="submit" class="content-rank-generator-action-btn inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50" aria-label="<?php echo $generator['status'] === 'active' ? 'Pausar' : 'Iniciar'; ?>" title="<?php echo $generator['status'] === 'active' ? 'Pausar' : 'Iniciar'; ?>">
-                                                            <span class="dashicons dashicons-<?php echo $generator['status'] === 'active' ? 'controls-pause' : 'controls-play'; ?> text-[17px] leading-none"></span>
+                                                            <?php if ($generator['status'] === 'active'): ?>
+                                                                <svg class="content-rank-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14" /></svg>
+                                                            <?php else: ?>
+                                                                <svg class="content-rank-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" /></svg>
+                                                            <?php endif; ?>
                                                             <span class="sr-only"><?php echo $generator['status'] === 'active' ? 'Pausar' : 'Iniciar'; ?></span>
                                                         </button>
                                                     </form>
@@ -321,7 +325,7 @@ class Content_Rank_Generator_Admin
                                                         class="content-rank-generator-action-btn inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
                                                         aria-label="Editar"
                                                         title="Editar">
-                                                        <span class="dashicons dashicons-edit text-[17px] leading-none"></span>
+                                                        <svg class="content-rank-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L19 8.5 15.5 5 4 16.5Z" /><path d="m14 6.5 3.5 3.5M4 21h16" /></svg>
                                                         <span class="sr-only">Editar</span>
                                                     </button>
                                                     <button
@@ -332,7 +336,7 @@ class Content_Rank_Generator_Admin
                                                         class="content-rank-generator-action-btn content-rank-generator-action-btn--primary inline-flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-600 text-white transition hover:bg-indigo-500"
                                                         aria-label="Escolher item"
                                                         title="Escolher item">
-                                                        <span class="dashicons dashicons-list-view text-[17px] leading-none"></span>
+                                                        <svg class="content-rank-action-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>
                                                         <span class="sr-only">Escolher item</span>
                                                     </button>
                                                     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
@@ -340,7 +344,7 @@ class Content_Rank_Generator_Admin
                                                         <input type="hidden" name="action" value="content_rank_export_generator" />
                                                         <input type="hidden" name="generator_id" value="<?php echo esc_attr($generator['id']); ?>" />
                                                         <button type="submit" class="content-rank-generator-action-btn inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50" aria-label="Exportar" title="Exportar">
-                                                            <span class="dashicons dashicons-download text-[17px] leading-none"></span>
+                                                            <svg class="content-rank-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M8 11l4 4 4-4M5 19h14" /></svg>
                                                             <span class="sr-only">Exportar</span>
                                                         </button>
                                                     </form>
@@ -349,7 +353,7 @@ class Content_Rank_Generator_Admin
                                                         <input type="hidden" name="action" value="content_rank_duplicate_generator" />
                                                         <input type="hidden" name="generator_id" value="<?php echo esc_attr($generator['id']); ?>" />
                                                         <button type="submit" class="content-rank-generator-action-btn inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50" aria-label="Duplicar" title="Duplicar">
-                                                            <span class="dashicons dashicons-admin-page text-[17px] leading-none"></span>
+                                                            <svg class="content-rank-action-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="5" width="11" height="14" rx="2" /><path d="M5 16V7a2 2 0 0 1 2-2h8M5 9h2" /></svg>
                                                             <span class="sr-only">Duplicar</span>
                                                         </button>
                                                     </form>
@@ -358,7 +362,7 @@ class Content_Rank_Generator_Admin
                                                         <input type="hidden" name="action" value="content_rank_delete_generator" />
                                                         <input type="hidden" name="generator_id" value="<?php echo esc_attr($generator['id']); ?>" />
                                                         <button type="submit" class="content-rank-generator-action-btn inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-700 transition hover:bg-rose-100" aria-label="Excluir" title="Excluir">
-                                                            <span class="dashicons dashicons-trash text-[17px] leading-none"></span>
+                                                            <svg class="content-rank-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 11v6M14 11v6M9 7V4h6v3M7 7l1 13h8l1-13" /></svg>
                                                             <span class="sr-only">Excluir</span>
                                                         </button>
                                                     </form>
