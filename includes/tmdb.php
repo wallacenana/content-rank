@@ -87,6 +87,9 @@ final class Content_Rank_TMDB
             $localized_title = !empty($details['title']) ? (string) $details['title'] : (string) $result['title'];
             if ($language === 'pt-BR' && self::titles_match($localized_title, $query)) {
                 $alternative_title = self::get_brazilian_alternative_title(intval($result['id']));
+                if ($alternative_title === '') {
+                    $alternative_title = self::get_brazilian_translation_title(intval($result['id']));
+                }
                 if ($alternative_title !== '') {
                     $localized_title = $alternative_title;
                 }
@@ -584,6 +587,24 @@ final class Content_Rank_TMDB
         foreach ($titles as $title) {
             if (!empty($title['iso_3166_1']) && strtoupper((string) $title['iso_3166_1']) === 'BR' && !empty($title['title'])) {
                 return (string) $title['title'];
+            }
+        }
+        return '';
+    }
+
+    private static function get_brazilian_translation_title($movie_id)
+    {
+        $response = self::request('movie/' . absint($movie_id) . '/translations');
+        $translations = !empty($response['translations']) && is_array($response['translations']) ? $response['translations'] : array();
+        foreach ($translations as $translation) {
+            if (!is_array($translation)) {
+                continue;
+            }
+            $language = strtolower((string) ($translation['iso_639_1'] ?? ''));
+            $country = strtoupper((string) ($translation['iso_3166_1'] ?? ''));
+            $title = !empty($translation['data']['title']) ? trim((string) $translation['data']['title']) : '';
+            if ($language === 'pt' && ($country === 'BR' || $country === '') && $title !== '') {
+                return $title;
             }
         }
         return '';
