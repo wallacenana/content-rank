@@ -129,6 +129,7 @@ class Content_Rank_Generator_Admin
             wp_die('Acesso negado.');
         }
         check_admin_referer('content_rank_test_tmdb_thumbnail');
+        $this->delete_previous_tmdb_test_attachments();
         $query = isset($_POST['query']) ? sanitize_text_field(wp_unslash($_POST['query'])) : '';
         $genre_id = isset($_POST['genre_id']) ? absint($_POST['genre_id']) : 0;
         $limit = isset($_POST['limit']) ? min(5, max(1, absint($_POST['limit']))) : 5;
@@ -152,6 +153,24 @@ class Content_Rank_Generator_Admin
         $url = add_query_arg(array('page' => 'content-rank-tmdb-thumbnail-test', 'attachment_id' => absint($attachment_id), 'movies' => $encoded_movies), admin_url('admin.php'));
         wp_safe_redirect($url);
         exit;
+    }
+
+    private function delete_previous_tmdb_test_attachments()
+    {
+        $attachments = get_posts(array(
+            'post_type' => 'attachment',
+            'post_status' => 'any',
+            'post_parent' => 0,
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            's' => 'Thumbnail composta TMDB -',
+        ));
+        foreach ((array) $attachments as $attachment_id) {
+            $attachment_id = absint($attachment_id);
+            if ($attachment_id > 0) {
+                wp_delete_attachment($attachment_id, true);
+            }
+        }
     }
 
     public function render_admin_page()

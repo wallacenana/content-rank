@@ -469,8 +469,10 @@ final class Content_Rank_TMDB
             'error' => 0,
             'size' => filesize($tmp),
         ), intval($post_id), 'Thumbnail composta TMDB - ' . $term);
-        if (is_wp_error($attachment_id)) {
-            @unlink($tmp);
+        // media_handle_sideload normalmente move o arquivo, mas nao devemos
+        // deixar o temporario acumulando se o comportamento mudar ou falhar.
+        if (!empty($tmp) && file_exists($tmp)) {
+            wp_delete_file($tmp);
         }
         return $attachment_id;
     }
