@@ -362,7 +362,8 @@ final class Content_Rank_TMDB
                 $panel = imagecreatetruecolor($target_width, $height);
                 imagecopyresampled($panel, $image, 0, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
                 $skew = 22;
-                $skew_direction = $layout === 'skew_alt' && $index % 2 === 1 ? -1 : 1;
+                // The alternate layout is the same composition mirrored to the left.
+                $skew_direction = $layout === 'skew_alt' ? -1 : 1;
                 for ($row = 0; $row < $height; $row++) {
                     $offset = $skew_direction * (int) round($skew * (1 - ($row / max(1, $height - 1))));
                     imagecopy($canvas, $panel, $target_x + $offset, $row, 0, $row, $target_width, 1);
