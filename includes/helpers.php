@@ -5217,10 +5217,6 @@ class Content_Rank_Generator_Helper
                         }
                         $titles[] = $title;
                     }
-
-                    if ($max_items > 0 && count($titles) >= $max_items) {
-                        break;
-                    }
                 }
             }
         }
@@ -5245,9 +5241,6 @@ class Content_Rank_Generator_Helper
                     $titles[] = $title;
                 }
 
-                if ($max_items > 0 && count($titles) >= $max_items) {
-                    break;
-                }
             }
         }
 
@@ -5279,9 +5272,6 @@ class Content_Rank_Generator_Helper
                         }
                     }
 
-                    if ($max_items > 0 && count($titles) >= $max_items) {
-                        break;
-                    }
                 }
             }
         }
@@ -6228,6 +6218,8 @@ class Content_Rank_Generator_Helper
         $prompt .= "\n\nREGRAS DE TITULO E KEYWORD:\n";
         $prompt .= "- Em pautas de lista, o titulo pode indicar no maximo 10 itens. Nunca crie titulo com 11 ou mais itens.\n";
         $prompt .= "- Use no focus_keyword apenas os termos essenciais da pauta. Nao adicione 'melhor', 'melhores', 'best' ou superlativos que nao estejam no titulo ou na fonte.\n";
+        $prompt .= "- A keyword e uma referencia semantica, nao uma frase que precise ser copiada literalmente. Reescreva-a quando necessario para uma frase natural, com artigos, preposicoes, genero e numero corretos em portugues.\n";
+        $prompt .= "- Para a plataforma Netflix, use a forma natural 'na Netflix' ou 'da Netflix'. Nunca use 'no Netflix' e nao una 'filmes' a 'Netflix' sem preposicao quando isso prejudicar a concordancia. Exemplo valido: '10 filmes infantis na Netflix para a familia aproveitar'.\n";
         if (!empty($item['review_products_prompt'])) {
             $prompt .= "\n\nDADOS DOS PRODUTOS DA REVIEW:\n" . trim((string) $item['review_products_prompt']);
         }
