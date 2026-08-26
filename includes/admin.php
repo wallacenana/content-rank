@@ -703,9 +703,11 @@ class Content_Rank_Generator_Admin
                                     </select>
                                 </div>
                                 <div data-tmdb-thumbnail-field class="hidden">
+                                    <div class="mb-3">
+                                        <label class="content-rank-switch"><input type="checkbox" name="tmdb_thumbnail_auto_color" value="1" /><span class="content-rank-switch__track" aria-hidden="true"></span><span class="content-rank-switch__state" data-switch-state>Não</span></label>
+                                    </div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Cor da faixa inferior</label>
                                     <div data-tmdb-color-picker><input type="color" name="tmdb_thumbnail_bg_color" value="#c91414" class="h-11 w-20 cursor-pointer rounded-lg border border-slate-300 bg-white p-1" /></div>
-                                    <label class="mt-2 block text-sm text-slate-600"><input type="checkbox" name="tmdb_thumbnail_auto_color" value="1" class="mr-2" /> Extrair a cor automaticamente da imagem principal</label>
                                     <label class="mt-3 mb-1 block text-sm font-medium text-slate-700">Estilo da thumbnail</label>
                                     <select name="tmdb_thumbnail_layout" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                                         <option value="rotate">Aleatório</option>
@@ -719,14 +721,19 @@ class Content_Rank_Generator_Admin
                                     document.addEventListener('DOMContentLoaded', function () {
                                         var tmdbAutoColor = document.querySelector('input[name="tmdb_thumbnail_auto_color"]');
                                         var tmdbColorPicker = document.querySelector('[data-tmdb-color-picker]');
-                                        if (tmdbAutoColor && tmdbColorPicker) {
-                                            var syncTmdbColorPicker = function () {
-                                                tmdbColorPicker.style.display = tmdbAutoColor.checked ? 'none' : '';
-                                            };
-                                            tmdbAutoColor.addEventListener('change', syncTmdbColorPicker);
-                                            syncTmdbColorPicker();
-                                        }
-                                        var tmdbTranslation = document.querySelector('select[name="tmdb_title_translation_enabled"]');
+                                         if (tmdbAutoColor && tmdbColorPicker) {
+                                             var syncTmdbColorPicker = function () {
+                                                 tmdbColorPicker.style.display = tmdbAutoColor.checked ? 'none' : '';
+                                             };
+                                             tmdbAutoColor.addEventListener('change', syncTmdbColorPicker);
+                                             syncTmdbColorPicker();
+                                         }
+                                         var tmdbThumbnailField = document.querySelector('[data-tmdb-thumbnail-field]');
+                                         if (tmdbThumbnailField) {
+                                             var thumbnailDescription = tmdbThumbnailField.querySelector('p');
+                                             if (thumbnailDescription) thumbnailDescription.remove();
+                                         }
+                                         var tmdbTranslation = document.querySelector('select[name="tmdb_title_translation_enabled"]');
                                         if (!tmdbTranslation) return;
                                         var field = tmdbTranslation.closest('div');
                                         var label = field ? field.querySelector('label') : null;
@@ -734,15 +741,14 @@ class Content_Rank_Generator_Admin
                                         if (label) label.textContent = 'Localizar títulos de filmes via TMDB';
                                         var noOption = tmdbTranslation.querySelector('option[value="0"]');
                                         if (noOption) noOption.textContent = 'Não';
-                                        if (description) description.textContent = 'Usa os títulos encontrados na estrutura da fonte e substitui os nomes no artigo final.';
+                                        if (description) description.remove();
                                     });
                                     </script>
-                                    <p class="mt-1 text-xs text-slate-500">A faixa ocupa no mÃ¡ximo 30% da thumbnail. A sombra usa a mesma cor.</p>
                                 </div>
                                 <div>
-                                    <label class="mb-1 block text-sm font-medium text-slate-700">Localizar tÃ­tulos de filmes via TMDB</label>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Localizar títulos de filmes via TMDB</label>
                                     <select name="tmdb_title_translation_enabled" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                                        <option value="0">NÃ£o</option>
+                                        <option value="0">Não</option>
                                         <option value="1">Sim (experimental)</option>
                                     </select>
                                     <p class="mt-1 text-xs text-slate-500">Usa os tÃ­tulos encontrados na estrutura da fonte e substitui os nomes no artigo final.</p>
