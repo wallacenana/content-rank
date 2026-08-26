@@ -268,7 +268,7 @@ final class Content_Rank_TMDB
         $available_width = $width - ($gap * ($movie_count - 1));
         $panel_widths = array_fill(0, $movie_count, (int) floor($available_width / $movie_count));
         if ($layout === 'center_focus' && $movie_count >= 3) {
-            $center = (int) floor($available_width * 0.30);
+            $center = (int) floor($available_width * 0.36);
             $side_width = (int) floor(($available_width - $center) / ($movie_count - 1));
             $panel_widths = array_fill(0, $movie_count, $side_width);
             $panel_widths[(int) floor($movie_count / 2)] = $center;
@@ -309,7 +309,18 @@ final class Content_Rank_TMDB
                 $source_x = 0;
                 $source_y = (int) floor(($source_height - $crop_height) / 2);
             }
-            imagecopyresampled($canvas, $image, $target_x, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
+            if ($layout === 'skew') {
+                $panel = imagecreatetruecolor($target_width, $height);
+                imagecopyresampled($panel, $image, 0, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
+                $skew = 14;
+                for ($row = 0; $row < $height; $row++) {
+                    $offset = (int) round($skew * (1 - ($row / max(1, $height - 1))));
+                    imagecopy($canvas, $panel, $target_x + $offset, $row, 0, $row, $target_width, 1);
+                }
+                imagedestroy($panel);
+            } else {
+                imagecopyresampled($canvas, $image, $target_x, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
+            }
             imagedestroy($image);
             $loaded++;
             $cursor_x += $target_width + $gap;
@@ -344,10 +355,8 @@ final class Content_Rank_TMDB
             foreach ($panel_widths as $index => $panel_width) {
                 $left = $cursor_x;
                 $right = $cursor_x + $panel_width;
-                imagepolygon($canvas, array($left, 0, $left + $skew, 0, $left, $skew), 3, $edge_color);
-                imagepolygon($canvas, array($right, 0, $right - $skew, 0, $right, $skew), 3, $edge_color);
-                imagepolygon($canvas, array($left, $height, $left + $skew, $height, $left, $height - $skew), 3, $edge_color);
-                imagepolygon($canvas, array($right, $height, $right - $skew, $height, $right, $height - $skew), 3, $edge_color);
+                imageline($canvas, $left + $skew, 0, $left, $height, $edge_color);
+                imageline($canvas, $right + $skew, 0, $right, $height, $edge_color);
                 $cursor_x += $panel_width + $gap;
             }
         }
