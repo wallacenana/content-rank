@@ -252,19 +252,28 @@ final class Content_Rank_TMDB
         $movie_count = count($movies);
         $layout = sanitize_key((string) $layout);
         if ($layout === 'rotate') {
-            $layouts = array('standard', 'skew', 'center_focus');
+            $layouts = array('standard', 'skew', 'skew_alt', 'center_focus', 'spotlight', 'blur_background');
             $layout = function_exists('wp_rand')
                 ? $layouts[wp_rand(0, count($layouts) - 1)]
                 : $layouts[array_rand($layouts)];
         }
-        if (!in_array($layout, array('standard', 'skew', 'center_focus'), true) || $is_single) {
+        if (!in_array($layout, array('standard', 'skew', 'skew_alt', 'center_focus', 'spotlight', 'blur_background'), true) || $is_single) {
             $layout = 'standard';
         }
         $canvas = imagecreatetruecolor($width, $height);
         $rgb = self::hex_to_rgb($bg_color);
+        if (strtolower(trim((string) $bg_color)) === 'auto' && !empty($movies[0])) {
+            $color_url = !empty($movies[0]['backdrop_url']) ? $movies[0]['backdrop_url'] : $movies[0]['poster_url'];
+            $color_response = wp_remote_get(esc_url_raw($color_url), array('timeout' => 20));
+            $color_image = !is_wp_error($color_response) ? @imagecreatefromstring(wp_remote_retrieve_body($color_response)) : false;
+            if ($color_image) {
+                $rgb = self::extract_average_rgb($color_image);
+                imagedestroy($color_image);
+            }
+        }
         $base_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
         imagefill($canvas, 0, 0, $base_color);
-        if ($layout === 'skew' && !empty($movies[0])) {
+        if (in_array($layout, array('skew', 'skew_alt', 'blur_background'), true) && !empty($movies[0])) {
             $background_url = !empty($movies[0]['backdrop_url'])
                 ? (string) $movies[0]['backdrop_url']
                 : (string) $movies[0]['poster_url'];
@@ -290,6 +299,10 @@ final class Content_Rank_TMDB
                 }
                 imagecopyresampled($canvas, $background_image, 0, 0, $source_x, $source_y, $width, $height, $crop_width, $crop_height);
                 imagedestroy($background_image);
+                if ($layout === 'blur_background' && function_exists('imagefilter')) {
+                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+                }
                 $background_overlay = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], 78);
                 imagefilledrectangle($canvas, 0, 0, $width, $height, $background_overlay);
             }
@@ -302,6 +315,12 @@ final class Content_Rank_TMDB
             $side_width = (int) floor(($available_width - $center) / ($movie_count - 1));
             $panel_widths = array_fill(0, $movie_count, $side_width);
             $panel_widths[(int) floor($movie_count / 2)] = $center;
+            $panel_widths[$movie_count - 1] += $available_width - array_sum($panel_widths);
+        } elseif ($layout === 'spotlight' && $movie_count >= 2) {
+            $featured = (int) floor($available_width * 0.54);
+            $small_width = (int) floor(($available_width - $featured) / ($movie_count - 1));
+            $panel_widths = array_fill(0, $movie_count, $small_width);
+            $panel_widths[0] = $featured;
             $panel_widths[$movie_count - 1] += $available_width - array_sum($panel_widths);
         }
         $loaded = 0;
@@ -339,12 +358,13 @@ final class Content_Rank_TMDB
                 $source_x = 0;
                 $source_y = (int) floor(($source_height - $crop_height) / 2);
             }
-            if ($layout === 'skew') {
+            if ($layout === 'skew' || $layout === 'skew_alt') {
                 $panel = imagecreatetruecolor($target_width, $height);
                 imagecopyresampled($panel, $image, 0, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
                 $skew = 22;
+                $skew_direction = $layout === 'skew_alt' && $index % 2 === 1 ? -1 : 1;
                 for ($row = 0; $row < $height; $row++) {
-                    $offset = (int) round($skew * (1 - ($row / max(1, $height - 1))));
+                    $offset = $skew_direction * (int) round($skew * (1 - ($row / max(1, $height - 1))));
                     imagecopy($canvas, $panel, $target_x + $offset, $row, 0, $row, $target_width, 1);
                 }
                 imagedestroy($panel);
@@ -378,15 +398,16 @@ final class Content_Rank_TMDB
             imagefilledrectangle($canvas, 0, $gradient_start + $step, $width, $gradient_start + $step, $shadow);
         }
 
-        if ($layout === 'skew') {
+        if ($layout === 'skew' || $layout === 'skew_alt') {
             $skew = 22;
             $edge_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
             $cursor_x = 0;
             foreach ($panel_widths as $index => $panel_width) {
                 $left = $cursor_x;
                 $right = $cursor_x + $panel_width;
-                imageline($canvas, $left + $skew, 0, $left, $height, $edge_color);
-                imageline($canvas, $right + $skew, 0, $right, $height, $edge_color);
+                $skew_direction = $layout === 'skew_alt' && $index % 2 === 1 ? -1 : 1;
+                imageline($canvas, $left + ($skew * $skew_direction), 0, $left, $height, $edge_color);
+                imageline($canvas, $right + ($skew * $skew_direction), 0, $right, $height, $edge_color);
                 $cursor_x += $panel_width + $gap;
             }
         }
@@ -422,6 +443,28 @@ final class Content_Rank_TMDB
     {
         $color = Content_Rank_Generator::normalize_hex_color($color);
         return array(hexdec(substr($color, 1, 2)), hexdec(substr($color, 3, 2)), hexdec(substr($color, 5, 2)));
+    }
+
+    private static function extract_average_rgb($image)
+    {
+        $width = max(1, imagesx($image));
+        $height = max(1, imagesy($image));
+        $red = 0;
+        $green = 0;
+        $blue = 0;
+        $samples = 0;
+        for ($y = 0; $y < $height; $y += max(1, (int) floor($height / 20))) {
+            for ($x = 0; $x < $width; $x += max(1, (int) floor($width / 20))) {
+                $pixel = imagecolorat($image, $x, $y);
+                $red += ($pixel >> 16) & 0xFF;
+                $green += ($pixel >> 8) & 0xFF;
+                $blue += $pixel & 0xFF;
+                $samples++;
+            }
+        }
+        return $samples > 0
+            ? array((int) round($red / $samples), (int) round($green / $samples), (int) round($blue / $samples))
+            : array(15, 45, 128);
     }
 
     private static function extract_source_year($title)
