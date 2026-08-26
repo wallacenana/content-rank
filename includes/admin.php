@@ -580,7 +580,7 @@ class Content_Rank_Generator_Admin
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Tipo de geração</label>
-                                    <label class="content-rank-switch"><input type="checkbox" name="generation_mode" value="satellite" <?php checked(isset($editing_generator['generation_mode']) && Content_Rank_Generator::normalize_generation_mode((string) $editing_generator['generation_mode']) === 'satellite'); ?> /><span class="content-rank-switch__track" aria-hidden="true"></span><span class="content-rank-switch__state" data-switch-state>Satélite</span></label>
+                                    <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" name="generation_mode" value="satellite" <?php checked(isset($editing_generator['generation_mode']) && Content_Rank_Generator::normalize_generation_mode((string) $editing_generator['generation_mode']) === 'satellite'); ?> class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" /> Satélite</label>
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Modelo de conteúdo</label>
