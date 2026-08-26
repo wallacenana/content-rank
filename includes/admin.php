@@ -105,7 +105,7 @@ class Content_Rank_Generator_Admin
                 document.addEventListener('DOMContentLoaded', function () {
                     var layout = document.querySelector('select[name="layout"]');
                     if (!layout) return;
-                    var options = { skew_alt: 'Skew alternado', spotlight: 'Filme em destaque', blur_background: 'Fundo desfocado' };
+                    var options = { rotate: 'Aleatório', skew_alt: 'Skew alternado', spotlight: 'Filme em destaque', blur_background: 'Fundo desfocado' };
                     Object.keys(options).forEach(function (value) {
                         if (!layout.querySelector('option[value="' + value + '"]')) {
                             var option = document.createElement('option');
@@ -695,6 +695,17 @@ class Content_Rank_Generator_Admin
                                 <div data-tmdb-thumbnail-field class="hidden">
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Cor da faixa inferior</label>
                                     <input type="color" name="tmdb_thumbnail_bg_color" value="#c91414" class="h-11 w-20 cursor-pointer rounded-lg border border-slate-300 bg-white p-1" />
+                                    <label class="mt-2 block text-sm text-slate-600"><input type="checkbox" name="tmdb_thumbnail_auto_color" value="1" class="mr-2" /> Extrair a cor automaticamente da imagem principal</label>
+                                    <label class="mt-3 mb-1 block text-sm font-medium text-slate-700">Estilo da thumbnail</label>
+                                    <select name="tmdb_thumbnail_layout" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                        <option value="rotate">Aleatório</option>
+                                        <option value="standard">Painéis uniformes</option>
+                                        <option value="skew">Skew para a direita</option>
+                                        <option value="skew_alt">Skew alternado</option>
+                                        <option value="center_focus">Destaque central</option>
+                                        <option value="spotlight">Destaque no primeiro filme</option>
+                                        <option value="blur_background">Fundo desfocado</option>
+                                    </select>
                                     <script>
                                     document.addEventListener('DOMContentLoaded', function () {
                                         var tmdbTranslation = document.querySelector('select[name="tmdb_title_translation_enabled"]');
@@ -970,6 +981,8 @@ class Content_Rank_Generator_Admin
                                         'daily_end' => '',
                                         'image_source_mode' => '',
                                         'tmdb_thumbnail_bg_color' => '#c91414',
+                                        'tmdb_thumbnail_layout' => 'rotate',
+                                        'tmdb_thumbnail_auto_color' => '0',
                                         'tmdb_title_translation_enabled' => '0',
                                         'pexels_query' => Content_Rank_Generator::get_default_pexels_query(),
                                         'source_video_enabled' => '0',
@@ -1075,7 +1088,11 @@ class Content_Rank_Generator_Admin
                     function setValue(name, value) {
                         var el = byName(name);
                         if (el) {
-                            el.value = value !== undefined && value !== null ? value : '';
+                            if (el.type === 'checkbox') {
+                                el.checked = String(value) === '1' || value === true;
+                            } else {
+                                el.value = value !== undefined && value !== null ? value : '';
+                            }
                             if (typeof Event === 'function') {
                                 el.dispatchEvent(new Event('change', {
                                     bubbles: true
@@ -1796,6 +1813,8 @@ class Content_Rank_Generator_Admin
                         setValue('daily_end', defaults.daily_end);
                         setValue('image_source_mode', normalizeImageSourceModeForType(defaults.source_type, defaults.keyword_list_mode, defaults.image_source_mode || getDefaultImageSourceModeForType(defaults.source_type, defaults.keyword_list_mode)));
                         setValue('tmdb_thumbnail_bg_color', defaults.tmdb_thumbnail_bg_color);
+                        setValue('tmdb_thumbnail_layout', defaults.tmdb_thumbnail_layout);
+                        setValue('tmdb_thumbnail_auto_color', defaults.tmdb_thumbnail_auto_color);
                         setValue('tmdb_title_translation_enabled', defaults.tmdb_title_translation_enabled);
                         setValue('pexels_query', defaults.pexels_query);
                         setValue('source_video_enabled', defaults.source_video_enabled);
@@ -1858,6 +1877,8 @@ class Content_Rank_Generator_Admin
                         setValue('daily_end', generator.daily_end);
                         setValue('image_source_mode', normalizeImageSourceModeForType(generator.source_type || defaults.source_type, generator.keyword_list_mode || defaults.keyword_list_mode, generator.image_source_mode || (typeof generator.pexels_enabled !== 'undefined' ? (String(generator.pexels_enabled) === '1' ? 'rss_or_pexels' : 'rss') : defaults.image_source_mode)));
                         setValue('tmdb_thumbnail_bg_color', generator.tmdb_thumbnail_bg_color || defaults.tmdb_thumbnail_bg_color);
+                        setValue('tmdb_thumbnail_layout', generator.tmdb_thumbnail_layout || defaults.tmdb_thumbnail_layout);
+                        setValue('tmdb_thumbnail_auto_color', String(typeof generator.tmdb_thumbnail_auto_color !== 'undefined' ? generator.tmdb_thumbnail_auto_color : defaults.tmdb_thumbnail_auto_color));
                         setValue('tmdb_title_translation_enabled', typeof generator.tmdb_title_translation_enabled !== 'undefined' ? String(generator.tmdb_title_translation_enabled) : defaults.tmdb_title_translation_enabled);
                         setValue('pexels_query', generator.pexels_query || defaults.pexels_query);
                         setValue('source_video_enabled', String(typeof generator.source_video_enabled !== 'undefined' ? generator.source_video_enabled : defaults.source_video_enabled));

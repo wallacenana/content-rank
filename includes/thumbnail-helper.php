@@ -88,7 +88,10 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     $post_id,
                     $title,
                     $tmdb_movies,
-                    !empty($generator['tmdb_thumbnail_bg_color']) ? $generator['tmdb_thumbnail_bg_color'] : '#c91414'
+                    !empty($generator['tmdb_thumbnail_auto_color'])
+                        ? 'auto'
+                        : (!empty($generator['tmdb_thumbnail_bg_color']) ? $generator['tmdb_thumbnail_bg_color'] : '#c91414'),
+                    !empty($generator['tmdb_thumbnail_layout']) ? $generator['tmdb_thumbnail_layout'] : 'rotate'
                 );
                 if (!is_wp_error($composite_result) && intval($composite_result) > 0) {
                     $composite_id = intval($composite_result);

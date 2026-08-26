@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.106",
+  "version": "1.9.107",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -9,10 +9,10 @@
   "requires_php": "7.4",
   "author": "Wallace Tavares e Codex",
   "author_url": "https://github.com/wallacenana",
-  "last_updated": "2026-08-03",
+  "last_updated": "2026-08-26",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Removidos os logs temporarios do atualizador.</li><li>Mantida a correcao da validacao do pacote ZIP em diferentes pastas do plugin.</li></ul>",
+  "changelog": "<ul><li>Adicionados estilos de thumbnail TMDB fixos ou aleatorios no gerador.</li><li>Adicionada extracao automatica de cor da imagem principal.</li><li>Adicionados layouts com destaque, fundo desfocado e skew alternado.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""
