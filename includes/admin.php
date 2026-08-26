@@ -289,7 +289,7 @@ class Content_Rank_Generator_Admin
                                                         <?php echo esc_html($generator['feed_url']); ?>
                                                     <?php endif; ?>
                                                 </div>
-                                                <div class="mt-1 text-xs text-slate-400">Modo: <?php echo esc_html($generation_mode_label); ?></div>
+                                                <div class="mt-1 text-xs text-slate-400">Tipo: <?php echo esc_html($generation_mode_label); ?></div>
                                             </td>
                                             <td class="px-6 py-4">
                                                 <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold <?php echo $generator['status'] === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'; ?>">
@@ -306,6 +306,15 @@ class Content_Rank_Generator_Admin
                                             <td class="px-6 py-4 text-sm text-slate-600"><?php echo esc_html($generator['next_run_at'] ?: '-'); ?></td>
                                             <td class="px-6 py-4">
                                                 <div class="content-rank-generator-actions flex flex-wrap gap-2">
+                                                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                                                        <?php wp_nonce_field('content_rank_toggle_generator', 'content_rank_toggle_nonce'); ?>
+                                                        <input type="hidden" name="action" value="content_rank_toggle_generator" />
+                                                        <input type="hidden" name="generator_id" value="<?php echo esc_attr($generator['id']); ?>" />
+                                                        <button type="submit" class="content-rank-generator-action-btn inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50" aria-label="<?php echo $generator['status'] === 'active' ? 'Pausar' : 'Iniciar'; ?>" title="<?php echo $generator['status'] === 'active' ? 'Pausar' : 'Iniciar'; ?>">
+                                                            <span class="dashicons dashicons-<?php echo $generator['status'] === 'active' ? 'controls-pause' : 'controls-play'; ?> text-[17px] leading-none"></span>
+                                                            <span class="sr-only"><?php echo $generator['status'] === 'active' ? 'Pausar' : 'Iniciar'; ?></span>
+                                                        </button>
+                                                    </form>
                                                     <button
                                                         type="button"
                                                         data-edit-generator-id="<?php echo esc_attr($generator['id']); ?>"
@@ -571,10 +580,7 @@ class Content_Rank_Generator_Admin
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Tipo de geração</label>
-                                    <select name="generation_mode" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                                        <option value="pillar" <?php selected(isset($editing_generator['generation_mode']) ? $editing_generator['generation_mode'] : '', 'pillar'); ?>>Pilar</option>
-                                        <option value="satellite" <?php selected(isset($editing_generator['generation_mode']) ? $editing_generator['generation_mode'] : '', 'satellite'); ?>>Satélite</option>
-                                    </select>
+                                    <label class="content-rank-switch"><input type="checkbox" name="generation_mode" value="satellite" <?php checked(isset($editing_generator['generation_mode']) && Content_Rank_Generator::normalize_generation_mode((string) $editing_generator['generation_mode']) === 'satellite'); ?> /><span class="content-rank-switch__track" aria-hidden="true"></span><span class="content-rank-switch__state" data-switch-state>Satélite</span></label>
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Modelo de conteúdo</label>
@@ -1059,6 +1065,7 @@ class Content_Rank_Generator_Admin
                     var keywordListModeField = form.querySelector('[data-keyword-list-mode-field]');
                     var tavilyField = form.querySelector('[data-tavily-field]');
                     var tmdbThumbnailField = form.querySelector('[data-tmdb-thumbnail-field]');
+                    var postsPerRunField = byName('posts_per_run') ? byName('posts_per_run').parentElement : null;
                     var videoSelectorField = form.querySelector('[data-rss-video-selector-field]');
                     var imageIntervalField = form.querySelector('[data-rss-image-interval-field]');
                     var apiBase = <?php echo wp_json_encode(rest_url('content-rank/v1')); ?>;
@@ -1092,12 +1099,26 @@ class Content_Rank_Generator_Admin
                     hideFieldByName('source_context_min_rating');
                     hideFieldByName('source_context_keep_unrated');
                     hideFieldByName('seo_enabled');
+                    hideFieldByName('prompt_model_key');
+                    hideFieldByName('status');
+
+                    var tmdbTitleField = byName('tmdb_title_translation_enabled');
+                    if (tmdbTitleField && tmdbTitleField.parentElement) {
+                        var tmdbDescription = tmdbTitleField.parentElement.querySelector('p');
+                        if (tmdbDescription) {
+                            tmdbDescription.remove();
+                        }
+                    }
 
                     function setValue(name, value) {
                         var el = byName(name);
                         if (el) {
                             if (el.type === 'checkbox') {
-                                el.checked = String(value) === '1' || value === true;
+                                el.checked = name === 'generation_mode' ? String(value) === 'satellite' : (String(value) === '1' || value === true);
+                                var stateLabel = el.parentElement ? el.parentElement.querySelector('[data-switch-state]') : null;
+                                if (stateLabel) {
+                                    stateLabel.textContent = name === 'generation_mode' ? (el.checked ? 'Satélite' : 'Pilar') : (el.checked ? 'Sim' : 'Não');
+                                }
                             } else {
                                 el.value = value !== undefined && value !== null ? value : '';
                             }
@@ -1279,9 +1300,28 @@ class Content_Rank_Generator_Admin
                         }
                     }
 
+                    function convertBooleanSelectsToSwitches() {
+                        var names = ['tavily_enabled', 'tmdb_title_translation_enabled', 'source_video_enabled', 'source_content_images_enabled', 'source_content_links_enabled', 'random_bolds_enabled', 'source_context_keep_unrated', 'seo_enabled', 'related_posts_enabled', 'related_posts_same_category_only', 'related_posts_allow_fallback'];
+                        names.forEach(function(name) {
+                            var select = form.querySelector('select[name="' + name + '"]');
+                            if (!select || select.options.length !== 2) return;
+                            var values = Array.prototype.map.call(select.options, function(option) { return String(option.value); });
+                            if (values.indexOf('0') === -1 || values.indexOf('1') === -1) return;
+                            var label = document.createElement('label');
+                            label.className = 'content-rank-switch';
+                            var input = document.createElement('input');
+                            input.type = 'checkbox'; input.name = name; input.value = '1'; input.checked = String(select.value) === '1';
+                            var track = document.createElement('span'); track.className = 'content-rank-switch__track'; track.setAttribute('aria-hidden', 'true');
+                            var state = document.createElement('span'); state.className = 'content-rank-switch__state'; state.setAttribute('data-switch-state', ''); state.textContent = input.checked ? 'Sim' : 'Não';
+                            label.appendChild(input); label.appendChild(track); label.appendChild(state);
+                            input.addEventListener('change', function() { state.textContent = input.checked ? 'Sim' : 'Não'; });
+                            select.parentNode.replaceChild(label, select);
+                        });
+                    }
+
                     function syncSourceFields() {
                         var generationModeEl = byName('generation_mode');
-                        var generationMode = generationModeEl ? generationModeEl.value : 'pillar';
+                        var generationMode = generationModeEl ? (generationModeEl.type === 'checkbox' ? (generationModeEl.checked ? 'satellite' : 'pillar') : generationModeEl.value) : 'pillar';
                         var sourceTypeEl = byName('source_type');
                         var sourceType = sourceTypeEl ? sourceTypeEl.value : 'keyword_list';
                         var keywordListModeEl = byName('keyword_list_mode');
@@ -1338,6 +1378,9 @@ class Content_Rank_Generator_Admin
                         }
                         if (imageIntervalField) {
                             imageIntervalField.classList.toggle('hidden', isSatelliteMode || !isKeywordListSourceType(sourceType));
+                        }
+                        if (postsPerRunField) {
+                            postsPerRunField.classList.toggle('hidden', !isSatelliteMode);
                         }
                         if (videoSelectorField) {
                             var showVideoSelector = !isSatelliteMode && (sourceType === 'rss' || (isSpreadsheetSource && keywordListMode === 'url_reference'));
@@ -1979,6 +2022,7 @@ class Content_Rank_Generator_Admin
                         });
                     }
 
+                    convertBooleanSelectsToSwitches();
                     initSelect2Fields();
 
                     function syncBodyLock() {

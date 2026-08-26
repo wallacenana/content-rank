@@ -92,6 +92,7 @@
     var imageIntervalField = form.querySelector('[data-rss-image-interval-field]');
     var linkPhrasesField = form.querySelector('[data-rss-link-phrases-field]');
     var sourceFiltersField = form.querySelector('[data-rss-source-filters-field]');
+    var postsPerRunField = byName('posts_per_run') ? byName('posts_per_run').parentElement : null;
     var apiBase = arcConfig.apiBase || '';
     var restNonce = arcConfig.restNonce || '';
     var openModalCount = 0;
@@ -109,10 +110,10 @@
         var el = byName(name);
         if (el) {
             if (el.type === 'checkbox') {
-                el.checked = String(value) === '1' || value === true;
+                el.checked = name === 'generation_mode' ? String(value) === 'satellite' : (String(value) === '1' || value === true);
                 var stateLabel = el.parentElement ? el.parentElement.querySelector('[data-switch-state]') : null;
                 if (stateLabel) {
-                    stateLabel.textContent = el.checked ? 'Sim' : 'N\u00e3o';
+                    stateLabel.textContent = name === 'generation_mode' ? (el.checked ? 'Satélite' : 'Pilar') : (el.checked ? 'Sim' : 'N\u00e3o');
                 }
             } else {
                 el.value = value !== undefined && value !== null ? value : '';
@@ -131,6 +132,7 @@
 
     function convertBooleanSelectsToSwitches() {
         var booleanNames = [
+            'generation_mode',
             'tavily_enabled',
             'tmdb_title_translation_enabled',
             'source_video_enabled',
@@ -174,17 +176,39 @@
             var state = document.createElement('span');
             state.className = 'content-rank-switch__state';
             state.setAttribute('data-switch-state', '');
-            state.textContent = input.checked ? 'Sim' : 'N\u00e3o';
+            state.textContent = name === 'generation_mode' ? (input.checked ? 'Satélite' : 'Pilar') : (input.checked ? 'Sim' : 'N\u00e3o');
 
             switchLabel.appendChild(input);
             switchLabel.appendChild(track);
             switchLabel.appendChild(state);
             input.addEventListener('change', function () {
-                state.textContent = input.checked ? 'Sim' : 'N\u00e3o';
+                state.textContent = name === 'generation_mode' ? (input.checked ? 'Satélite' : 'Pilar') : (input.checked ? 'Sim' : 'N\u00e3o');
                 input.dispatchEvent(new Event('input', { bubbles: true }));
             });
             select.parentNode.replaceChild(switchLabel, select);
         });
+    }
+
+    function cleanGeneratorControls() {
+        var promptModel = byName('prompt_model_key');
+        if (promptModel && promptModel.parentElement) {
+            promptModel.parentElement.classList.add('hidden');
+        }
+        var statusField = byName('status');
+        if (statusField && statusField.parentElement) {
+            statusField.parentElement.classList.add('hidden');
+        }
+        var tmdbTranslation = byName('tmdb_title_translation_enabled');
+        if (tmdbTranslation && tmdbTranslation.parentElement) {
+            var description = tmdbTranslation.parentElement.querySelector('p');
+            var label = tmdbTranslation.parentElement.querySelector('label');
+            if (description) {
+                description.remove();
+            }
+            if (label) {
+                label.textContent = 'Localizar títulos via TMDB';
+            }
+        }
     }
 
     function promptLooksLikeRss(text) {
@@ -351,7 +375,7 @@
 
     function syncSourceFields() {
         var generationModeEl = byName('generation_mode');
-        var generationMode = generationModeEl ? generationModeEl.value : 'pillar';
+        var generationMode = generationModeEl ? (generationModeEl.type === 'checkbox' ? (generationModeEl.checked ? 'satellite' : 'pillar') : generationModeEl.value) : 'pillar';
         var sourceTypeEl = byName('source_type');
         var sourceType = sourceTypeEl ? sourceTypeEl.value : 'keyword_list';
         var keywordListModeEl = byName('keyword_list_mode');
@@ -436,6 +460,9 @@
         }
         if (imageIntervalField) {
             imageIntervalField.classList.toggle('hidden', isSatelliteMode || !isListSource);
+        }
+        if (postsPerRunField) {
+            postsPerRunField.classList.toggle('hidden', !isSatelliteMode);
         }
         if (linkPhrasesField) {
             linkPhrasesField.classList.toggle('hidden', !showSourceMediaControls || !useSourceContentLinks);
@@ -960,6 +987,7 @@
     }
 
     convertBooleanSelectsToSwitches();
+    cleanGeneratorControls();
     initSelect2Fields();
 
     function syncBodyLock() {

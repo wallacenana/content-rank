@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.121
+Version: 1.9.122
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.121');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.122');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.121';
+        const VERSION = '1.9.122';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -213,6 +213,7 @@ if (!class_exists('Content_Rank_Generator')) {
             add_action('admin_post_content_rank_save_generator', array($this, 'handle_save_generator'));
             add_action('admin_post_content_rank_delete_generator', array($this, 'handle_delete_generator'));
             add_action('admin_post_content_rank_run_generator', array($this, 'handle_run_generator'));
+            add_action('admin_post_content_rank_toggle_generator', array($this, 'handle_toggle_generator'));
             add_action('admin_post_content_rank_duplicate_generator', array($this, 'handle_duplicate_generator'));
             add_action('admin_post_content_rank_export_generator', array($this, 'handle_export_generator'));
             add_action('admin_post_content_rank_export_generators', array($this, 'handle_export_generators'));
