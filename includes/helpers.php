@@ -5149,6 +5149,7 @@ class Content_Rank_Generator_Helper
 
     public static function build_source_outline_titles_for_prompt(&$item, $max_items = 0, $generator = array())
     {
+        static $translation_cache = array();
         $item = is_array($item) ? $item : array();
         if (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])) {
             $localized_titles = array();
@@ -5171,8 +5172,22 @@ class Content_Rank_Generator_Helper
 
         $raw_titles = self::build_raw_source_outline_titles_for_prompt($item, $max_items);
         if ($raw_titles !== '' && class_exists('Content_Rank_TMDB')) {
+            $language = !empty($generator['generation_language']) ? (string) $generator['generation_language'] : 'pt-BR';
+            $cache_key = md5((string) ($item['guid'] ?? '') . '|' . $language . '|' . $raw_titles);
+            if (isset($translation_cache[$cache_key])) {
+                if (!empty($translation_cache[$cache_key]['movies'])) {
+                    $item['tmdb_movies'] = $translation_cache[$cache_key]['movies'];
+                }
+                error_log('[Content Rank][tmdb-outline] usando cache da traducao');
+                return (string) $translation_cache[$cache_key]['titles'];
+            }
             error_log('[Content Rank][tmdb-outline] traduzindo titulos extraidos dos H2');
-            return Content_Rank_TMDB::translate_source_outline_titles($generator, $item, $raw_titles);
+            $translated_titles = Content_Rank_TMDB::translate_source_outline_titles($generator, $item, $raw_titles);
+            $translation_cache[$cache_key] = array(
+                'titles' => $translated_titles,
+                'movies' => !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? $item['tmdb_movies'] : array(),
+            );
+            return $translated_titles;
         }
         return $raw_titles;
     }
@@ -6044,9 +6059,6 @@ class Content_Rank_Generator_Helper
                     $source_item_count = intval($count_match[1]);
                 }
             }
-            if ($source_item_count > 0) {
-                $source_outline_titles = self::build_source_outline_titles_for_prompt($item, 0, $generator);
-            }
         }
 
         $prompt_models = Content_Rank_Generator::get_prompt_models($generator);
@@ -6305,7 +6317,6 @@ class Content_Rank_Generator_Helper
                 break;
             }
         }
-        $source_outline_titles = self::build_source_outline_titles_for_prompt($item, 0, $generator);
         $review_products_prompt = !empty($item['review_products_prompt'])
             ? trim((string) $item['review_products_prompt'])
             : '';

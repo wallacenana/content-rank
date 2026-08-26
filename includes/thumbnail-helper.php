@@ -11,6 +11,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
             $article = is_array($article) ? $article : array();
 
             if ($post_id <= 0) {
+                error_log('[Content Rank][thumbnail] abortado: post_id invalido');
                 return false;
             }
 
@@ -45,6 +46,12 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 'image_source_mode' => $image_source_mode,
                 'generator_image_source_mode' => isset($generator['image_source_mode']) ? (string) $generator['image_source_mode'] : '',
             ));
+            error_log('[Content Rank][thumbnail] inicio ' . wp_json_encode(array(
+                'post_id' => $post_id,
+                'mode' => $image_source_mode,
+                'title' => $title,
+                'existing_id' => $existing_thumbnail_id,
+            ), JSON_UNESCAPED_UNICODE));
 
             if ($image_source_mode === 'tmdb_composite' && class_exists('Content_Rank_TMDB')) {
                 if (empty($item['tmdb_movies']) || !is_array($item['tmdb_movies'])) {
@@ -54,6 +61,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     'post_id' => $post_id,
                     'movies_count' => !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? count($item['tmdb_movies']) : 0,
                 ));
+                error_log('[Content Rank][thumbnail] TMDB posters=' . (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? count($item['tmdb_movies']) : 0));
                 $composite_result = Content_Rank_TMDB::create_composite_thumbnail_for_post(
                     $post_id,
                     $title,
@@ -61,8 +69,10 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     !empty($generator['tmdb_thumbnail_bg_color']) ? $generator['tmdb_thumbnail_bg_color'] : '#c91414'
                 );
                 if (!is_wp_error($composite_result) && intval($composite_result) > 0) {
+                    error_log('[Content Rank][thumbnail] TMDB concluida attachment=' . intval($composite_result));
                     return intval($composite_result);
                 }
+                error_log('[Content Rank][thumbnail] TMDB falhou ' . (is_wp_error($composite_result) ? $composite_result->get_error_message() : 'resultado invalido'));
                 Content_Rank_Generator::log_image_debug('thumbnail_helper_tmdb_failed', array(
                     'post_id' => $post_id,
                     'error' => is_wp_error($composite_result) ? $composite_result->get_error_message() : 'unknown',
@@ -82,6 +92,11 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     !empty($item['permalink']) ? (string) $item['permalink'] : ''
                 );
             }
+            error_log('[Content Rank][thumbnail] fontes ' . wp_json_encode(array(
+                'source_url' => $source_image_url,
+                'use_pexels' => $use_pexels ? 1 : 0,
+                'use_dalle' => $use_dalle ? 1 : 0,
+            ), JSON_UNESCAPED_UNICODE));
 
             Content_Rank_Generator::log_image_debug('thumbnail_helper_start', array(
                 'post_id' => $post_id,
@@ -102,6 +117,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     ''
                 );
                 if (!is_wp_error($source_result) && intval($source_result) > 0) {
+                    error_log('[Content Rank][thumbnail] fonte concluida attachment=' . intval($source_result));
                     update_post_meta($post_id, '_content_rank_source_image_url', esc_url_raw($source_image_url));
                     Content_Rank_Generator::log_image_debug('thumbnail_helper_source_done', array(
                         'post_id' => $post_id,
@@ -120,6 +136,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     $is_keyword_list
                 );
                 if (!is_wp_error($pexels_result) && intval($pexels_result) > 0) {
+                    error_log('[Content Rank][thumbnail] Pexels concluida attachment=' . intval($pexels_result));
                     return intval($pexels_result);
                 }
             } elseif ($use_dalle) {
@@ -131,6 +148,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     $is_keyword_list
                 );
                 if (!is_wp_error($dalle_result) && intval($dalle_result) > 0) {
+                    error_log('[Content Rank][thumbnail] Dall-e concluida attachment=' . intval($dalle_result));
                     return intval($dalle_result);
                 }
             }
@@ -148,6 +166,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 'attachment_id' => intval($fallback_id),
                 'image_source_mode' => $image_source_mode,
             ));
+            error_log('[Content Rank][thumbnail] fallback attachment=' . intval($fallback_id));
 
             return intval($fallback_id) > 0 ? intval($fallback_id) : false;
         }

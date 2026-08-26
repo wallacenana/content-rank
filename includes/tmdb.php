@@ -196,12 +196,15 @@ final class Content_Rank_TMDB
         $loaded = 0;
 
         foreach ($movies as $index => $movie) {
+            error_log('[Content Rank][thumbnail] TMDB baixando poster ' . ($index + 1) . '/' . count($movies) . ' ' . esc_url_raw($movie['poster_url']));
             $response = wp_remote_get(esc_url_raw($movie['poster_url']), array('timeout' => 20));
             if (is_wp_error($response)) {
+                error_log('[Content Rank][thumbnail] TMDB download falhou ' . $response->get_error_message());
                 continue;
             }
             $image = @imagecreatefromstring(wp_remote_retrieve_body($response));
             if (!$image) {
+                error_log('[Content Rank][thumbnail] TMDB resposta nao e imagem');
                 continue;
             }
             $target_width = $index === count($movies) - 1 ? $width - ($panel_width * $index) : $panel_width;
@@ -259,6 +262,7 @@ final class Content_Rank_TMDB
             'error' => 0,
             'size' => filesize($tmp),
         ), intval($post_id), 'Thumbnail composta TMDB - ' . $term);
+        error_log('[Content Rank][thumbnail] TMDB sideload result=' . (is_wp_error($attachment_id) ? $attachment_id->get_error_message() : intval($attachment_id)));
         if (is_wp_error($attachment_id)) {
             @unlink($tmp);
         }
