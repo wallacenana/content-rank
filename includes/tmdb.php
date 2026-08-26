@@ -317,6 +317,17 @@ final class Content_Rank_TMDB
                 }
                 imagecopyresampled($canvas, $background_image, 0, 0, $source_x, $source_y, $width, $height, $crop_width, $crop_height);
                 imagedestroy($background_image);
+                if ($layout === 'blur_background' && function_exists('imagefilter')) {
+                    // Keep the background recognizable, but soften its details before the halftone.
+                    $blur_width = max(120, (int) floor($width * 0.15));
+                    $blur_height = max(68, (int) floor($height * 0.15));
+                    $blur_layer = imagecreatetruecolor($blur_width, $blur_height);
+                    imagecopyresampled($blur_layer, $canvas, 0, 0, 0, 0, $blur_width, $blur_height, $width, $height);
+                    imagecopyresampled($canvas, $blur_layer, 0, 0, 0, 0, $width, $height, $blur_width, $blur_height);
+                    imagedestroy($blur_layer);
+                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+                }
                 $background_overlay = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], 78);
                 imagefilledrectangle($canvas, 0, 0, $width, $height, $background_overlay);
                 if ($layout === 'blur_background') {
