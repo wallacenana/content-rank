@@ -6180,7 +6180,8 @@ class Content_Rank_Generator_Helper
         foreach (array('source_page_content_html', 'source_page_html', 'content_html') as $candidate_key) {
             if (!empty($item[$candidate_key])) {
                 $source_page_html_source = $candidate_key;
-                $source_page_html = self::limit_prompt_html_chars(self::normalize_prompt_context_html(preg_replace('/<title[^>]*>.*?<\/title>/is', '', (string) $item[$candidate_key])), 6000);
+                // Keep the source context long enough to include the first H2 and its items.
+                $source_page_html = self::limit_prompt_html_chars(self::normalize_prompt_context_html(preg_replace('/<title[^>]*>.*?<\/title>/is', '', (string) $item[$candidate_key])), 18000);
                 break;
             }
         }
