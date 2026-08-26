@@ -149,9 +149,12 @@ final class Content_Rank_TMDB
             if (!is_array($movie) || empty($movie['title'])) {
                 continue;
             }
-            $image_url = !empty($movie['thumbnail_url'])
-                ? (string) $movie['thumbnail_url']
-                : (!empty($movie['poster_url']) ? (string) $movie['poster_url'] : '');
+            // Use the horizontal backdrop in the article; posters remain a fallback.
+            $image_url = !empty($movie['backdrop_url'])
+                ? (string) $movie['backdrop_url']
+                : (!empty($movie['thumbnail_url'])
+                    ? (string) $movie['thumbnail_url']
+                    : (!empty($movie['poster_url']) ? (string) $movie['poster_url'] : ''));
             if ($image_url === '') {
                 continue;
             }
