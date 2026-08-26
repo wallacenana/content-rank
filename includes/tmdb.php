@@ -313,6 +313,8 @@ final class Content_Rank_TMDB
                 if ($layout === 'blur_background' && function_exists('imagefilter')) {
                     imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
                     imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
                 }
                 $background_overlay = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], 78);
                 imagefilledrectangle($canvas, 0, 0, $width, $height, $background_overlay);
@@ -373,15 +375,21 @@ final class Content_Rank_TMDB
                 $source_x = 0;
                 $source_y = (int) floor(($source_height - $crop_height) / 2);
             }
-            if ($layout === 'skew' || $layout === 'skew_alt') {
+            if ($layout === 'skew' || $layout === 'skew_alt' || $layout === 'blur_background') {
                 $panel = imagecreatetruecolor($target_width, $height);
                 imagecopyresampled($panel, $image, 0, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
-                $skew = 22;
+                $skew = $layout === 'blur_background' ? 42 : 22;
                 // The alternate layout is the same composition mirrored to the left.
                 $skew_direction = $layout === 'skew_alt' ? -1 : 1;
                 for ($row = 0; $row < $height; $row++) {
                     $offset = $skew_direction * (int) round($skew * (1 - ($row / max(1, $height - 1))));
                     imagecopy($canvas, $panel, $target_x + $offset, $row, 0, $row, $target_width, 1);
+                    if ($layout === 'blur_background') {
+                        $border_left = $target_x + $offset - 6;
+                        $border_right = $target_x + $offset + $target_width;
+                        imagefilledrectangle($canvas, max(0, $border_left), $row, max(0, $border_left + 5), $row, $base_color);
+                        imagefilledrectangle($canvas, min($width - 1, $border_right), $row, min($width - 1, $border_right + 5), $row, $base_color);
+                    }
                 }
                 imagedestroy($panel);
             } else {
