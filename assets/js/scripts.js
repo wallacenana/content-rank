@@ -108,7 +108,15 @@
     function setValue(name, value) {
         var el = byName(name);
         if (el) {
-            el.value = value !== undefined && value !== null ? value : '';
+            if (el.type === 'checkbox') {
+                el.checked = String(value) === '1' || value === true;
+                var stateLabel = el.parentElement ? el.parentElement.querySelector('[data-switch-state]') : null;
+                if (stateLabel) {
+                    stateLabel.textContent = el.checked ? 'Sim' : 'N\u00e3o';
+                }
+            } else {
+                el.value = value !== undefined && value !== null ? value : '';
+            }
             if (typeof Event === 'function') {
                 el.dispatchEvent(new Event('change', {
                     bubbles: true
@@ -119,6 +127,64 @@
                 el.dispatchEvent(changeEvent);
             }
         }
+    }
+
+    function convertBooleanSelectsToSwitches() {
+        var booleanNames = [
+            'tavily_enabled',
+            'tmdb_title_translation_enabled',
+            'source_video_enabled',
+            'source_content_images_enabled',
+            'source_content_links_enabled',
+            'random_bolds_enabled',
+            'source_context_keep_unrated',
+            'seo_enabled',
+            'related_posts_enabled',
+            'related_posts_same_category_only',
+            'related_posts_allow_fallback'
+        ];
+
+        booleanNames.forEach(function (name) {
+            var select = form.querySelector('select[name="' + name + '"]');
+            if (!select || select.options.length !== 2) {
+                return;
+            }
+
+            var values = Array.prototype.map.call(select.options, function (option) {
+                return String(option.value);
+            });
+            if (values.indexOf('0') === -1 || values.indexOf('1') === -1) {
+                return;
+            }
+
+            var switchLabel = document.createElement('label');
+            switchLabel.className = 'content-rank-switch';
+            switchLabel.setAttribute('data-switch-field', name);
+
+            var input = document.createElement('input');
+            input.type = 'checkbox';
+            input.name = name;
+            input.value = '1';
+            input.checked = String(select.value) === '1';
+
+            var track = document.createElement('span');
+            track.className = 'content-rank-switch__track';
+            track.setAttribute('aria-hidden', 'true');
+
+            var state = document.createElement('span');
+            state.className = 'content-rank-switch__state';
+            state.setAttribute('data-switch-state', '');
+            state.textContent = input.checked ? 'Sim' : 'N\u00e3o';
+
+            switchLabel.appendChild(input);
+            switchLabel.appendChild(track);
+            switchLabel.appendChild(state);
+            input.addEventListener('change', function () {
+                state.textContent = input.checked ? 'Sim' : 'N\u00e3o';
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            select.parentNode.replaceChild(switchLabel, select);
+        });
     }
 
     function promptLooksLikeRss(text) {
@@ -347,8 +413,8 @@
         var showSourceMediaControls = !isSatelliteMode && (sourceType === 'rss' || (isSpreadsheetSource && keywordListMode === 'url_reference'));
         var sourceContentImagesEnabledEl = byName('source_content_images_enabled');
         var sourceContentLinksEnabledEl = byName('source_content_links_enabled');
-        var useSourceContentImages = !sourceContentImagesEnabledEl || String(sourceContentImagesEnabledEl.value || '1') === '1';
-        var useSourceContentLinks = !sourceContentLinksEnabledEl || String(sourceContentLinksEnabledEl.value || '1') === '1';
+        var useSourceContentImages = !sourceContentImagesEnabledEl || (sourceContentImagesEnabledEl.type === 'checkbox' ? sourceContentImagesEnabledEl.checked : String(sourceContentImagesEnabledEl.value || '1') === '1');
+        var useSourceContentLinks = !sourceContentLinksEnabledEl || (sourceContentLinksEnabledEl.type === 'checkbox' ? sourceContentLinksEnabledEl.checked : String(sourceContentLinksEnabledEl.value || '1') === '1');
 
         if (videoSelectorField) {
             videoSelectorField.classList.toggle('hidden', !showSourceMediaControls);
@@ -893,6 +959,7 @@
         sourceContentLinksEnabledEl.addEventListener('change', syncSourceFields);
     }
 
+    convertBooleanSelectsToSwitches();
     initSelect2Fields();
 
     function syncBodyLock() {
