@@ -32,7 +32,8 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 $keyword_list_mode
             );
             $existing_thumbnail_id = intval(get_post_thumbnail_id($post_id));
-            if ($reuse_existing && $image_source_mode !== 'tmdb_composite' && $existing_thumbnail_id > 0 && wp_attachment_is_image($existing_thumbnail_id)) {
+            if ($reuse_existing && $existing_thumbnail_id > 0 && wp_attachment_is_image($existing_thumbnail_id)) {
+                error_log('[Content Rank][thumbnail] reutilizando anexo existente=' . $existing_thumbnail_id);
                 return $existing_thumbnail_id;
             }
             $title = !empty($article['title'])
