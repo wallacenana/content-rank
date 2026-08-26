@@ -91,8 +91,14 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     !empty($generator['tmdb_thumbnail_bg_color']) ? $generator['tmdb_thumbnail_bg_color'] : '#c91414'
                 );
                 if (!is_wp_error($composite_result) && intval($composite_result) > 0) {
-                    error_log('[Content Rank][thumbnail] TMDB concluida attachment=' . intval($composite_result));
-                    return intval($composite_result);
+                    $composite_id = intval($composite_result);
+                    $thumbnail_set = set_post_thumbnail($post_id, $composite_id);
+                    $assigned_id = intval(get_post_thumbnail_id($post_id));
+                    error_log('[Content Rank][thumbnail] TMDB concluida attachment=' . $composite_id . ' set=' . ($thumbnail_set ? '1' : '0') . ' assigned=' . $assigned_id);
+                    if ($assigned_id !== $composite_id) {
+                        return new WP_Error('content_rank_tmdb_thumbnail_assign_failed', 'A thumbnail TMDB foi criada, mas nao foi vinculada ao post.');
+                    }
+                    return $composite_id;
                 }
                 error_log('[Content Rank][thumbnail] TMDB falhou ' . (is_wp_error($composite_result) ? $composite_result->get_error_message() : 'resultado invalido'));
                 Content_Rank_Generator::log_image_debug('thumbnail_helper_tmdb_failed', array(
