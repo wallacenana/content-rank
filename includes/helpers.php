@@ -371,18 +371,17 @@ class Content_Rank_Generator_Helper
             if (is_array($block) && isset($block['blockName']) && $block['blockName'] === 'core/heading') {
                 $level = !empty($block['attrs']['level']) ? intval($block['attrs']['level']) : 2;
                 if ($level === 2) {
-                    if ($current_h2_index >= 0 && isset($section_map[$current_h2_index])) {
-                        $output_blocks = array_merge($output_blocks, self::build_source_video_blocks_for_section($section_map[$current_h2_index], $serialized_content));
-                    }
                     $current_h2_index++;
                 }
             }
 
             $output_blocks[] = $block;
-        }
-
-        if ($current_h2_index >= 0 && isset($section_map[$current_h2_index])) {
-            $output_blocks = array_merge($output_blocks, self::build_source_video_blocks_for_section($section_map[$current_h2_index], $serialized_content));
+            if (is_array($block) && isset($block['blockName']) && $block['blockName'] === 'core/heading') {
+                $level = !empty($block['attrs']['level']) ? intval($block['attrs']['level']) : 2;
+                if ($level === 2 && isset($section_map[$current_h2_index])) {
+                    $output_blocks = array_merge($output_blocks, self::build_source_video_blocks_for_section($section_map[$current_h2_index], $serialized_content));
+                }
+            }
         }
 
         return serialize_blocks($output_blocks);
