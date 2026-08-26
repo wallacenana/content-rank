@@ -5617,18 +5617,18 @@ class Content_Rank_Generator_Helper
             : array();
 
         $compact_prompt = array(
-            'Voce e um classificador editorial interno.',
+            'Você é um classificador editorial interno.',
             'Idioma da resposta: ' . $generation_language . '.',
-            'Analise o titulo, a keyword e o HTML completo da fonte. Ignore rodape, sidebar, widgets e navegacao.',
+            'Analise o título, a keyword e o HTML completo da fonte. Ignore rodapé, sidebar, widgets e navegação.',
             'Retorne somente JSON valido com: content_type, funnel_level, primary_pain, focus_keyword, recommended_prompt_model_key. funnel_level deve ser top, mid ou bottom, nunca numero.',
-            'Escolha lista para pautas numeradas ou com quantidade; noticia para acontecimento pontual; review para avaliacao; comparativo para duas opcoes; tutorial para passo a passo; artigo para os demais temas evergreen.',
-            'Siga primeiro o titulo e a intencao da pauta; use o HTML apenas para confirmar o contexto.',
+            'Escolha lista para pautas numeradas ou com quantidade; notícia para acontecimento pontual; review para avaliação; comparativo para duas opções; tutorial para passo a passo; artigo para os demais temas evergreen.',
+            'Siga primeiro o título e a intenção da pauta; use o HTML apenas para confirmar o contexto.',
             'A focus_keyword deve ser curta, natural e coerente com a pauta.',
             !empty($selected_prompt_model)
                 ? 'Modelo fixado pelo gerador: ' . $selected_prompt_model_key . ' (' . (string) $selected_prompt_model['name'] . ').'
                 : 'Escolha recommended_prompt_model_key entre os modelos disponiveis abaixo.',
-            'Titulo da fonte: ' . ($source_title !== '' ? $source_title : '[sem titulo disponivel]'),
-            $source_item_count > 0 ? 'Quantidade indicada no titulo: ' . $source_item_count . '.' : '',
+            'Título da fonte: ' . ($source_title !== '' ? $source_title : '[sem título disponível]'),
+            $source_item_count > 0 ? 'Quantidade indicada no título: ' . $source_item_count . '.' : '',
             'Keyword: ' . ($keyword !== '' ? $keyword : '[sem keyword]'),
             !empty($existing_keyword_post_titles)
                 ? "Posts ja gerados para esta keyword:\n- " . implode("\n- ", $existing_keyword_post_titles) . "\nEscolha um angulo diferente."
