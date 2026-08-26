@@ -213,14 +213,18 @@ final class Content_Rank_TMDB
         }
         imagefilledrectangle($canvas, 0, $height - $band_height, $width, $height, $base_color);
 
-        $tmp = wp_tempnam('content-rank-tmdb-thumbnail.jpg');
+        if (!function_exists('wp_tempnam')) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+        }
+        $tmp = function_exists('wp_tempnam')
+            ? wp_tempnam('content-rank-tmdb-thumbnail.jpg')
+            : tempnam(sys_get_temp_dir(), 'content-rank-tmdb-');
         if (!$tmp || !imagejpeg($canvas, $tmp, 88)) {
             imagedestroy($canvas);
             return new WP_Error('content_rank_tmdb_thumbnail_save_failed', 'Nao foi possivel salvar a thumbnail composta.');
         }
         imagedestroy($canvas);
 
-        require_once ABSPATH . 'wp-admin/includes/file.php';
         require_once ABSPATH . 'wp-admin/includes/media.php';
         require_once ABSPATH . 'wp-admin/includes/image.php';
         $attachment_id = media_handle_sideload(array(
