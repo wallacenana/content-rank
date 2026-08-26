@@ -6651,6 +6651,11 @@ class Content_Rank_Generator_Helper
         if ($source_outline_titles !== '') {
             $hidden_context[] = 'TITULOS DOS ITENS DA FONTE, JA LOCALIZADOS PELO TMDB: ' . $source_outline_titles;
         }
+        if ($generated_title_outline_count > 0) {
+            $hidden_context[] = 'FIDELIDADE ABSOLUTA AO TITULO: o titulo promete exatamente ' . $generated_title_outline_count . ' itens. Desenvolva exatamente ' . $generated_title_outline_count . ' itens, nem um a mais. Nunca mencione, enumere, recomende ou crie no conteudo itens adicionais encontrados na fonte.';
+        } else {
+            $hidden_context[] = 'FIDELIDADE AO TITULO: siga exatamente o escopo e a quantidade prometidos pelo titulo. Se o titulo nao informar quantidade, nao transforme automaticamente todos os itens da fonte em uma lista.';
+        }
         if (is_string($row_data) && $row_data !== '') {
             $hidden_context[] = 'Dados completos da linha de origem: {{row_data}}';
         }
