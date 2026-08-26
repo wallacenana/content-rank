@@ -260,6 +260,11 @@ final class Content_Rank_TMDB
         if (!in_array($layout, array('standard', 'skew', 'skew_alt', 'center_focus', 'spotlight', 'blur_background'), true) || $is_single) {
             $layout = 'standard';
         }
+        if ($layout === 'spotlight' && $movie_count > 4) {
+            $movies = array_slice($movies, 0, 4);
+            $movie_count = count($movies);
+            $is_single = $movie_count === 1;
+        }
         $canvas = imagecreatetruecolor($width, $height);
         $rgb = self::hex_to_rgb($bg_color);
         if (strtolower(trim((string) $bg_color)) === 'auto' && !empty($movies[0])) {

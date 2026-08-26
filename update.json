@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.108",
+  "version": "1.9.109",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-26",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Corrigido o estilo skew alternado para aplicar a inclinacao para a esquerda de forma uniforme.</li><li>Adicionados estilos de thumbnail TMDB fixos ou aleatorios no gerador.</li><li>Adicionada extracao automatica de cor da imagem principal.</li></ul>",
+  "changelog": "<ul><li>O layout com filme em destaque agora usa no maximo quatro capas: uma principal e tres secundarias.</li><li>Corrigido o estilo skew alternado para aplicar a inclinacao para a esquerda de forma uniforme.</li><li>Adicionados estilos de thumbnail TMDB fixos ou aleatorios no gerador.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""
