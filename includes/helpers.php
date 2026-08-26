@@ -6871,18 +6871,13 @@ class Content_Rank_Generator_Helper
             }
         }
 
-        // Temporarily avoid the AI outline/classification pass. The source is
-        // already structured; only a minimal deterministic context is needed.
-        $outline_context = self::build_outline_context_base($generator);
-        $outline_context['content_type'] = !empty($generator['prompt_model_key'])
-            ? Content_Rank_Generator::normalize_prompt_model_key((string) $generator['prompt_model_key'])
-            : 'artigo';
-        $outline_context['funnel_level'] = 'mid';
-        $outline_context['focus_keyword'] = !empty($item['keyword'])
-            ? self::normalize_prompt_context_text((string) $item['keyword'])
-            : (!empty($item['source_title']) ? self::normalize_prompt_context_text((string) $item['source_title']) : '');
-        $outline_context['outline_text'] = '';
-        $outline_context['outline_sections'] = array();
+        // Planning remains active. It defines the content type, funnel and
+        // SEO context; only the later editorial content-outline pass is off.
+        $outline_base_context = self::build_outline_context_base($generator);
+        $outline_context = self::build_outline_context_from_source($generator, $item, array(), $outline_base_context);
+        if (is_wp_error($outline_context)) {
+            return $outline_context;
+        }
 
         if (!empty($item['existing_keyword_post_titles']) && is_array($item['existing_keyword_post_titles'])) {
             $outline_context['existing_keyword_post_titles'] = array_values($item['existing_keyword_post_titles']);
