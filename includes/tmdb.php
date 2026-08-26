@@ -317,20 +317,19 @@ final class Content_Rank_TMDB
                 }
                 imagecopyresampled($canvas, $background_image, 0, 0, $source_x, $source_y, $width, $height, $crop_width, $crop_height);
                 imagedestroy($background_image);
-                if ($layout === 'blur_background' && function_exists('imagefilter')) {
-                    // Downsample and enlarge the background to remove detail before blurring.
-                    $blur_width = max(24, (int) floor($width * 0.10));
-                    $blur_height = max(14, (int) floor($height * 0.10));
-                    $blur_layer = imagecreatetruecolor($blur_width, $blur_height);
-                    imagecopyresampled($blur_layer, $canvas, 0, 0, 0, 0, $blur_width, $blur_height, $width, $height);
-                    imagecopyresampled($canvas, $blur_layer, 0, 0, 0, 0, $width, $height, $blur_width, $blur_height);
-                    imagedestroy($blur_layer);
-                    for ($blur_pass = 0; $blur_pass < 4; $blur_pass++) {
-                        imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
-                    }
-                }
                 $background_overlay = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], 78);
                 imagefilledrectangle($canvas, 0, 0, $width, $height, $background_overlay);
+                if ($layout === 'blur_background') {
+                    // Use a uniform halftone pattern instead of a gradient.
+                    $halftone_color = imagecolorallocatealpha($canvas, 0, 0, 0, 42);
+                    $dot_spacing = 12;
+                    $dot_radius = 2;
+                    for ($dot_y = 6; $dot_y < $height; $dot_y += $dot_spacing) {
+                        for ($dot_x = 6; $dot_x < $width; $dot_x += $dot_spacing) {
+                            imagefilledellipse($canvas, $dot_x, $dot_y, $dot_radius * 2, $dot_radius * 2, $halftone_color);
+                        }
+                    }
+                }
             }
         }
         $gap = $is_single ? 0 : 6;
