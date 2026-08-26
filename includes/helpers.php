@@ -588,6 +588,21 @@ class Content_Rank_Generator_Helper
         return $html;
     }
 
+    public static function build_plain_source_text_for_prompt($html, $content_selector = '')
+    {
+        $html = self::normalize_prompt_context_html($html, $content_selector);
+        if ($html === '') {
+            return '';
+        }
+        $html = preg_replace('~<h[1-6][^>]*>~i', "\n\n", $html);
+        $html = preg_replace('~</h[1-6]>~i', "\n\n", $html);
+        $html = preg_replace('~</(?:p|li|blockquote|div|section|article|br)\s*>~i', "\n", $html);
+        $text = html_entity_decode(wp_strip_all_tags((string) $html), ENT_QUOTES | ENT_HTML5, get_bloginfo('charset'));
+        $text = preg_replace("~[ \t]+~u", ' ', (string) $text);
+        $text = preg_replace("~\n\s*\n\s*\n+~u", "\n\n", (string) $text);
+        return trim((string) $text);
+    }
+
     public static function limit_prompt_html_chars($html, $max_chars = 6000)
     {
         $html = trim((string) $html);
@@ -6635,7 +6650,7 @@ class Content_Rank_Generator_Helper
         $source_page_html = '';
         foreach (array('source_page_content_html', 'source_page_html', 'content_html') as $candidate_key) {
             if (!empty($item[$candidate_key])) {
-                $source_page_html = self::limit_prompt_html_chars(self::normalize_prompt_context_html(preg_replace('/<title[^>]*>.*?<\/title>/is', '', (string) $item[$candidate_key])), 6000);
+                $source_page_html = self::limit_prompt_html_chars(self::build_plain_source_text_for_prompt(preg_replace('/<title[^>]*>.*?<\/title>/is', '', (string) $item[$candidate_key])), 18000);
                 break;
             }
         }
