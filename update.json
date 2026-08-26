@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.117",
+  "version": "1.9.118",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-26",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Removido o espaco extra entre os paineis dos layouts skew para evitar bordas duplas.</li><li>Mantido o padrao halftone com um blur moderado aplicado apenas ao fundo.</li><li>A borda clara agora usa 20% de mistura com branco.</li></ul>",
+  "changelog": "<ul><li>Restaurado o espacamento de 6 px no skew e corrigido o separador para evitar bordas duplas.</li><li>Mantido o padrao halftone com um blur moderado aplicado apenas ao fundo.</li><li>A borda clara agora usa 20% de mistura com branco.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

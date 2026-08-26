@@ -343,7 +343,7 @@ final class Content_Rank_TMDB
                 }
             }
         }
-        $gap = $is_single || in_array($layout, array('skew', 'skew_alt'), true) ? 0 : 6;
+        $gap = $is_single ? 0 : 6;
         $available_width = $width - ($gap * ($movie_count - 1));
         $panel_widths = array_fill(0, $movie_count, (int) floor($available_width / $movie_count));
         if ($layout === 'center_focus' && $movie_count >= 3) {
@@ -407,6 +407,17 @@ final class Content_Rank_TMDB
                 for ($row = 0; $row < $height; $row++) {
                     $offset = $skew_direction * (int) round($skew * (1 - ($row / max(1, $height - 1))));
                     imagecopy($canvas, $panel, $target_x + $offset, $row, 0, $row, $target_width, 1);
+                    if ($gap > 0 && $index < count($movies) - 1 && ($layout === 'skew' || $layout === 'skew_alt')) {
+                        $separator_start = $target_x + $offset + $target_width;
+                        imagefilledrectangle(
+                            $canvas,
+                            max(0, $separator_start),
+                            $row,
+                            min($width - 1, $separator_start + $gap - 1),
+                            $row,
+                            $base_color
+                        );
+                    }
                     if ($layout === 'blur_background') {
                         $border_left = $target_x + $offset - 6;
                         $border_right = $target_x + $offset + $target_width;
