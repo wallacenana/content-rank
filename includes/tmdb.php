@@ -105,6 +105,7 @@ final class Content_Rank_TMDB
                 'year' => !empty($details['release_date']) ? substr((string) $details['release_date'], 0, 4) : (!empty($result['release_date']) ? substr((string) $result['release_date'], 0, 4) : ''),
                 'poster_url' => $poster_path !== '' ? 'https://image.tmdb.org/t/p/w780' . $poster_path : '',
                 'thumbnail_url' => $poster_path !== '' ? 'https://image.tmdb.org/t/p/w342' . $poster_path : '',
+                'backdrop_url' => !empty($details['backdrop_path']) ? 'https://image.tmdb.org/t/p/w1280' . (string) $details['backdrop_path'] : (!empty($result['backdrop_path']) ? 'https://image.tmdb.org/t/p/w1280' . (string) $result['backdrop_path'] : ''),
                 'source_query' => $source_query,
             );
             if ($localized_title === '' || self::titles_match($query, $localized_title)) {
@@ -220,6 +221,7 @@ final class Content_Rank_TMDB
                 'year' => !empty($result['release_date']) ? substr((string) $result['release_date'], 0, 4) : '',
                 'poster_url' => 'https://image.tmdb.org/t/p/w780' . (string) $result['poster_path'],
                 'thumbnail_url' => 'https://image.tmdb.org/t/p/w342' . (string) $result['poster_path'],
+                'backdrop_url' => !empty($result['backdrop_path']) ? 'https://image.tmdb.org/t/p/w1280' . (string) $result['backdrop_path'] : '',
                 'source_query' => $query,
             );
             if (count($movies) >= $limit) {
@@ -250,12 +252,17 @@ final class Content_Rank_TMDB
         $rgb = self::hex_to_rgb($bg_color);
         $base_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
         imagefill($canvas, 0, 0, $base_color);
-        $panel_width = (int) floor($width / count($movies));
+        $is_single = count($movies) === 1;
+        $gap = $is_single ? 0 : 8;
+        $panel_width = (int) floor(($width - ($gap * (count($movies) - 1))) / count($movies));
         $loaded = 0;
 
         foreach ($movies as $index => $movie) {
-            error_log('[Content Rank][thumbnail] TMDB baixando poster ' . ($index + 1) . '/' . count($movies) . ' ' . esc_url_raw($movie['poster_url']));
-            $response = wp_remote_get(esc_url_raw($movie['poster_url']), array('timeout' => 20));
+            $image_url = $is_single && !empty($movie['backdrop_url'])
+                ? (string) $movie['backdrop_url']
+                : (string) $movie['poster_url'];
+            error_log('[Content Rank][thumbnail] TMDB baixando ' . ($is_single && !empty($movie['backdrop_url']) ? 'backdrop' : 'poster') . ' ' . ($index + 1) . '/' . count($movies) . ' ' . esc_url_raw($image_url));
+            $response = wp_remote_get(esc_url_raw($image_url), array('timeout' => 20));
             if (is_wp_error($response)) {
                 error_log('[Content Rank][thumbnail] TMDB download falhou ' . $response->get_error_message());
                 continue;
@@ -265,7 +272,8 @@ final class Content_Rank_TMDB
                 error_log('[Content Rank][thumbnail] TMDB resposta nao e imagem');
                 continue;
             }
-            $target_width = $index === count($movies) - 1 ? $width - ($panel_width * $index) : $panel_width;
+            $target_x = ($panel_width + $gap) * $index;
+            $target_width = $index === count($movies) - 1 ? $width - $target_x : $panel_width;
             $source_width = imagesx($image);
             $source_height = imagesy($image);
             $target_ratio = $target_width / $height;
@@ -281,7 +289,7 @@ final class Content_Rank_TMDB
                 $source_x = 0;
                 $source_y = (int) floor(($source_height - $crop_height) / 2);
             }
-            imagecopyresampled($canvas, $image, $panel_width * $index, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
+            imagecopyresampled($canvas, $image, $target_x, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
             imagedestroy($image);
             $loaded++;
         }
@@ -307,7 +315,10 @@ final class Content_Rank_TMDB
             $shadow = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], max(0, min(127, $gd_alpha)));
             imagefilledrectangle($canvas, 0, $gradient_start + $step, $width, $gradient_start + $step, $shadow);
         }
-        imagefilledrectangle($canvas, 0, $height - $band_height, $width, $height, $base_color);
+        // Keep the posters visible below the gradient. The previous opaque
+        // fill erased the lower part of every panel.
+        $band_overlay = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], 62);
+        imagefilledrectangle($canvas, 0, $height - $band_height, $width, $height, $band_overlay);
 
         if (!function_exists('wp_tempnam')) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
