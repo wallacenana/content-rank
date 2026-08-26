@@ -300,12 +300,12 @@ final class Content_Rank_TMDB
         }
 
         imagealphablending($canvas, true);
-        $gradient_height = 120;
-        $gradient_start = $height - $band_height - $gradient_height;
+        $gradient_height = $band_height;
+        $gradient_start = $height - $gradient_height;
         for ($step = 0; $step < $gradient_height; $step++) {
             $progress = $step / max(1, $gradient_height - 1);
-            // Match the test gradient: transparent at the top, 28% in the
-            // middle and approximately 76% immediately before the solid band.
+            // Use one smooth overlay: transparent at the top, 28% in the
+            // middle and approximately 76% at the bottom.
             if ($progress <= 0.28) {
                 $opacity = ($progress / 0.28) * 0.28;
             } else {
@@ -315,11 +315,6 @@ final class Content_Rank_TMDB
             $shadow = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], max(0, min(127, $gd_alpha)));
             imagefilledrectangle($canvas, 0, $gradient_start + $step, $width, $gradient_start + $step, $shadow);
         }
-        // Keep the posters visible below the gradient. The previous opaque
-        // fill erased the lower part of every panel.
-        $band_overlay = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], 62);
-        imagefilledrectangle($canvas, 0, $height - $band_height, $width, $height, $band_overlay);
-
         if (!function_exists('wp_tempnam')) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
         }
