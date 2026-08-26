@@ -257,13 +257,17 @@ final class Content_Rank_TMDB
                 ? $layouts[wp_rand(0, count($layouts) - 1)]
                 : $layouts[array_rand($layouts)];
         }
-        if (!in_array($layout, array('standard', 'skew', 'skew_alt', 'center_focus', 'spotlight', 'blur_background'), true) || $is_single) {
-            $layout = 'standard';
-        }
         if ($layout === 'spotlight' && $movie_count > 4) {
             $movies = array_slice($movies, 0, 4);
             $movie_count = count($movies);
             $is_single = $movie_count === 1;
+        } elseif ($layout === 'blur_background') {
+            $movies = array_slice($movies, 0, 1);
+            $movie_count = count($movies);
+            $is_single = $movie_count === 1;
+        }
+        if (!in_array($layout, array('standard', 'skew', 'skew_alt', 'center_focus', 'spotlight', 'blur_background'), true) || ($is_single && !in_array($layout, array('spotlight', 'blur_background'), true))) {
+            $layout = 'standard';
         }
         $canvas = imagecreatetruecolor($width, $height);
         $rgb = self::hex_to_rgb($bg_color);
@@ -279,9 +283,11 @@ final class Content_Rank_TMDB
         $base_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
         imagefill($canvas, 0, 0, $base_color);
         if (in_array($layout, array('skew', 'skew_alt', 'blur_background'), true) && !empty($movies[0])) {
-            $background_url = !empty($movies[0]['backdrop_url'])
+            $background_url = $layout === 'blur_background'
+                ? (string) $movies[0]['poster_url']
+                : (!empty($movies[0]['backdrop_url'])
                 ? (string) $movies[0]['backdrop_url']
-                : (string) $movies[0]['poster_url'];
+                : (string) $movies[0]['poster_url']);
             $background_response = wp_remote_get(esc_url_raw($background_url), array('timeout' => 20));
             $background_image = !is_wp_error($background_response)
                 ? @imagecreatefromstring(wp_remote_retrieve_body($background_response))
@@ -327,12 +333,16 @@ final class Content_Rank_TMDB
             $panel_widths = array_fill(0, $movie_count, $small_width);
             $panel_widths[0] = $featured;
             $panel_widths[$movie_count - 1] += $available_width - array_sum($panel_widths);
+        } elseif ($layout === 'blur_background') {
+            $panel_widths = array(min(620, (int) floor($width * 0.48)));
         }
         $loaded = 0;
-        $cursor_x = 0;
+        $cursor_x = $layout === 'blur_background'
+            ? (int) floor(($width - $panel_widths[0]) / 2)
+            : 0;
 
         foreach ($movies as $index => $movie) {
-            $image_url = $is_single && !empty($movie['backdrop_url'])
+            $image_url = $is_single && $layout !== 'blur_background' && !empty($movie['backdrop_url'])
                 ? (string) $movie['backdrop_url']
                 : (string) $movie['poster_url'];
             error_log('[Content Rank][thumbnail] TMDB baixando ' . ($is_single && !empty($movie['backdrop_url']) ? 'backdrop' : 'poster') . ' ' . ($index + 1) . '/' . count($movies) . ' ' . esc_url_raw($image_url));
