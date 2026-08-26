@@ -281,6 +281,13 @@ final class Content_Rank_TMDB
             }
         }
         $base_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
+        $border_color = imagecolorallocate(
+            $canvas,
+            min(255, (int) round($rgb[0] * 0.70 + 255 * 0.30)),
+            min(255, (int) round($rgb[1] * 0.70 + 255 * 0.30)),
+            min(255, (int) round($rgb[2] * 0.70 + 255 * 0.30))
+        );
+        $border_highlight = imagecolorallocatealpha($canvas, 255, 255, 255, 72);
         imagefill($canvas, 0, 0, $base_color);
         if (in_array($layout, array('skew', 'skew_alt', 'blur_background'), true) && !empty($movies[0])) {
             $background_url = $layout === 'blur_background'
@@ -387,8 +394,10 @@ final class Content_Rank_TMDB
                     if ($layout === 'blur_background') {
                         $border_left = $target_x + $offset - 6;
                         $border_right = $target_x + $offset + $target_width;
-                        imagefilledrectangle($canvas, max(0, $border_left), $row, max(0, $border_left + 5), $row, $base_color);
-                        imagefilledrectangle($canvas, min($width - 1, $border_right), $row, min($width - 1, $border_right + 5), $row, $base_color);
+                        imagefilledrectangle($canvas, max(0, $border_left), $row, max(0, $border_left + 5), $row, $border_color);
+                        imagefilledrectangle($canvas, min($width - 1, $border_right), $row, min($width - 1, $border_right + 5), $row, $border_color);
+                        imagefilledrectangle($canvas, max(0, $border_left + 4), $row, max(0, $border_left + 5), $row, $border_highlight);
+                        imagefilledrectangle($canvas, min($width - 1, $border_right), $row, min($width - 1, $border_right + 1), $row, $border_highlight);
                     }
                 }
                 imagedestroy($panel);
