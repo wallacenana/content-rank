@@ -9,6 +9,7 @@ class Content_Rank_Generator_Admin
     public function __construct()
     {
         add_action('admin_notices', array(__CLASS__, 'render_notice'));
+        add_action('admin_post_content_rank_test_tmdb_thumbnail', array($this, 'handle_test_tmdb_thumbnail'));
     }
 
     public function admin_menu()
@@ -61,6 +62,76 @@ class Content_Rank_Generator_Admin
             array($this, 'render_global_settings_page'),
             999
         );
+        add_submenu_page(
+            'content-rank',
+            'Teste de thumbnail TMDB',
+            'Teste de thumbnail TMDB',
+            'manage_options',
+            'content-rank-tmdb-thumbnail-test',
+            array($this, 'render_tmdb_thumbnail_test_page'),
+            998
+        );
+    }
+
+    public function render_tmdb_thumbnail_test_page()
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Acesso negado.');
+        }
+
+        $attachment_id = isset($_GET['attachment_id']) ? absint($_GET['attachment_id']) : 0;
+        $error = isset($_GET['tmdb_error']) ? sanitize_text_field(wp_unslash($_GET['tmdb_error'])) : '';
+        $movies = isset($_GET['movies']) ? json_decode(base64_decode((string) wp_unslash($_GET['movies'])), true) : array();
+        $movies = is_array($movies) ? $movies : array();
+        ?>
+        <div class="wrap">
+            <h1>Teste de thumbnail TMDB</h1>
+            <p>Consulta o TMDB e monta uma imagem sem gerar conteúdo ou consumir créditos da OpenAI.</p>
+            <?php if ($error !== '') : ?><div class="notice notice-error"><p><?php echo esc_html($error); ?></p></div><?php endif; ?>
+            <?php if ($attachment_id > 0) : ?>
+                <div class="notice notice-success"><p>Thumbnail criada. Anexo #<?php echo esc_html($attachment_id); ?>.</p></div>
+                <p><img src="<?php echo esc_url(wp_get_attachment_image_url($attachment_id, 'large')); ?>" style="max-width:1200px;height:auto;display:block;background:#111;" /></p>
+                <?php if (!empty($movies)) : ?><p><strong>Filmes usados:</strong> <?php echo esc_html(implode(', ', array_map(function ($movie) { return !empty($movie['title']) ? $movie['title'] : ''; }, $movies))); ?></p><?php endif; ?>
+            <?php endif; ?>
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="max-width:620px;background:#fff;padding:20px;border:1px solid #ccd0d4;">
+                <input type="hidden" name="action" value="content_rank_test_tmdb_thumbnail" />
+                <?php wp_nonce_field('content_rank_test_tmdb_thumbnail'); ?>
+                <p><label for="content-rank-tmdb-query"><strong>Keyword ou termo</strong></label><br /><input id="content-rank-tmdb-query" type="text" name="query" class="regular-text" placeholder="Ex.: filmes infantis" /></p>
+                <p><label for="content-rank-tmdb-genre"><strong>Gênero TMDB</strong></label><br /><select id="content-rank-tmdb-genre" name="genre_id" class="regular-text"><option value="0">Qualquer gênero</option><option value="16">Animação</option><option value="10751">Família</option><option value="12">Aventura</option><option value="35">Comédia</option><option value="14">Fantasia</option><option value="28">Ação</option><option value="18">Drama</option><option value="10749">Romance</option><option value="878">Ficção científica</option></select></p>
+                <p><label for="content-rank-tmdb-limit"><strong>Quantidade</strong></label><br /><input id="content-rank-tmdb-limit" type="number" name="limit" value="5" min="1" max="5" /></p>
+                <p><label for="content-rank-tmdb-color"><strong>Cor da faixa</strong></label><br /><input id="content-rank-tmdb-color" type="color" name="bg_color" value="#0f2d80" /></p>
+                <p><button type="submit" class="button button-primary">Gerar thumbnail</button></p>
+            </form>
+        </div>
+        <?php
+    }
+
+    public function handle_test_tmdb_thumbnail()
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Acesso negado.');
+        }
+        check_admin_referer('content_rank_test_tmdb_thumbnail');
+        $query = isset($_POST['query']) ? sanitize_text_field(wp_unslash($_POST['query'])) : '';
+        $genre_id = isset($_POST['genre_id']) ? absint($_POST['genre_id']) : 0;
+        $limit = isset($_POST['limit']) ? min(5, max(1, absint($_POST['limit']))) : 5;
+        $bg_color = isset($_POST['bg_color']) ? Content_Rank_Generator::normalize_hex_color(wp_unslash($_POST['bg_color']), '#0f2d80') : '#0f2d80';
+        $movies = class_exists('Content_Rank_TMDB') ? Content_Rank_TMDB::find_movies_for_thumbnail($query, $genre_id, $limit) : array();
+        if (empty($movies)) {
+            $url = add_query_arg(array('page' => 'content-rank-tmdb-thumbnail-test', 'tmdb_error' => 'Nenhum filme com poster foi encontrado no TMDB.'), admin_url('admin.php'));
+            wp_safe_redirect($url);
+            exit;
+        }
+        $attachment_id = Content_Rank_TMDB::create_composite_thumbnail_for_post(0, $query !== '' ? $query : 'tmdb-teste', $movies, $bg_color);
+        if (is_wp_error($attachment_id)) {
+            $url = add_query_arg(array('page' => 'content-rank-tmdb-thumbnail-test', 'tmdb_error' => $attachment_id->get_error_message()), admin_url('admin.php'));
+            wp_safe_redirect($url);
+            exit;
+        }
+        $encoded_movies = base64_encode(wp_json_encode($movies));
+        $url = add_query_arg(array('page' => 'content-rank-tmdb-thumbnail-test', 'attachment_id' => absint($attachment_id), 'movies' => $encoded_movies), admin_url('admin.php'));
+        wp_safe_redirect($url);
+        exit;
     }
 
     public function render_admin_page()

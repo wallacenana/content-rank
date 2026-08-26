@@ -172,6 +172,64 @@ final class Content_Rank_TMDB
         return $sections;
     }
 
+    public static function find_movies_for_thumbnail($query = '', $genre_id = 0, $limit = 5)
+    {
+        $query = trim((string) $query);
+        $genre_id = absint($genre_id);
+        $limit = min(5, max(1, absint($limit)));
+        $results = array();
+
+        if ($query !== '') {
+            $search = self::request('search/movie', array(
+                'query' => $query,
+                'language' => 'pt-BR',
+                'region' => 'BR',
+                'include_adult' => 'false',
+                'page' => 1,
+            ));
+            $results = !empty($search['results']) && is_array($search['results']) ? $search['results'] : array();
+            if ($genre_id > 0) {
+                $filtered = array_filter($results, function ($movie) use ($genre_id) {
+                    return is_array($movie) && !empty($movie['genre_ids']) && in_array($genre_id, array_map('absint', (array) $movie['genre_ids']), true);
+                });
+                if (!empty($filtered)) {
+                    $results = array_values($filtered);
+                }
+            }
+        } else {
+            $discover = self::request('discover/movie', array(
+                'language' => 'pt-BR',
+                'region' => 'BR',
+                'include_adult' => 'false',
+                'sort_by' => 'popularity.desc',
+                'with_genres' => $genre_id > 0 ? (string) $genre_id : '',
+                'page' => 1,
+            ));
+            $results = !empty($discover['results']) && is_array($discover['results']) ? $discover['results'] : array();
+        }
+
+        $movies = array();
+        foreach ($results as $result) {
+            if (!is_array($result) || empty($result['id']) || empty($result['poster_path'])) {
+                continue;
+            }
+            $movies[] = array(
+                'id' => absint($result['id']),
+                'title' => !empty($result['title']) ? (string) $result['title'] : '',
+                'original_title' => !empty($result['original_title']) ? (string) $result['original_title'] : '',
+                'year' => !empty($result['release_date']) ? substr((string) $result['release_date'], 0, 4) : '',
+                'poster_url' => 'https://image.tmdb.org/t/p/w780' . (string) $result['poster_path'],
+                'thumbnail_url' => 'https://image.tmdb.org/t/p/w342' . (string) $result['poster_path'],
+                'source_query' => $query,
+            );
+            if (count($movies) >= $limit) {
+                break;
+            }
+        }
+
+        return $movies;
+    }
+
     public static function create_composite_thumbnail_for_post($post_id, $term, $movies, $bg_color = '#c91414')
     {
         if (!function_exists('imagecreatetruecolor') || !function_exists('imagecreatefromstring')) {
