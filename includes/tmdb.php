@@ -283,9 +283,9 @@ final class Content_Rank_TMDB
         $base_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
         $border_color = imagecolorallocate(
             $canvas,
-            min(255, (int) round($rgb[0] * 0.70 + 255 * 0.30)),
-            min(255, (int) round($rgb[1] * 0.70 + 255 * 0.30)),
-            min(255, (int) round($rgb[2] * 0.70 + 255 * 0.30))
+            min(255, (int) round($rgb[0] * 0.80 + 255 * 0.20)),
+            min(255, (int) round($rgb[1] * 0.80 + 255 * 0.20)),
+            min(255, (int) round($rgb[2] * 0.80 + 255 * 0.20))
         );
         $border_highlight = imagecolorallocatealpha($canvas, 255, 255, 255, 72);
         imagefill($canvas, 0, 0, $base_color);
@@ -318,12 +318,16 @@ final class Content_Rank_TMDB
                 imagecopyresampled($canvas, $background_image, 0, 0, $source_x, $source_y, $width, $height, $crop_width, $crop_height);
                 imagedestroy($background_image);
                 if ($layout === 'blur_background' && function_exists('imagefilter')) {
-                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
-                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
-                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
-                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
-                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
-                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+                    // Downsample and enlarge the background to remove detail before blurring.
+                    $blur_width = max(24, (int) floor($width * 0.10));
+                    $blur_height = max(14, (int) floor($height * 0.10));
+                    $blur_layer = imagecreatetruecolor($blur_width, $blur_height);
+                    imagecopyresampled($blur_layer, $canvas, 0, 0, 0, 0, $blur_width, $blur_height, $width, $height);
+                    imagecopyresampled($canvas, $blur_layer, 0, 0, 0, 0, $width, $height, $blur_width, $blur_height);
+                    imagedestroy($blur_layer);
+                    for ($blur_pass = 0; $blur_pass < 4; $blur_pass++) {
+                        imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+                    }
                 }
                 $background_overlay = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], 78);
                 imagefilledrectangle($canvas, 0, 0, $width, $height, $background_overlay);

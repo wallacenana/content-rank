@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.113",
+  "version": "1.9.114",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-26",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Aumentada a intensidade do blur no fundo da thumbnail.</li><li>A borda do fundo desfocado agora usa uma versao mais clara da cor selecionada, com brilho discreto.</li><li>O fundo desfocado agora usa uma unica capa central sobre a mesma capa ampliada e desfocada.</li></ul>",
+  "changelog": "<ul><li>Refeito o blur do fundo com reducao e reampliacao da imagem para ocultar melhor os detalhes.</li><li>A borda clara agora usa 20% de mistura com branco.</li><li>O fundo desfocado agora usa uma unica capa central sobre a mesma capa ampliada e desfocada.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""
