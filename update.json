@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.124",
+  "version": "1.9.125",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-08-26",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Tipo de geracao agora usa switch estilizado com o texto Satelite.</li><li>Adicionado play/pause de status diretamente nas acoes da tabela.</li><li>Posts por execucao aparece apenas para geradores satelite.</li></ul>",
+  "changelog": "<ul><li>Corrigido o handler do play/pause dos geradores.</li><li>Tipo de geracao usa switch estilizado com o texto Satelite.</li><li>Posts por execucao aparece apenas para geradores satelite.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

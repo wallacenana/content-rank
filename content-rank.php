@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.124
+Version: 1.9.125
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.124');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.125');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.124';
+        const VERSION = '1.9.125';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -10979,6 +10979,40 @@ if (!class_exists('Content_Rank_Generator')) {
             }
             $generator_name = isset($_POST['name']) ? sanitize_text_field(wp_unslash($_POST['name'])) : '';
             self::redirect_with_notice(sprintf('Gerador %s salvo com sucesso.', $generator_name));
+        }
+
+        public function handle_toggle_generator()
+        {
+            global $wpdb;
+
+            if (!current_user_can('manage_options')) {
+                wp_die('Acesso negado.');
+            }
+            check_admin_referer('content_rank_toggle_generator', 'content_rank_toggle_nonce');
+
+            $id = isset($_POST['generator_id']) ? intval($_POST['generator_id']) : 0;
+            $generator = $id > 0 ? self::get_generator($id) : null;
+            if (!$generator) {
+                self::redirect_with_notice('Gerador nao encontrado.', 'error');
+            }
+
+            $new_status = isset($generator['status']) && $generator['status'] === 'active' ? 'inactive' : 'active';
+            $updated = $wpdb->update(
+                self::$table_generators,
+                array(
+                    'status' => $new_status,
+                    'updated_at' => current_time('mysql'),
+                ),
+                array('id' => $id),
+                array('%s', '%s'),
+                array('%d')
+            );
+            if ($updated === false) {
+                self::redirect_with_notice('Nao foi possivel alterar o status do gerador.', 'error');
+            }
+
+            self::update_generator_schedule($id);
+            self::redirect_with_notice($new_status === 'active' ? 'Gerador iniciado.' : 'Gerador pausado.');
         }
 
         public function handle_delete_generator()
