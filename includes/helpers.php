@@ -6032,14 +6032,6 @@ class Content_Rank_Generator_Helper
                     : '';
             }
 
-            // A clear list signal in the title is deterministic. Do not let
-            // an incomplete source page make the planner switch it to article.
-            if (empty($selected_prompt_model) && $outline_model_hint_key === 'list_article') {
-                $outline_context['content_type'] = 'lista';
-                $outline_context['recommended_outline_model_key'] = 'list_article';
-                $outline_context['recommended_prompt_model_key'] = 'lista';
-            }
-
             // Preserve every source item named by a quantified headline. The AI
             // often summarizes the introduction and omits the remaining names.
             $source_title_for_count = '';
