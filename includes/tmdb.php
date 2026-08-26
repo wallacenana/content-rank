@@ -248,10 +248,6 @@ final class Content_Rank_TMDB
         $width = 1200;
         $height = 675;
         $band_height = min(202, (int) floor($height * 0.30));
-        $canvas = imagecreatetruecolor($width, $height);
-        $rgb = self::hex_to_rgb($bg_color);
-        $base_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
-        imagefill($canvas, 0, 0, $base_color);
         $is_single = count($movies) === 1;
         $movie_count = count($movies);
         $layout = sanitize_key((string) $layout);
@@ -263,6 +259,40 @@ final class Content_Rank_TMDB
         }
         if (!in_array($layout, array('standard', 'skew', 'center_focus'), true) || $is_single) {
             $layout = 'standard';
+        }
+        $canvas = imagecreatetruecolor($width, $height);
+        $rgb = self::hex_to_rgb($bg_color);
+        $base_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
+        imagefill($canvas, 0, 0, $base_color);
+        if ($layout === 'skew' && !empty($movies[0])) {
+            $background_url = !empty($movies[0]['backdrop_url'])
+                ? (string) $movies[0]['backdrop_url']
+                : (string) $movies[0]['poster_url'];
+            $background_response = wp_remote_get(esc_url_raw($background_url), array('timeout' => 20));
+            $background_image = !is_wp_error($background_response)
+                ? @imagecreatefromstring(wp_remote_retrieve_body($background_response))
+                : false;
+            if ($background_image) {
+                $background_width = imagesx($background_image);
+                $background_height = imagesy($background_image);
+                $background_ratio = $width / $height;
+                $source_ratio = $background_width / max(1, $background_height);
+                if ($source_ratio > $background_ratio) {
+                    $crop_height = $background_height;
+                    $crop_width = (int) floor($background_height * $background_ratio);
+                    $source_x = (int) floor(($background_width - $crop_width) / 2);
+                    $source_y = 0;
+                } else {
+                    $crop_width = $background_width;
+                    $crop_height = (int) floor($background_width / $background_ratio);
+                    $source_x = 0;
+                    $source_y = (int) floor(($background_height - $crop_height) / 2);
+                }
+                imagecopyresampled($canvas, $background_image, 0, 0, $source_x, $source_y, $width, $height, $crop_width, $crop_height);
+                imagedestroy($background_image);
+                $background_overlay = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], 78);
+                imagefilledrectangle($canvas, 0, 0, $width, $height, $background_overlay);
+            }
         }
         $gap = $is_single ? 0 : 6;
         $available_width = $width - ($gap * ($movie_count - 1));
@@ -312,7 +342,7 @@ final class Content_Rank_TMDB
             if ($layout === 'skew') {
                 $panel = imagecreatetruecolor($target_width, $height);
                 imagecopyresampled($panel, $image, 0, 0, $source_x, $source_y, $target_width, $height, $crop_width, $crop_height);
-                $skew = 14;
+                $skew = 22;
                 for ($row = 0; $row < $height; $row++) {
                     $offset = (int) round($skew * (1 - ($row / max(1, $height - 1))));
                     imagecopy($canvas, $panel, $target_x + $offset, $row, 0, $row, $target_width, 1);
@@ -349,7 +379,7 @@ final class Content_Rank_TMDB
         }
 
         if ($layout === 'skew') {
-            $skew = 14;
+            $skew = 22;
             $edge_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
             $cursor_x = 0;
             foreach ($panel_widths as $index => $panel_width) {
