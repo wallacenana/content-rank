@@ -292,10 +292,20 @@ final class Content_Rank_TMDB
         }
 
         imagealphablending($canvas, true);
-        for ($step = 0; $step < 50; $step++) {
-            $alpha = 100 - (int) floor(($step / 50) * 75);
-            $shadow = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], $alpha);
-            imagefilledrectangle($canvas, 0, $height - $band_height - 50 + $step, $width, $height - $band_height - 49 + $step, $shadow);
+        $gradient_height = 120;
+        $gradient_start = $height - $band_height - $gradient_height;
+        for ($step = 0; $step < $gradient_height; $step++) {
+            $progress = $step / max(1, $gradient_height - 1);
+            // Match the test gradient: transparent at the top, 28% in the
+            // middle and approximately 76% immediately before the solid band.
+            if ($progress <= 0.28) {
+                $opacity = ($progress / 0.28) * 0.28;
+            } else {
+                $opacity = 0.28 + (($progress - 0.28) / 0.72) * 0.48;
+            }
+            $gd_alpha = 127 - (int) round($opacity * 127);
+            $shadow = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], max(0, min(127, $gd_alpha)));
+            imagefilledrectangle($canvas, 0, $gradient_start + $step, $width, $gradient_start + $step, $shadow);
         }
         imagefilledrectangle($canvas, 0, $height - $band_height, $width, $height, $base_color);
 
