@@ -322,6 +322,8 @@ final class Content_Rank_TMDB
                     imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
                     imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
                     imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+                    imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
                 }
                 $background_overlay = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], 78);
                 imagefilledrectangle($canvas, 0, 0, $width, $height, $background_overlay);
