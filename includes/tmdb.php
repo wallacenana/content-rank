@@ -257,7 +257,9 @@ final class Content_Rank_TMDB
         $layout = sanitize_key((string) $layout);
         if ($layout === 'rotate') {
             $layouts = array('standard', 'skew', 'center_focus');
-            $layout = $post_id > 0 ? $layouts[$post_id % count($layouts)] : 'standard';
+            $layout = function_exists('wp_rand')
+                ? $layouts[wp_rand(0, count($layouts) - 1)]
+                : $layouts[array_rand($layouts)];
         }
         if (!in_array($layout, array('standard', 'skew', 'center_focus'), true) || $is_single) {
             $layout = 'standard';
@@ -326,9 +328,9 @@ final class Content_Rank_TMDB
             // Use one smooth overlay: transparent at the top, 28% in the
             // middle and approximately 76% at the bottom.
             if ($progress <= 0.28) {
-                $opacity = ($progress / 0.28) * 0.28;
+                $opacity = ($progress / 0.28) * 0.36;
             } else {
-                $opacity = 0.28 + (($progress - 0.28) / 0.72) * 0.48;
+                $opacity = 0.36 + (($progress - 0.28) / 0.72) * 0.52;
             }
             $gd_alpha = 127 - (int) round($opacity * 127);
             $shadow = imagecolorallocatealpha($canvas, $rgb[0], $rgb[1], $rgb[2], max(0, min(127, $gd_alpha)));

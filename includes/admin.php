@@ -118,7 +118,7 @@ class Content_Rank_Generator_Admin
         $limit = isset($_POST['limit']) ? min(5, max(1, absint($_POST['limit']))) : 5;
         $bg_color = isset($_POST['bg_color']) ? Content_Rank_Generator::normalize_hex_color(wp_unslash($_POST['bg_color']), '#0f2d80') : '#0f2d80';
         $layout = isset($_POST['layout']) ? sanitize_key(wp_unslash($_POST['layout'])) : 'standard';
-        $layout = in_array($layout, array('standard', 'skew', 'center_focus'), true) ? $layout : 'standard';
+        $layout = in_array($layout, array('rotate', 'standard', 'skew', 'center_focus'), true) ? $layout : 'rotate';
         $movies = class_exists('Content_Rank_TMDB') ? Content_Rank_TMDB::find_movies_for_thumbnail($query, $genre_id, $limit) : array();
         if (empty($movies)) {
             $url = add_query_arg(array('page' => 'content-rank-tmdb-thumbnail-test', 'tmdb_error' => 'Nenhum filme com poster foi encontrado no TMDB.'), admin_url('admin.php'));
