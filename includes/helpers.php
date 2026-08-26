@@ -6317,6 +6317,8 @@ class Content_Rank_Generator_Helper
                 break;
             }
         }
+        // The editorial content-outline pass is disabled temporarily.
+        $source_outline_titles = '';
         $review_products_prompt = !empty($item['review_products_prompt'])
             ? trim((string) $item['review_products_prompt'])
             : '';
