@@ -172,6 +172,43 @@ final class Content_Rank_TMDB
         return $sections;
     }
 
+    public static function build_content_video_sections($movies)
+    {
+        foreach ((array) $movies as $movie) {
+            if (!is_array($movie) || empty($movie['id']) || empty($movie['title'])) {
+                continue;
+            }
+            $video = self::find_movie_trailer((int) $movie['id']);
+            if (empty($video['key'])) {
+                continue;
+            }
+            return array(array(
+                'h2' => (string) $movie['title'],
+                'videos' => array(array(
+                    'video_url' => 'https://www.youtube.com/watch?v=' . rawurlencode((string) $video['key']),
+                    'video_embed_html' => '',
+                    'video_source' => 'youtube',
+                )),
+            ));
+        }
+        return array();
+    }
+
+    private static function find_movie_trailer($movie_id)
+    {
+        $languages = array('pt-BR', 'en-US');
+        foreach ($languages as $language) {
+            $response = self::request('movie/' . absint($movie_id) . '/videos', array('language' => $language));
+            $videos = !empty($response['results']) && is_array($response['results']) ? $response['results'] : array();
+            foreach ($videos as $video) {
+                if (is_array($video) && strtolower((string) ($video['site'] ?? '')) === 'youtube' && strtolower((string) ($video['type'] ?? '')) === 'trailer' && !empty($video['key'])) {
+                    return $video;
+                }
+            }
+        }
+        return array();
+    }
+
     public static function find_movies_for_thumbnail($query = '', $genre_id = 0, $limit = 5)
     {
         $query = trim((string) $query);

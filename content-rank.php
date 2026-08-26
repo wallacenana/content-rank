@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.131
+Version: 1.9.132
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.131');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.132');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.131';
+        const VERSION = '1.9.132';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -9655,6 +9655,9 @@ if (!class_exists('Content_Rank_Generator')) {
             $tmdb_content_image_sections = ($use_tmdb_thumbnail && class_exists('Content_Rank_TMDB') && !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']))
                 ? Content_Rank_TMDB::build_content_image_sections($item['tmdb_movies'])
                 : array();
+            $tmdb_content_video_sections = ($use_tmdb_thumbnail && class_exists('Content_Rank_TMDB') && !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']))
+                ? Content_Rank_TMDB::build_content_video_sections($item['tmdb_movies'])
+                : array();
 
             if (!empty($article['content_html']) && !empty($generator['random_bolds_enabled'])) {
                 $focus_keyword = !empty($article['focus_keyword'])
@@ -9766,23 +9769,29 @@ if (!class_exists('Content_Rank_Generator')) {
             }
 
             try {
-            if (!empty($tmdb_content_image_sections) && !empty($article['content_html'])) {
-                $images_before = preg_match_all('/<img\b/i', (string) $article['content_html']);
-                $article['content_html'] = Content_Rank_Generator_Helper::inject_outline_section_media_into_content(
-                    $article['content_html'],
-                    $tmdb_content_image_sections,
-                    $post_id,
-                    self::get_content_image_size_for_generator($generator),
-                    '',
-                    true,
-                    false,
-                    $generator,
-                    array('post_id' => intval($post_id), 'generated_title' => !empty($article['title']) ? (string) $article['title'] : ''),
-                    array(),
-                    array(),
-                    array()
-                );
-                $images_after = preg_match_all('/<img\b/i', (string) $article['content_html']);
+            if ((!empty($tmdb_content_image_sections) || !empty($tmdb_content_video_sections)) && !empty($article['content_html'])) {
+                if (!empty($tmdb_content_image_sections)) {
+                    $article['content_html'] = Content_Rank_Generator_Helper::inject_outline_section_media_into_content(
+                        $article['content_html'],
+                        $tmdb_content_image_sections,
+                        $post_id,
+                        self::get_content_image_size_for_generator($generator),
+                        '',
+                        true,
+                        false,
+                        $generator,
+                        array('post_id' => intval($post_id), 'generated_title' => !empty($article['title']) ? (string) $article['title'] : ''),
+                        array(),
+                        array(),
+                        array()
+                    );
+                }
+                if (!empty($tmdb_content_video_sections)) {
+                    $article['content_html'] = Content_Rank_Generator_Helper::inject_source_video_sections_into_content(
+                        $article['content_html'],
+                        $tmdb_content_video_sections
+                    );
+                }
                 $article['content_html'] = Content_Rank_Generator_Helper::ensure_content_starts_with_paragraph_html($article['content_html']);
                 if ($article['content_html'] !== '') {
                     $update_content = wp_update_post(array(
