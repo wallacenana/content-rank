@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.73
+Version: 1.9.75
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -35,7 +35,7 @@ if (!defined('CONTENT_RANK_GENERATOR_UPDATE_ENABLED')) {
     define('CONTENT_RANK_GENERATOR_UPDATE_ENABLED', true);
 }
 if (!defined('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL')) {
-    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.73');
+    define('CONTENT_RANK_GENERATOR_UPDATE_MANIFEST_URL', 'https://raw.githubusercontent.com/wallacenana/content-rank/main/update.json?v=1.9.75');
 }
 
 $content_rank_autoload_file = CONTENT_RANK_GENERATOR_PLUGIN_DIR . 'vendor/autoload.php';
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.73';
+        const VERSION = '1.9.75';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -8901,7 +8901,6 @@ if (!class_exists('Content_Rank_Generator')) {
             $stage_labels = array(
                 'planning' => 'Planejamento',
                 'seo' => 'SEO',
-                'content_outline' => 'Esboço',
                 'content' => 'Conteúdo',
             );
 
@@ -8970,7 +8969,6 @@ if (!class_exists('Content_Rank_Generator')) {
                 <div class="content-rank-staged-generation-toast__steps">
                     <span data-stage="planning">Planejamento</span>
                     <span data-stage="seo">SEO</span>
-                    <span data-stage="content_outline">Esboço</span>
                     <span data-stage="content">Conteúdo</span>
                 </div>
                 <a class="content-rank-staged-generation-toast__link" href="#" target="_blank" rel="noopener">Abrir post</a>
@@ -8998,8 +8996,8 @@ if (!class_exists('Content_Rank_Generator')) {
                     if (!toast) return;
                     var items = <?php echo wp_json_encode($initial_items); ?>;
                     var postIds = items.map(function (item) { return String(item.post_id); });
-                    var stageOrder = ['planning', 'seo', 'content_outline', 'content'];
-                    var stageNames = { planning: 'Planejamento', seo: 'SEO', content_outline: 'Esboço', content: 'Conteúdo' };
+                    var stageOrder = ['planning', 'seo', 'content'];
+                    var stageNames = { planning: 'Planejamento', seo: 'SEO', content: 'Conteúdo' };
                     var timer;
                     var dismissed = false;
                     var toastKey = '';
@@ -9420,26 +9418,14 @@ if (!class_exists('Content_Rank_Generator')) {
 
                     $state['seo_article'] = !empty($result['seo_article']) && is_array($result['seo_article']) ? $result['seo_article'] : array();
                     $state['outline_context'] = !empty($result['outline_context']) && is_array($result['outline_context']) ? $result['outline_context'] : array();
-                    $state['stage'] = 'content_outline';
+                    $state['outline_context']['outline_text'] = '';
+                    $state['outline_context']['outline_sections'] = array();
+                    $state['stage'] = 'content';
                 } elseif ($stage === 'content_outline') {
-                    $result = Content_Rank_Generator_Helper::generate_content_outline_context(
-                        $generator,
-                        $item,
-                        !empty($state['seo_article']) && is_array($state['seo_article']) ? $state['seo_article'] : array(),
-                        !empty($state['outline_context']) && is_array($state['outline_context']) ? $state['outline_context'] : array()
-                    );
-                    if (is_wp_error($result)) {
-                        throw new RuntimeException($result->get_error_message());
-                    }
-                    $state['outline_context'] = $result;
-                    if (!empty($item['review_products_prompt'])) {
-                        // Do not let the generic outline response change the
-                        // fixed review model used by the next content stage.
-                        $state['outline_context']['content_type'] = 'review';
-                        $state['outline_context']['recommended_prompt_model_key'] = 'review';
-                        $state['outline_context']['recommended_outline_model_key'] = 'guide_long';
-                        $state['outline_context']['outline_model_key'] = 'guide_long';
-                    }
+                    // Compatibility for jobs created before the outline pass
+                    // was disabled. Do not call the old AI outline endpoint.
+                    $state['outline_context']['outline_text'] = '';
+                    $state['outline_context']['outline_sections'] = array();
                     $state['stage'] = 'content';
                 } elseif ($stage === 'content') {
                     $seo_article = !empty($state['seo_article']) && is_array($state['seo_article']) ? $state['seo_article'] : array();

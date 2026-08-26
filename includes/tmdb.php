@@ -15,7 +15,7 @@ final class Content_Rank_TMDB
             return '';
         }
 
-        self::localize_article_movie_titles($generator, $item, array(), false);
+        self::localize_article_movie_titles($generator, $item, array(), false, $source_titles);
         error_log('[Content Rank][tmdb-outline] resultados TMDB: ' . (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? count($item['tmdb_movies']) : 0));
         $localized_by_source = array();
         foreach (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? $item['tmdb_movies'] : array() as $movie) {
@@ -41,13 +41,15 @@ final class Content_Rank_TMDB
         return implode("\n", $translated);
     }
 
-    public static function localize_article_movie_titles($generator, &$item, $article, $apply_replacements = true)
+    public static function localize_article_movie_titles($generator, &$item, $article, $apply_replacements = true, $source_titles_override = null)
     {
         $generator = is_array($generator) ? $generator : array();
         $item = is_array($item) ? $item : array();
         $article = is_array($article) ? $article : array();
 
-        $source_titles = Content_Rank_Generator_Helper::build_raw_source_outline_titles_for_prompt($item, 0);
+        $source_titles = is_string($source_titles_override)
+            ? trim($source_titles_override)
+            : Content_Rank_Generator_Helper::build_raw_source_outline_titles_for_prompt($item, 0);
         if ($source_titles === '') {
             return $article;
         }
