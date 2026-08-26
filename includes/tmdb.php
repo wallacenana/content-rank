@@ -253,7 +253,7 @@ final class Content_Rank_TMDB
         $base_color = imagecolorallocate($canvas, $rgb[0], $rgb[1], $rgb[2]);
         imagefill($canvas, 0, 0, $base_color);
         $is_single = count($movies) === 1;
-        $gap = $is_single ? 0 : 8;
+        $gap = $is_single ? 0 : 4;
         $panel_width = (int) floor(($width - ($gap * (count($movies) - 1))) / count($movies));
         $loaded = 0;
 
