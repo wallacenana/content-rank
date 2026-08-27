@@ -387,7 +387,7 @@ class Content_Rank_Generator_Helper
         return serialize_blocks($output_blocks);
     }
 
-    public static function inject_tmdb_media_sections_into_content($content, $sections, $post_id = 0, $image_size = 'medium')
+    public static function inject_tmdb_media_sections_into_content($content, $sections, $post_id = 0, $image_size = 'medium', $existing_image_map = array())
     {
         $content = (string) $content;
         if ($content === '' || !is_array($sections) || empty($sections) || !function_exists('parse_blocks') || !function_exists('serialize_blocks')) {
@@ -398,6 +398,7 @@ class Content_Rank_Generator_Helper
             return $content;
         }
         $sections = array_values(array_filter($sections, 'is_array'));
+        $existing_image_map = is_array($existing_image_map) ? $existing_image_map : array();
         $output = array();
         $h2_index = -1;
         foreach ($blocks as $block) {
@@ -413,7 +414,7 @@ class Content_Rank_Generator_Helper
             if (!empty($section['videos'])) {
                 $output = array_merge($output, self::build_source_video_blocks_for_section($section, $content));
             } elseif (!empty($section['images'])) {
-                $image_html = self::build_outline_section_image_html($section, intval($post_id), $image_size, array(), $h2_index, array(), array());
+                $image_html = self::build_outline_section_image_html($section, intval($post_id), $image_size, $existing_image_map, $h2_index, array(), array());
                 if ($image_html !== '') {
                     $output[] = array('blockName' => 'core/html', 'attrs' => array(), 'innerBlocks' => array(), 'innerContent' => array($image_html));
                 }
