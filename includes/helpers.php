@@ -594,10 +594,13 @@ class Content_Rank_Generator_Helper
         if ($html === '') {
             return '';
         }
-        $html = preg_replace('~<h[1-6][^>]*>~i', "\n\n", $html);
-        $html = preg_replace('~</h[1-6]>~i', "\n\n", $html);
+        $html = preg_replace('~<h2[^>]*>~i', "\n\n__CONTENT_RANK_H2_OPEN__", $html);
+        $html = preg_replace('~</h2>~i', "__CONTENT_RANK_H2_CLOSE__\n\n", $html);
+        $html = preg_replace('~<h[134-6][^>]*>~i', "\n\n", $html);
+        $html = preg_replace('~</h[134-6]>~i', "\n\n", $html);
         $html = preg_replace('~</(?:p|li|blockquote|div|section|article|br)\s*>~i', "\n", $html);
         $text = html_entity_decode(wp_strip_all_tags((string) $html), ENT_QUOTES | ENT_HTML5, get_bloginfo('charset'));
+        $text = str_replace(array('__CONTENT_RANK_H2_OPEN__', '__CONTENT_RANK_H2_CLOSE__'), array('<h2>', '</h2>'), $text);
         $text = preg_replace("~[ \t]+~u", ' ', (string) $text);
         $text = preg_replace("~\n\s*\n\s*\n+~u", "\n\n", (string) $text);
         return trim((string) $text);
