@@ -6696,7 +6696,6 @@ class Content_Rank_Generator_Helper
             'Slug final: {{generated_slug}}',
             'Modelo de prompt: {{prompt_model_name}}',
             'Idioma final: {{generation_language}}',
-            'Conteudo HTML filtrado da fonte: {{source_content}}',
             'LIMITE ABSOLUTO: o content_html final deve ter no maximo 1200 palavras. Se faltar espaco, corte detalhes secundarios; nunca ultrapasse esse limite.',
         );
         if ($source_outline_titles !== '') {
@@ -6771,6 +6770,7 @@ class Content_Rank_Generator_Helper
             $hidden_context[] = 'Nome do gerador: ' . (!empty($generator_editorial_context['name']) ? $generator_editorial_context['name'] : '[sem nome definido]');
             $hidden_context[] = 'Categoria editorial: ' . (!empty($generator_editorial_context['category_text']) ? $generator_editorial_context['category_text'] : '[sem categoria definida]');
         }
+        $hidden_context[] = 'Conteudo HTML filtrado da fonte: {{source_content}}';
 
         $template = $visible_template . "
 
