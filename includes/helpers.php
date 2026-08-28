@@ -1406,8 +1406,10 @@ class Content_Rank_Generator_Helper
                 $phrase_slice = $slice;
                 if ($start > 0) {
                     $previous_word = $words[$start - 1];
-                    if (in_array((string) $previous_word['normalized'], array('a', 'o', 'as', 'os', 'um', 'uma'), true)
-                        && intval($previous_word['offset']) > strlen($leading_whitespace)) {
+                    if (
+                        in_array((string) $previous_word['normalized'], array('a', 'o', 'as', 'os', 'um', 'uma'), true)
+                        && intval($previous_word['offset']) > strlen($leading_whitespace)
+                    ) {
                         array_unshift($phrase_slice, $previous_word);
                     }
                 }
@@ -3714,7 +3716,7 @@ class Content_Rank_Generator_Helper
             }
 
             $link_text_options = self::parse_source_link_cta_phrases($link_phrases);
-        $link_text = self::pick_random_text_variant($link_text_options, $section_title !== '' ? $section_title : __('Leia mais', 'content-rank'));
+            $link_text = self::pick_random_text_variant($link_text_options, $section_title !== '' ? $section_title : __('Leia mais', 'content-rank'));
 
             return '<p class="content-rank-source-link"><a href="' . esc_url($link_url) . '" target="_blank" rel="noopener noreferrer">' . esc_html($link_text) . '</a></p>';
         }
@@ -5204,7 +5206,8 @@ class Content_Rank_Generator_Helper
     {
         static $translation_cache = array();
         $item = is_array($item) ? $item : array();
-        if (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])) {
+        $tmdb_translation_enabled = is_array($generator) && !empty($generator['tmdb_title_translation_enabled']);
+        if ($tmdb_translation_enabled && !empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])) {
             $localized_titles = array();
             foreach ($item['tmdb_movies'] as $movie) {
                 if (!is_array($movie) || empty($movie['title'])) {
@@ -5223,7 +5226,7 @@ class Content_Rank_Generator_Helper
         }
 
         $raw_titles = self::build_raw_source_outline_titles_for_prompt($item, $max_items);
-        if ($raw_titles !== '' && class_exists('Content_Rank_TMDB')) {
+        if ($tmdb_translation_enabled && $raw_titles !== '' && class_exists('Content_Rank_TMDB')) {
             $language = !empty($generator['generation_language']) ? (string) $generator['generation_language'] : 'pt-BR';
             $cache_key = md5((string) ($item['guid'] ?? '') . '|' . $language . '|' . $raw_titles);
             if (isset($translation_cache[$cache_key])) {
@@ -5305,7 +5308,6 @@ class Content_Rank_Generator_Helper
                     }
                     $titles[] = $title;
                 }
-
             }
         }
 
@@ -5336,7 +5338,6 @@ class Content_Rank_Generator_Helper
                             $titles[] = self::normalize_prompt_context_text($title);
                         }
                     }
-
                 }
             }
         }
@@ -5625,7 +5626,12 @@ class Content_Rank_Generator_Helper
         foreach (array('source_page_content_html', 'content_html', 'source_page_html') as $candidate_key) {
             if (!empty($item[$candidate_key])) {
                 // Planning must scan the complete list whenever possible.
-                $source_content_html = self::limit_prompt_html_chars(self::normalize_prompt_context_html(preg_replace('/<title[^>]*>.*?<\/title>/is', '', (string) $item[$candidate_key])), 18000);
+                $source_content_html = self::limit_prompt_html_chars(
+                    self::build_plain_source_text_for_prompt(
+                        preg_replace('/<title[^>]*>.*?<\/title>/is', '', (string) $item[$candidate_key])
+                    ),
+                    5000
+                );
                 break;
             }
         }
@@ -5684,7 +5690,7 @@ class Content_Rank_Generator_Helper
                 : '',
             'Modelos disponiveis:',
             !empty($selected_prompt_model) ? $selected_prompt_model_key : $available_prompt_models_text,
-            'HTML completo da fonte:',
+            'Contexto textual essencial da fonte:',
             $source_content_html !== '' ? $source_content_html : '[sem HTML de referencia]',
         );
         return implode("\n", array_values(array_filter($compact_prompt, 'strlen')));
@@ -6270,7 +6276,7 @@ class Content_Rank_Generator_Helper
         ));
         $prompt = strtr($template, $replacements);
         $prompt .= "\n\nREGRAS DE TITULO E KEYWORD:\n";
-        $prompt .= "- Gere tambem pexels_tags com ate 4 termos visuais, concretos e especificos para a busca de imagens. Inclua nomes proprios e elementos visuais diretamente ligados ao assunto, nunca termos genericos como filme, cinema, pessoas ou casa. Essa informacao e interna do backend e nao deve ser solicitada ao usuario.\n";
+        $prompt .= "- Gere pexels_tags com EXATAMENTE 3 palavras, obrigatoriamente em ingles. As tags devem ser dinamicas e relativas ao tema, seguindo: [Objeto/Sujeito], [Acao/Estado], [Local Especifico]. Cada tag deve ter apenas uma palavra unica, substantivo ou verbo concreto. Proibido usar frases, portugues, conceitos abstratos ou locais genericos como home, space ou life. Inclua nomes proprios quando forem visualmente relevantes. Essa informacao e interna do backend e nao deve ser solicitada ao usuario.\n";
         $prompt .= "- Em pautas de lista, o titulo pode indicar no maximo 10 itens, mas nunca assuma 10 por padrao. Escolha apenas a quantidade necessaria para a pauta e nunca preencha a lista ate o limite maximo sem motivo editorial.\n";
         $prompt .= "- Use no focus_keyword apenas os termos essenciais da pauta. Nao adicione 'melhor', 'melhores', 'best' ou superlativos que nao estejam no titulo ou na fonte.\n";
         $prompt .= "- A keyword e uma referencia semantica, nao uma frase que precise ser copiada literalmente. Reescreva-a quando necessario para uma frase natural, com artigos, preposicoes, genero e numero corretos em portugues.\n";
@@ -6659,17 +6665,7 @@ class Content_Rank_Generator_Helper
                 break;
             }
         }
-        $source_outline_titles = self::build_source_outline_titles_for_prompt($item, 0, $generator);
-        $tmdb_movie_titles = array();
-        if (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])) {
-            foreach ($item['tmdb_movies'] as $tmdb_movie) {
-                if (!is_array($tmdb_movie) || empty($tmdb_movie['title'])) {
-                    continue;
-                }
-                $tmdb_movie_titles[] = trim((string) $tmdb_movie['title'])
-                    . (!empty($tmdb_movie['year']) ? ' (' . sanitize_text_field((string) $tmdb_movie['year']) . ')' : '');
-            }
-        }
+        self::build_source_outline_titles_for_prompt($item, 0, $generator);
         $selected_tags = Content_Rank_Generator::get_generator_selected_tags($generator);
         $selected_tags_csv = !empty($selected_tags) ? implode(', ', $selected_tags) : '';
 
@@ -6713,13 +6709,8 @@ class Content_Rank_Generator_Helper
             'Idioma final: {{generation_language}}',
             'LIMITE ABSOLUTO: o content_html final deve ter no maximo 1200 palavras. Se faltar espaco, corte detalhes secundarios; nunca ultrapasse esse limite.',
         );
-        if ($source_outline_titles !== '') {
-            $hidden_context[] = 'TITULOS DOS ITENS DA FONTE, JA LOCALIZADOS PELO TMDB: ' . $source_outline_titles;
-        }
-        if (!empty($tmdb_movie_titles)) {
-            $hidden_context[] = 'TITULOS CONFIRMADOS PELO TMDB PARA ESTE CONTEUDO: ' . implode('; ', $tmdb_movie_titles);
-            $hidden_context[] = 'Use estes titulos confirmados exatamente como fornecidos. Nao traduza, substitua, invente ou altere os nomes das obras.';
-        }
+        $hidden_context[] = 'IDENTIFICACAO PARA MIDIA: retorne titles_found com apenas os nomes exatos de filmes, series, animes ou outras obras realmente desenvolvidos no content_html. Nao inclua personagens, nomes apenas citados na fonte ou o titulo principal quando ele nao for uma obra.';
+        $hidden_context[] = 'SELECAO DE THUMBNAIL: retorne thumbnail_titles com de 1 a 5 obras mais importantes para representar visualmente o content_html. Escolha pela relevancia real do conteudo, nao pela quantidade de itens da fonte. Para um conteudo sobre uma unica obra, retorne somente essa obra. Use apenas nomes que tambem estejam em titles_found. Nao inclua personagens.';
         if ($generated_title_outline_count > 0) {
             $hidden_context[] = 'FIDELIDADE ABSOLUTA AO TITULO: o titulo promete exatamente ' . $generated_title_outline_count . ' itens. Desenvolva exatamente ' . $generated_title_outline_count . ' itens, nem um a mais. Nunca mencione, enumere, recomende ou crie no conteudo itens adicionais encontrados na fonte.';
         } else {
@@ -6758,23 +6749,6 @@ class Content_Rank_Generator_Helper
             if (!empty($outline_context[$narrative_key])) {
                 $hidden_context[] = $narrative_label . ': ' . sanitize_textarea_field((string) $outline_context[$narrative_key]);
             }
-        }
-        $hidden_context[] = 'NARRATIVA OBRIGATORIA: cada bloco deve avancar o conflito editorial, responder a pergunta da secao anterior ou preparar a proxima. Nao crie secoes apenas para preencher estrutura.';
-        if ($is_list_content) {
-            $hidden_context[] = 'ESTRUTURA OBRIGATORIA DA LISTA: comece com 2 ou 3 paragrafos de introducao sem H2, desenvolva cada item prometido em um H2 na ordem do esboco e termine com a conclusao. Nao use um H2 chamado Introducao e nao transforme os itens em H3.';
-            $hidden_context[] = 'LISTAS EM HTML: quando houver dois ou mais itens paralelos dentro de uma secao, use <ol><li>...</li></ol> para itens ordenados ou <ul><li>...</li></ul> quando a ordem nao importar. Nunca escreva varios itens numerados (1), 2), 3)...) dentro de um unico paragrafo.';
-        } elseif ($content_type === 'noticia') {
-            $hidden_context[] = 'ESTRUTURA OBRIGATORIA DA NOTICIA: comece com um lead forte e factual em paragrafos, sem H2 de introducao; use somente 2 ou 3 H2 no maximo para os detalhes diretamente ligados ao fato e finalize com a conclusao. Nao transforme a noticia em guia ou artigo generico.';
-        } elseif ($content_type === 'artigo') {
-            $hidden_context[] = 'ESTRUTURA OBRIGATORIA DO ARTIGO: comece com 2 ou 3 paragrafos de lead e contexto sem H2; desenvolva os assuntos especificos em H2 e H3 conforme o esboco e finalize com a conclusao.';
-        } else {
-            $hidden_context[] = 'ESTRUTURA OBRIGATORIA: a introducao deve ser feita em paragrafos sem H2; desenvolva os topicos do esboco em H2/H3 e finalize com a conclusao.';
-        }
-        $hidden_context[] = 'LEAD OBRIGATORIO: abra com a situacao, duvida, dor ou fato concreto que motivou a busca. Nao use "Bem-vindo", "este guia", "este artigo", "neste conteudo" ou introducoes genericas de marketing.';
-        if ($outline_text !== '') {
-            $hidden_context[] = 'ESBOCO EDITORIAL OBRIGATORIO, GERADO DEPOIS DO TITULO SEO:';
-            $hidden_context[] = '{{outline_text}}';
-            $hidden_context[] = 'Siga este esboco na ordem apresentada. A primeira secao e a introducao sem H2; desenvolva as secoes H2/H3 indicadas; termine pela secao de conclusao. Nao substitua o esboco por uma estrutura generica.';
         }
         if ($review_products_prompt !== '') {
             $hidden_context[] = 'DADOS FIXOS DOS PRODUTOS DA REVIEW:';
@@ -6832,6 +6806,7 @@ class Content_Rank_Generator_Helper
 
         $prompt = strtr($template, $replacements);
         $prompt = Content_Rank_Generator::append_content_prompt_output_suffix($prompt);
+        $prompt .= "\n\nFORMATO OBRIGATORIO DA ETAPA DE CONTEUDO: retorne um JSON com content_html, titles_found e thumbnail_titles. Os dois campos de titulos devem ser arrays de strings.\n";
         $prompt_preview = preg_replace('/\s+/', ' ', wp_strip_all_tags($prompt));
         $prompt_preview = function_exists('mb_substr') ? mb_substr($prompt_preview, 0, 1400) : substr($prompt_preview, 0, 1400);
 
@@ -7021,8 +6996,16 @@ class Content_Rank_Generator_Helper
                 'content_html' => array(
                     'type' => 'string',
                 ),
+                'titles_found' => array(
+                    'type' => 'array',
+                    'items' => array('type' => 'string'),
+                ),
+                'thumbnail_titles' => array(
+                    'type' => 'array',
+                    'items' => array('type' => 'string'),
+                ),
             ),
-            'required' => array('content_html'),
+            'required' => array('content_html', 'titles_found', 'thumbnail_titles'),
             'additionalProperties' => false,
         );
         $content_previous_response_id = !empty($outline_context['outline_response_id'])
@@ -7039,7 +7022,7 @@ class Content_Rank_Generator_Helper
             'previous_response_id' => $content_previous_response_id,
             'response_schema' => $content_response_schema,
             'response_schema_name' => 'content_rank_content_html',
-            'response_schema_description' => 'Retornar somente o HTML do conteudo gerado.',
+            'response_schema_description' => 'Retornar o HTML do conteudo e os nomes de obras realmente tratados no texto.',
         ));
         if (is_wp_error($content_article)) {
             return $content_article;
@@ -7051,6 +7034,15 @@ class Content_Rank_Generator_Helper
                 'A resposta da OpenAI nao trouxe content_html valido para a etapa de conteudo.'
             );
         }
+
+        $content_article['titles_found'] = !empty($content_article['titles_found']) && is_array($content_article['titles_found'])
+            ? array_values(array_filter(array_map('sanitize_text_field', $content_article['titles_found'])))
+            : array();
+        $content_article['thumbnail_titles'] = !empty($content_article['thumbnail_titles']) && is_array($content_article['thumbnail_titles'])
+            ? array_values(array_filter(array_map('sanitize_text_field', $content_article['thumbnail_titles'])))
+            : array();
+        error_log('[Content Rank][content-stage] titles_found ' . wp_json_encode($content_article['titles_found'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        error_log('[Content Rank][content-stage] thumbnail_titles ' . wp_json_encode($content_article['thumbnail_titles'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
         return $content_article;
     }
@@ -7092,6 +7084,12 @@ class Content_Rank_Generator_Helper
         }
 
         $seo_article['content_html'] = !empty($content_article['content_html']) ? $content_article['content_html'] : (isset($seo_article['content_html']) ? $seo_article['content_html'] : '');
+        $seo_article['titles_found'] = !empty($content_article['titles_found']) && is_array($content_article['titles_found'])
+            ? $content_article['titles_found']
+            : array();
+        $seo_article['thumbnail_titles'] = !empty($content_article['thumbnail_titles']) && is_array($content_article['thumbnail_titles'])
+            ? $content_article['thumbnail_titles']
+            : array();
         if (!empty($seo_article['content_html'])) {
             $seo_article['content_html'] = self::strip_generated_image_markup_from_html($seo_article['content_html']);
         }

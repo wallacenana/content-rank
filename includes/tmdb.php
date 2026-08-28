@@ -624,29 +624,37 @@ final class Content_Rank_TMDB
         $results = is_array($results) ? $results : array();
         $best = array();
         $best_score = -1;
+        $best_exact = false;
         foreach ($results as $result) {
             if (!is_array($result) || empty($result['id'])) {
                 continue;
             }
             $result_year = !empty($result['release_date']) ? (int) substr((string) $result['release_date'], 0, 4) : 0;
             $score = 0;
+            $exact_title = !empty($result['title']) && self::titles_match($query, $result['title']);
+            $exact_original_title = !empty($result['original_title']) && self::titles_match($query, $result['original_title']);
             if ($year > 0 && $result_year === $year) {
                 $score += 100;
             } elseif ($year > 0) {
                 $score -= 50;
             }
-            if (!empty($result['title']) && self::titles_match($query, $result['title'])) {
+            if ($exact_title) {
                 $score += 50;
             }
-            if (!empty($result['original_title']) && self::titles_match($query, $result['original_title'])) {
+            if ($exact_original_title) {
                 $score += 50;
             }
-            if ($score > $best_score) {
+            if (($exact_title || $exact_original_title) && !$best_exact
+                || ($exact_title || $exact_original_title) === $best_exact && $score > $best_score) {
                 $best = $result;
                 $best_score = $score;
+                $best_exact = $exact_title || $exact_original_title;
             }
         }
-        return $best;
+        // TMDB returns broad matches for short or ambiguous queries. Never
+        // turn the first broad result into a movie candidate without an exact
+        // title match, otherwise unrelated posters enter the thumbnail.
+        return $best_exact ? $best : array();
     }
 
     private static function get_brazilian_alternative_title($movie_id)

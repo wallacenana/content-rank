@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.142
+Version: 1.9.143
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.142';
+        const VERSION = '1.9.143';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -1133,13 +1133,15 @@ if (!class_exists('Content_Rank_Generator')) {
         public static function get_content_prompt_output_suffix()
         {
             return "FORMATO FINAL\n"
-                . "Saída: retorne APENAS um JSON válido com exatamente esta estrutura:\n"
-                . "{\n"
-                . "  \"content_html\": \"\"\n"
-                . "}\n"
                 . "Não inclua title, slug, resumo, meta_descricao, tags, focus_keyword ou qualquer outra chave.\n"
                 . "Não escreva texto fora do JSON.\n"
-                . "Se não houver conteúdo, ainda assim retorne algum erro/formato inválido.";
+                . "Se não houver conteúdo, ainda assim retorne algum erro/formato inválido."
+                . "Saída: retorne APENAS um JSON válido com exatamente esta estrutura:\n"
+                . "{\n"
+                . "  \"content_html\": \"\",\n"
+                . "  \"titles_found\": [\"filme 1 encontrado\", \"filme 2 encontrado\", ...],\n"
+                . "  \"thumbnail_titles\": [\"obra principal para a thumbnail\"]\n"
+                . "}\n";
         }
 
         public static function append_content_prompt_output_suffix($prompt)
@@ -4151,12 +4153,48 @@ if (!class_exists('Content_Rank_Generator')) {
             }
 
             $stopwords = array(
-                'a', 'o', 'as', 'os', 'um', 'uma', 'uns', 'umas',
-                'de', 'da', 'do', 'das', 'dos',
-                'e', 'em', 'no', 'na', 'nos', 'nas',
-                'por', 'para', 'com', 'sem', 'sobre', 'entre',
-                'que', 'se', 'ao', 'aos', 'à', 'às',
-                'the', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with', 'from', 'by',
+                'a',
+                'o',
+                'as',
+                'os',
+                'um',
+                'uma',
+                'uns',
+                'umas',
+                'de',
+                'da',
+                'do',
+                'das',
+                'dos',
+                'e',
+                'em',
+                'no',
+                'na',
+                'nos',
+                'nas',
+                'por',
+                'para',
+                'com',
+                'sem',
+                'sobre',
+                'entre',
+                'que',
+                'se',
+                'ao',
+                'aos',
+                'à',
+                'às',
+                'the',
+                'and',
+                'or',
+                'of',
+                'to',
+                'in',
+                'on',
+                'for',
+                'with',
+                'from',
+                'by',
             );
 
             $tokens = array_values(array_filter(preg_split('/\s+/u', $text)));
@@ -4769,6 +4807,8 @@ if (!class_exists('Content_Rank_Generator')) {
             $article['meta_description'] = isset($data['meta_description']) ? sanitize_text_field($data['meta_description']) : (isset($data['meta_descricao']) ? sanitize_text_field($data['meta_descricao']) : '');
             $article['focus_keyword'] = isset($data['focus_keyword']) ? sanitize_text_field($data['focus_keyword']) : (isset($data['palavra_chave_foco']) ? sanitize_text_field($data['palavra_chave_foco']) : '');
             $article['tags'] = array();
+            $article['titles_found'] = array();
+            $article['thumbnail_titles'] = array();
             $article['pexels_tags'] = array();
 
             if (isset($data['tags'])) {
@@ -4777,6 +4817,24 @@ if (!class_exists('Content_Rank_Generator')) {
                     $tag = sanitize_text_field($tag);
                     if ($tag !== '') {
                         $article['tags'][] = $tag;
+                    }
+                }
+            }
+
+            if (isset($data['titles_found']) && is_array($data['titles_found'])) {
+                foreach ($data['titles_found'] as $found_title) {
+                    $found_title = sanitize_text_field($found_title);
+                    if ($found_title !== '' && !in_array($found_title, $article['titles_found'], true)) {
+                        $article['titles_found'][] = $found_title;
+                    }
+                }
+            }
+
+            if (isset($data['thumbnail_titles']) && is_array($data['thumbnail_titles'])) {
+                foreach ($data['thumbnail_titles'] as $thumbnail_title) {
+                    $thumbnail_title = sanitize_text_field($thumbnail_title);
+                    if ($thumbnail_title !== '' && !in_array($thumbnail_title, $article['thumbnail_titles'], true)) {
+                        $article['thumbnail_titles'][] = $thumbnail_title;
                     }
                 }
             }
@@ -8569,7 +8627,7 @@ if (!class_exists('Content_Rank_Generator')) {
             } elseif (!empty($article['tags']) && is_array($article['tags'])) {
                 $pexels_tags = $article['tags'];
             }
-            $pexels_tags = self::filter_pexels_tags(array_values(array_unique(array_filter(array_map('sanitize_text_field', $pexels_tags)))), 4);
+            $pexels_tags = self::filter_pexels_tags(array_values(array_unique(array_filter(array_map('sanitize_text_field', $pexels_tags)))), 3);
             if (empty($pexels_tags)) {
                 $fallback_terms = array();
                 if (!empty($article['focus_keyword'])) {
@@ -8581,12 +8639,12 @@ if (!class_exists('Content_Rank_Generator')) {
                 if (!empty($item['source_title'])) {
                     $fallback_terms[] = $item['source_title'];
                 }
-                $fallback_terms = self::filter_pexels_tags($fallback_terms, 4);
+                $fallback_terms = self::filter_pexels_tags($fallback_terms, 3);
                 if (!empty($fallback_terms)) {
                     $pexels_tags = $fallback_terms;
                 }
             }
-            $pexels_search_terms = trim(implode(' ', array_slice($pexels_tags, 0, 4)));
+            $pexels_search_terms = trim(implode(' ', array_slice($pexels_tags, 0, 3)));
 
             $query = strtr($query, array(
                 '{{title}}' => $article['title'],
@@ -8594,7 +8652,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 '{{feed_title}}' => isset($item['feed_title']) ? (string) $item['feed_title'] : '',
                 '{{focus_keyword}}' => $article['focus_keyword'],
                 '{{pexels_tags}}' => $pexels_search_terms,
-                '{{pexels_tags_csv}}' => implode(', ', array_slice($pexels_tags, 0, 4)),
+                '{{pexels_tags_csv}}' => implode(', ', array_slice($pexels_tags, 0, 3)),
             ));
             $query = str_replace(array(',', ';'), ' ', $query);
             $query = preg_replace('/\s+/', ' ', $query);
@@ -8635,6 +8693,13 @@ if (!class_exists('Content_Rank_Generator')) {
                 ));
                 return false;
             }
+
+            error_log('[Content Rank][thumbnail] pexels-query ' . wp_json_encode(array(
+                'post_id' => intval($post_id),
+                'query' => $query,
+                'title' => !empty($article['title']) ? (string) $article['title'] : '',
+                'pexels_tags' => !empty($article['pexels_tags']) && is_array($article['pexels_tags']) ? $article['pexels_tags'] : array(),
+            ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
             self::log_image_debug('pexels_start', array(
                 'post_id' => intval($post_id),
@@ -9009,7 +9074,7 @@ if (!class_exists('Content_Rank_Generator')) {
 
             $status_url = admin_url('admin-ajax.php');
             $nonce = wp_create_nonce('content_rank_staged_generation_status');
-            ?>
+?>
             <div id="content-rank-staged-generation-toast" class="content-rank-staged-generation-toast" role="status" aria-live="polite" style="<?php echo empty($initial_items) ? 'display:none;' : ''; ?>">
                 <button type="button" class="content-rank-staged-generation-toast__close" aria-label="Fechar">&times;</button>
                 <div class="content-rank-staged-generation-toast__eyebrow">Content Rank</div>
@@ -9025,30 +9090,143 @@ if (!class_exists('Content_Rank_Generator')) {
                 <a class="content-rank-staged-generation-toast__link" href="#" target="_blank" rel="noopener">Abrir post</a>
             </div>
             <style>
-                .content-rank-staged-generation-toast{position:fixed;z-index:100000;right:24px;bottom:24px;width:min(360px,calc(100vw - 32px));padding:18px 20px;border:1px solid #dbe3f0;border-radius:16px;background:#fff;color:#17213a;box-shadow:0 16px 45px rgba(15,23,42,.2);font-size:13px;line-height:1.45}
-                .content-rank-staged-generation-toast__close{position:absolute;top:8px;right:10px;border:0;background:transparent;color:#64748b;font-size:22px;line-height:1;cursor:pointer}
-                .content-rank-staged-generation-toast__eyebrow{margin-bottom:4px;color:#4f46e5;font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}
-                .content-rank-staged-generation-toast__title{display:block;padding-right:18px;font-size:15px}
-                .content-rank-staged-generation-toast__post{margin-top:6px;overflow:hidden;color:#475569;text-overflow:ellipsis;white-space:nowrap}
-                .content-rank-staged-generation-toast__stage{margin-top:12px;color:#4f46e5;font-weight:600}
-                .content-rank-staged-generation-toast__track{height:6px;margin-top:10px;overflow:hidden;border-radius:999px;background:#e2e8f0}
-                .content-rank-staged-generation-toast__track span{display:block;width:35%;height:100%;border-radius:999px;background:#4f46e5;animation:content-rank-staged-generation-loading 1.25s ease-in-out infinite}
-                .content-rank-staged-generation-toast__steps{display:flex;justify-content:space-between;gap:5px;margin-top:8px;color:#94a3b8;font-size:10px}
-                .content-rank-staged-generation-toast__steps span.is-active{color:#4f46e5;font-weight:700}
-                .content-rank-staged-generation-toast__link{display:inline-block;margin-top:12px;color:#4338ca;text-decoration:none}
-                .content-rank-staged-generation-toast.is-success{border-color:#86efac;background:#f0fdf4}
-                .content-rank-staged-generation-toast.is-error{border-color:#fca5a5;background:#fef2f2}
-                .content-rank-staged-generation-toast.is-success .content-rank-staged-generation-toast__track span{width:100%!important;transform:none!important;animation:none!important}
-                @keyframes content-rank-staged-generation-loading{0%,100%{transform:translateX(-110%)}50%{transform:translateX(300%)}}
+                .content-rank-staged-generation-toast {
+                    position: fixed;
+                    z-index: 100000;
+                    right: 24px;
+                    bottom: 24px;
+                    width: min(360px, calc(100vw - 32px));
+                    padding: 18px 20px;
+                    border: 1px solid #dbe3f0;
+                    border-radius: 16px;
+                    background: #fff;
+                    color: #17213a;
+                    box-shadow: 0 16px 45px rgba(15, 23, 42, .2);
+                    font-size: 13px;
+                    line-height: 1.45
+                }
+
+                .content-rank-staged-generation-toast__close {
+                    position: absolute;
+                    top: 8px;
+                    right: 10px;
+                    border: 0;
+                    background: transparent;
+                    color: #64748b;
+                    font-size: 22px;
+                    line-height: 1;
+                    cursor: pointer
+                }
+
+                .content-rank-staged-generation-toast__eyebrow {
+                    margin-bottom: 4px;
+                    color: #4f46e5;
+                    font-size: 10px;
+                    font-weight: 700;
+                    letter-spacing: .16em;
+                    text-transform: uppercase
+                }
+
+                .content-rank-staged-generation-toast__title {
+                    display: block;
+                    padding-right: 18px;
+                    font-size: 15px
+                }
+
+                .content-rank-staged-generation-toast__post {
+                    margin-top: 6px;
+                    overflow: hidden;
+                    color: #475569;
+                    text-overflow: ellipsis;
+                    white-space: nowrap
+                }
+
+                .content-rank-staged-generation-toast__stage {
+                    margin-top: 12px;
+                    color: #4f46e5;
+                    font-weight: 600
+                }
+
+                .content-rank-staged-generation-toast__track {
+                    height: 6px;
+                    margin-top: 10px;
+                    overflow: hidden;
+                    border-radius: 999px;
+                    background: #e2e8f0
+                }
+
+                .content-rank-staged-generation-toast__track span {
+                    display: block;
+                    width: 35%;
+                    height: 100%;
+                    border-radius: 999px;
+                    background: #4f46e5;
+                    animation: content-rank-staged-generation-loading 1.25s ease-in-out infinite
+                }
+
+                .content-rank-staged-generation-toast__steps {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 5px;
+                    margin-top: 8px;
+                    color: #94a3b8;
+                    font-size: 10px
+                }
+
+                .content-rank-staged-generation-toast__steps span.is-active {
+                    color: #4f46e5;
+                    font-weight: 700
+                }
+
+                .content-rank-staged-generation-toast__link {
+                    display: inline-block;
+                    margin-top: 12px;
+                    color: #4338ca;
+                    text-decoration: none
+                }
+
+                .content-rank-staged-generation-toast.is-success {
+                    border-color: #86efac;
+                    background: #f0fdf4
+                }
+
+                .content-rank-staged-generation-toast.is-error {
+                    border-color: #fca5a5;
+                    background: #fef2f2
+                }
+
+                .content-rank-staged-generation-toast.is-success .content-rank-staged-generation-toast__track span {
+                    width: 100% !important;
+                    transform: none !important;
+                    animation: none !important
+                }
+
+                @keyframes content-rank-staged-generation-loading {
+
+                    0%,
+                    100% {
+                        transform: translateX(-110%)
+                    }
+
+                    50% {
+                        transform: translateX(300%)
+                    }
+                }
             </style>
             <script>
-                (function () {
+                (function() {
                     var toast = document.getElementById('content-rank-staged-generation-toast');
                     if (!toast) return;
                     var items = <?php echo wp_json_encode($initial_items); ?>;
-                    var postIds = items.map(function (item) { return String(item.post_id); });
+                    var postIds = items.map(function(item) {
+                        return String(item.post_id);
+                    });
                     var stageOrder = ['planning', 'seo', 'content'];
-                    var stageNames = { planning: 'Planejamento', seo: 'SEO', content: 'Conteúdo' };
+                    var stageNames = {
+                        planning: 'Planejamento',
+                        seo: 'SEO',
+                        content: 'Conteúdo'
+                    };
                     var timer;
                     var dismissed = false;
                     var toastKey = '';
@@ -9061,7 +9239,9 @@ if (!class_exists('Content_Rank_Generator')) {
                     var linkNode = toast.querySelector('.content-rank-staged-generation-toast__link');
 
                     function getToastKey(ids) {
-                        var normalized = Array.isArray(ids) ? ids.map(function (id) { return String(id); }).filter(Boolean).sort() : [];
+                        var normalized = Array.isArray(ids) ? ids.map(function(id) {
+                            return String(id);
+                        }).filter(Boolean).sort() : [];
                         return toastStoragePrefix + (normalized.length ? normalized.join('_') : 'unknown');
                     }
 
@@ -9094,7 +9274,7 @@ if (!class_exists('Content_Rank_Generator')) {
                         stageNode.textContent = status === 'completed' ? 'Todas as etapas foram concluídas.' : (status === 'failed' ? ('Erro: ' + (item.error_message || 'A geração falhou.')) : ('Etapa atual: ' + (item.stage_label || stageNames[item.stage] || 'Processando')));
                         trackNode.style.width = status === 'processing' ? '35%' : '100%';
                         trackNode.style.animationPlayState = status === 'processing' ? 'running' : 'paused';
-                        toast.querySelectorAll('[data-stage]').forEach(function (node, index) {
+                        toast.querySelectorAll('[data-stage]').forEach(function(node, index) {
                             node.classList.toggle('is-active', status === 'completed' || index <= stageIndex);
                         });
                         linkNode.href = item.edit_url || '#';
@@ -9118,10 +9298,12 @@ if (!class_exists('Content_Rank_Generator')) {
                     }
 
                     function showGenerationToast(nextPostIds, fallbackTitle) {
-                        nextPostIds = Array.isArray(nextPostIds) ? nextPostIds.map(function (id) { return String(id); }).filter(Boolean) : [];
+                        nextPostIds = Array.isArray(nextPostIds) ? nextPostIds.map(function(id) {
+                            return String(id);
+                        }).filter(Boolean) : [];
                         if (nextPostIds.length) {
                             postIds = nextPostIds;
-                            items = postIds.map(function (postId) {
+                            items = postIds.map(function(postId) {
                                 return {
                                     post_id: parseInt(postId, 10) || 0,
                                     title: fallbackTitle || 'Geração iniciada',
@@ -9162,13 +9344,22 @@ if (!class_exists('Content_Rank_Generator')) {
                         var body = new URLSearchParams();
                         body.append('action', 'content_rank_get_staged_generation_status');
                         body.append('nonce', <?php echo wp_json_encode($nonce); ?>);
-                        postIds.forEach(function (id) { body.append('post_ids[]', id); });
-                        fetch(<?php echo wp_json_encode($status_url); ?>, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: body.toString() })
-                            .then(function (response) {
+                        postIds.forEach(function(id) {
+                            body.append('post_ids[]', id);
+                        });
+                        fetch(<?php echo wp_json_encode($status_url); ?>, {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: {
+                                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                                },
+                                body: body.toString()
+                            })
+                            .then(function(response) {
                                 if (!response.ok) {
                                     throw new Error('HTTP ' + response.status);
                                 }
-                                return response.text().then(function (text) {
+                                return response.text().then(function(text) {
                                     try {
                                         return JSON.parse(text);
                                     } catch (error) {
@@ -9176,7 +9367,7 @@ if (!class_exists('Content_Rank_Generator')) {
                                     }
                                 });
                             })
-                            .then(function (payload) {
+                            .then(function(payload) {
                                 if (!payload || !payload.success) {
                                     throw new Error(payload && payload.data && payload.data.message ? payload.data.message : 'resposta inválida do servidor');
                                 }
@@ -9185,20 +9376,26 @@ if (!class_exists('Content_Rank_Generator')) {
                                 }
                                 if (!payload.data.items.length) return;
                                 items = payload.data.items;
-                                postIds = items.map(function (item) { return String(item.post_id); });
+                                postIds = items.map(function(item) {
+                                    return String(item.post_id);
+                                });
                                 if (dismissed) return;
                                 toast.style.display = 'block';
-                                var current = items.find(function (item) { return item.status === 'processing'; });
+                                var current = items.find(function(item) {
+                                    return item.status === 'processing';
+                                });
                                 if (current) {
                                     render(current);
                                     return;
                                 }
-                                var failed = items.find(function (item) { return item.status === 'failed'; });
+                                var failed = items.find(function(item) {
+                                    return item.status === 'failed';
+                                });
                                 finish(failed || items[0], failed ? 'failed' : 'completed');
                                 window.clearInterval(timer);
                                 timer = null;
                             })
-                            .catch(function (error) {
+                            .catch(function(error) {
                                 if (dismissed) return;
                                 showPollingError(error && error.message ? error.message : 'falha de comunicação com o servidor');
                                 window.clearInterval(timer);
@@ -9206,7 +9403,7 @@ if (!class_exists('Content_Rank_Generator')) {
                             });
                     }
 
-                    closeButton.addEventListener('click', function () {
+                    closeButton.addEventListener('click', function() {
                         dismissed = true;
                         try {
                             window.sessionStorage.setItem(toastKey || getToastKey(postIds), '1');
@@ -9225,7 +9422,7 @@ if (!class_exists('Content_Rank_Generator')) {
                     }
                 }());
             </script>
-            <?php
+<?php
         }
 
         public static function dispatch_staged_generation_async($post_id)
@@ -9485,6 +9682,20 @@ if (!class_exists('Content_Rank_Generator')) {
                         throw new RuntimeException($content_article->get_error_message());
                     }
                     $seo_article['content_html'] = !empty($content_article['content_html']) ? $content_article['content_html'] : '';
+                    // Preserve the entities identified in the final content
+                    // for the thumbnail/media stage. Without this copy the
+                    // staged pipeline silently discarded titles_found.
+                    $seo_article['titles_found'] = !empty($content_article['titles_found']) && is_array($content_article['titles_found'])
+                        ? array_values(array_filter(array_map('sanitize_text_field', $content_article['titles_found'])))
+                        : array();
+                    $seo_article['thumbnail_titles'] = !empty($content_article['thumbnail_titles']) && is_array($content_article['thumbnail_titles'])
+                        ? array_values(array_filter(array_map('sanitize_text_field', $content_article['thumbnail_titles'])))
+                        : array();
+                    error_log('[Content Rank][pipeline] content-result ' . wp_json_encode(array(
+                        'post_id' => $post_id,
+                        'titles_found' => $seo_article['titles_found'],
+                        'thumbnail_titles' => $seo_article['thumbnail_titles'],
+                    ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                     $review_products = !empty($item['review_products']) && is_array($item['review_products'])
                         ? $item['review_products']
                         : json_decode((string) get_post_meta($post_id, '_content_rank_review_products_json', true), true);
@@ -9811,43 +10022,43 @@ if (!class_exists('Content_Rank_Generator')) {
             }
 
             try {
-            if (!empty($tmdb_content_media_sections) && !empty($article['content_html'])) {
-                $article['content_html'] = Content_Rank_Generator_Helper::inject_tmdb_media_sections_into_content(
-                    $article['content_html'],
-                    $tmdb_content_media_sections,
-                    $post_id,
-                    self::get_content_image_size_for_generator($generator),
-                    Content_Rank_Generator_Helper::extract_outline_section_image_map_from_content((string) get_post_field('post_content', $post_id))
-                );
-                $article['content_html'] = Content_Rank_Generator_Helper::ensure_content_starts_with_paragraph_html($article['content_html']);
-                if ($article['content_html'] !== '') {
-                    $update_content = wp_update_post(array(
-                        'ID' => $post_id,
-                        'post_content' => $article['content_html'],
-                    ), true);
-                    if (is_wp_error($update_content)) {
-                        self::force_generated_post_draft($post_id, $update_content->get_error_message());
-                        return $update_content;
+                if (!empty($tmdb_content_media_sections) && !empty($article['content_html'])) {
+                    $article['content_html'] = Content_Rank_Generator_Helper::inject_tmdb_media_sections_into_content(
+                        $article['content_html'],
+                        $tmdb_content_media_sections,
+                        $post_id,
+                        self::get_content_image_size_for_generator($generator),
+                        Content_Rank_Generator_Helper::extract_outline_section_image_map_from_content((string) get_post_field('post_content', $post_id))
+                    );
+                    $article['content_html'] = Content_Rank_Generator_Helper::ensure_content_starts_with_paragraph_html($article['content_html']);
+                    if ($article['content_html'] !== '') {
+                        $update_content = wp_update_post(array(
+                            'ID' => $post_id,
+                            'post_content' => $article['content_html'],
+                        ), true);
+                        if (is_wp_error($update_content)) {
+                            self::force_generated_post_draft($post_id, $update_content->get_error_message());
+                            return $update_content;
+                        }
                     }
                 }
-            }
-            $content_media_sections = !empty($item['source_page_outline_sections']) && is_array($item['source_page_outline_sections'])
-                ? $item['source_page_outline_sections']
-                : array();
-            $use_interval_content_images = self::generator_uses_interval_content_images($generator);
-            if ($use_interval_content_images) {
-                $content_media_sections = self::resolve_content_image_sections_for_generation($item, $generator, $article);
-            }
-            if ($content_media_source !== 'none' && empty($tmdb_content_media_sections) && !empty($content_media_sections) && is_array($content_media_sections)) {
-                $content_image_size = self::get_content_image_size_for_generator($generator);
-                $use_source_content_images = self::generator_uses_source_content_images($generator);
-                $use_source_content_links = self::generator_uses_source_content_links($generator);
-                $existing_image_map = array();
-                if (!empty($article['content_html'])) {
-                    $existing_image_map = Content_Rank_Generator_Helper::extract_outline_section_image_map_from_content($article['content_html']);
-                }
+                $content_media_sections = !empty($item['source_page_outline_sections']) && is_array($item['source_page_outline_sections'])
+                    ? $item['source_page_outline_sections']
+                    : array();
+                $use_interval_content_images = self::generator_uses_interval_content_images($generator);
                 if ($use_interval_content_images) {
-                    $article['content_html'] = Content_Rank_Generator_Helper::inject_content_images_by_word_interval(
+                    $content_media_sections = self::resolve_content_image_sections_for_generation($item, $generator, $article);
+                }
+                if ($content_media_source !== 'none' && empty($tmdb_content_media_sections) && !empty($content_media_sections) && is_array($content_media_sections)) {
+                    $content_image_size = self::get_content_image_size_for_generator($generator);
+                    $use_source_content_images = self::generator_uses_source_content_images($generator);
+                    $use_source_content_links = self::generator_uses_source_content_links($generator);
+                    $existing_image_map = array();
+                    if (!empty($article['content_html'])) {
+                        $existing_image_map = Content_Rank_Generator_Helper::extract_outline_section_image_map_from_content($article['content_html']);
+                    }
+                    if ($use_interval_content_images) {
+                        $article['content_html'] = Content_Rank_Generator_Helper::inject_content_images_by_word_interval(
                             $article['content_html'],
                             $content_media_sections,
                             $post_id,
@@ -9855,107 +10066,107 @@ if (!class_exists('Content_Rank_Generator')) {
                             !empty($generator['content_image_interval_words']) ? intval($generator['content_image_interval_words']) : 500,
                             array(!empty($item['source_image_url']) ? trim((string) $item['source_image_url']) : '')
                         );
-                } else {
-                    $article['content_html'] = Content_Rank_Generator_Helper::inject_outline_section_media_into_content(
-                        $article['content_html'],
-                        $content_media_sections,
-                        $post_id,
-                        $content_image_size,
-                        !empty($generator['source_link_phrases']) ? $generator['source_link_phrases'] : '',
-                        $use_source_content_images,
-                        false,
-                        $generator,
-                        array(
-                            'post_id' => intval($post_id),
-                            'item_guid' => !empty($item['guid']) ? $item['guid'] : '',
-                            'generated_title' => !empty($article['title']) ? (string) $article['title'] : '',
-                            'outline_target_h2_count_hint' => !empty($item['title_outline_count_hint']) ? intval($item['title_outline_count_hint']) : 0,
-                            'source_image_url' => !empty($item['source_image_url']) ? trim((string) $item['source_image_url']) : '',
-                        ),
-                        $existing_image_map,
-                        array(),
-                        array(!empty($item['source_image_url']) ? trim((string) $item['source_image_url']) : '')
-                    );
-                }
-                $article['content_html'] = Content_Rank_Generator_Helper::ensure_content_starts_with_paragraph_html($article['content_html']);
-                if ($article['content_html'] !== '') {
-                    $update_content = wp_update_post(array(
-                        'ID' => $post_id,
-                        'post_content' => $article['content_html'],
-                    ), true);
-                    if (is_wp_error($update_content)) {
-                        self::insert_run_log($generator['id'], 'warning', $update_content->get_error_message(), array(
-                            'request' => array(
-                                'post_id' => $post_id,
+                    } else {
+                        $article['content_html'] = Content_Rank_Generator_Helper::inject_outline_section_media_into_content(
+                            $article['content_html'],
+                            $content_media_sections,
+                            $post_id,
+                            $content_image_size,
+                            !empty($generator['source_link_phrases']) ? $generator['source_link_phrases'] : '',
+                            $use_source_content_images,
+                            false,
+                            $generator,
+                            array(
+                                'post_id' => intval($post_id),
                                 'item_guid' => !empty($item['guid']) ? $item['guid'] : '',
+                                'generated_title' => !empty($article['title']) ? (string) $article['title'] : '',
+                                'outline_target_h2_count_hint' => !empty($item['title_outline_count_hint']) ? intval($item['title_outline_count_hint']) : 0,
+                                'source_image_url' => !empty($item['source_image_url']) ? trim((string) $item['source_image_url']) : '',
                             ),
-                        ), $post_id, $item['guid'], $item['permalink']);
-                        self::force_generated_post_draft($post_id, $update_content->get_error_message());
-                        return $update_content;
+                            $existing_image_map,
+                            array(),
+                            array(!empty($item['source_image_url']) ? trim((string) $item['source_image_url']) : '')
+                        );
+                    }
+                    $article['content_html'] = Content_Rank_Generator_Helper::ensure_content_starts_with_paragraph_html($article['content_html']);
+                    if ($article['content_html'] !== '') {
+                        $update_content = wp_update_post(array(
+                            'ID' => $post_id,
+                            'post_content' => $article['content_html'],
+                        ), true);
+                        if (is_wp_error($update_content)) {
+                            self::insert_run_log($generator['id'], 'warning', $update_content->get_error_message(), array(
+                                'request' => array(
+                                    'post_id' => $post_id,
+                                    'item_guid' => !empty($item['guid']) ? $item['guid'] : '',
+                                ),
+                            ), $post_id, $item['guid'], $item['permalink']);
+                            self::force_generated_post_draft($post_id, $update_content->get_error_message());
+                            return $update_content;
+                        }
                     }
                 }
-            }
 
-            $taxonomy_result = self::apply_taxonomies_and_meta($post_id, $generator, $article, $item);
-            if (is_wp_error($taxonomy_result)) {
-                self::force_generated_post_draft($post_id, $taxonomy_result->get_error_message());
-                return $taxonomy_result;
-            }
+                $taxonomy_result = self::apply_taxonomies_and_meta($post_id, $generator, $article, $item);
+                if (is_wp_error($taxonomy_result)) {
+                    self::force_generated_post_draft($post_id, $taxonomy_result->get_error_message());
+                    return $taxonomy_result;
+                }
 
-            $thumbnail_result = Content_Rank_Thumbnail_Helper::set_featured_image(
-                $post_id,
-                $generator,
-                $item,
-                $article,
-                true
-            );
-            if (is_wp_error($thumbnail_result)) {
-                self::force_generated_post_draft($post_id, $thumbnail_result->get_error_message());
-                return $thumbnail_result;
-            }
-
-            $featured_image_id = intval(get_post_thumbnail_id($post_id));
-            if ($featured_image_id <= 0) {
-                $fallback_title = !empty($article['title']) ? (string) $article['title'] : (!empty($item['source_title']) ? (string) $item['source_title'] : (!empty($item['title']) ? (string) $item['title'] : ''));
-                $featured_image_id = intval(Content_Rank_Generator::create_placeholder_image_attachment(
+                $thumbnail_result = Content_Rank_Thumbnail_Helper::set_featured_image(
                     $post_id,
-                    $fallback_title,
-                    'fallback',
-                    !empty($item['keyword']) ? $item['keyword'] : '',
-                    ''
-                ));
-            }
-
-            if ($featured_image_id <= 0) {
-                $thumbnail_error = new WP_Error(
-                    'content_rank_generation_thumbnail_missing',
-                    'A geração falhou porque não foi possível definir a imagem destacada.'
+                    $generator,
+                    $item,
+                    $article,
+                    true
                 );
-                self::force_generated_post_draft($post_id, $thumbnail_error->get_error_message());
-                return $thumbnail_error;
-            }
+                if (is_wp_error($thumbnail_result)) {
+                    self::force_generated_post_draft($post_id, $thumbnail_result->get_error_message());
+                    return $thumbnail_result;
+                }
 
-            if ($treat_like_rss && $use_source_video) {
-                self::insert_run_log($generator['id'], 'info', 'Checagem de vídeo da fonte', array(
-                    'request' => array(
-                        'post_id' => $post_id,
-                        'item_guid' => $item['guid'],
-                    ),
-                    'response' => array(
-                        'source_video_url' => !empty($item['source_video_url']) ? $item['source_video_url'] : '',
-                        'has_source_video' => !empty($item['source_video_url']) ? 1 : 0,
-                        'video_selector_class' => !empty($generator['video_selector_class']) ? $generator['video_selector_class'] : '',
-                        'permalink' => !empty($item['permalink']) ? $item['permalink'] : '',
-                    ),
+                $featured_image_id = intval(get_post_thumbnail_id($post_id));
+                if ($featured_image_id <= 0) {
+                    $fallback_title = !empty($article['title']) ? (string) $article['title'] : (!empty($item['source_title']) ? (string) $item['source_title'] : (!empty($item['title']) ? (string) $item['title'] : ''));
+                    $featured_image_id = intval(Content_Rank_Generator::create_placeholder_image_attachment(
+                        $post_id,
+                        $fallback_title,
+                        'fallback',
+                        !empty($item['keyword']) ? $item['keyword'] : '',
+                        ''
+                    ));
+                }
+
+                if ($featured_image_id <= 0) {
+                    $thumbnail_error = new WP_Error(
+                        'content_rank_generation_thumbnail_missing',
+                        'A geração falhou porque não foi possível definir a imagem destacada.'
+                    );
+                    self::force_generated_post_draft($post_id, $thumbnail_error->get_error_message());
+                    return $thumbnail_error;
+                }
+
+                if ($treat_like_rss && $use_source_video) {
+                    self::insert_run_log($generator['id'], 'info', 'Checagem de vídeo da fonte', array(
+                        'request' => array(
+                            'post_id' => $post_id,
+                            'item_guid' => $item['guid'],
+                        ),
+                        'response' => array(
+                            'source_video_url' => !empty($item['source_video_url']) ? $item['source_video_url'] : '',
+                            'has_source_video' => !empty($item['source_video_url']) ? 1 : 0,
+                            'video_selector_class' => !empty($generator['video_selector_class']) ? $generator['video_selector_class'] : '',
+                            'permalink' => !empty($item['permalink']) ? $item['permalink'] : '',
+                        ),
+                    ), $post_id, $item['guid'], $item['permalink']);
+                }
+                self::mark_item_processed($generator['id'], $item, $post_id);
+                self::insert_run_log($generator['id'], 'success', 'Post criado', array(
+                    'request' => array('item' => $item['guid']),
+                    'response' => array('post_id' => $post_id, 'title' => $article['title']),
                 ), $post_id, $item['guid'], $item['permalink']);
-            }
-            self::mark_item_processed($generator['id'], $item, $post_id);
-            self::insert_run_log($generator['id'], 'success', 'Post criado', array(
-                'request' => array('item' => $item['guid']),
-                'response' => array('post_id' => $post_id, 'title' => $article['title']),
-            ), $post_id, $item['guid'], $item['permalink']);
 
-            return $post_id;
+                return $post_id;
             } catch (Throwable $error) {
                 $message = trim((string) $error->getMessage());
                 if ($message === '') {
@@ -10175,12 +10386,12 @@ if (!class_exists('Content_Rank_Generator')) {
                         continue;
                     }
 
-                $result = self::queue_staged_generation($generator, $selected_item);
-                if (is_wp_error($result)) {
-                    self::mark_item_failed($generator['id'], $selected_item, $result->get_error_code(), $result->get_error_message());
-                    $failed++;
-                    $wpdb->update(
-                        $tables['rows'],
+                    $result = self::queue_staged_generation($generator, $selected_item);
+                    if (is_wp_error($result)) {
+                        self::mark_item_failed($generator['id'], $selected_item, $result->get_error_code(), $result->get_error_message());
+                        $failed++;
+                        $wpdb->update(
+                            $tables['rows'],
                             array(
                                 'row_status' => 'failed',
                                 'error_message' => $result->get_error_message(),

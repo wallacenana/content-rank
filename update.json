@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.142",
+  "version": "1.9.143",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -9,7 +9,7 @@
   "requires_php": "7.4",
   "author": "Wallace Tavares e Codex",
   "author_url": "https://github.com/wallacenana",
-  "last_updated": "2026-08-26",
+  "last_updated": "2026-08-28",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
   "changelog": "<ul><li>Substituidos os icones das acoes por SVGs inline mais consistentes.</li><li>Corrigido o handler do play/pause dos geradores.</li><li>Tipo de geracao usa switch estilizado com o texto Satelite.</li></ul>",
