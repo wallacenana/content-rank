@@ -777,10 +777,6 @@ class Content_Rank_Generator_Admin
                                     <p class="mt-1 text-xs text-slate-500">Usa os tÃ­tulos encontrados na estrutura da fonte e substitui os nomes no artigo final.</p>
                                 </div>
                                 <div>
-                                    <label class="mb-1 block text-sm font-medium text-slate-700">Consulta no Pexels</label>
-                                    <input type="text" name="pexels_query" value="<?php echo esc_attr(Content_Rank_Generator::get_default_pexels_query()); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
-                                </div>
-                                <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Usar vídeo da fonte</label>
                                     <select name="source_video_enabled" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                                         <option value="0" selected>Não</option>
@@ -3116,10 +3112,6 @@ class Content_Rank_Generator_Admin
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Máximo de tokens</label>
                                                 <input id="content-rank-keyword-generate-max-tokens" type="number" min="256" value="<?php echo esc_attr($global_settings['default_max_tokens']); ?>" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
                                             </div>
-                                            <div>
-                                                <label class="mb-1 block text-sm font-medium text-slate-700">Consulta no Pexels</label>
-                                                <input id="content-rank-keyword-generate-pexels-query" type="text" value="<?php echo esc_attr(Content_Rank_Generator::get_default_pexels_query()); ?>" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
-                                            </div>
                                             <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 md:col-span-2">
                                                 <div class="text-sm font-medium text-amber-900">Pexels obrigatório</div>
                                                 <p class="mt-1 text-xs text-amber-700">Listas por planilha sempre usam imagens do Pexels. Imagens do site de origem são ignoradas.</p>
@@ -3283,7 +3275,6 @@ class Content_Rank_Generator_Admin
                     var generateModelInput = document.getElementById('content-rank-keyword-generate-model');
                     var generateTemperatureInput = document.getElementById('content-rank-keyword-generate-temperature');
                     var generateMaxTokensInput = document.getElementById('content-rank-keyword-generate-max-tokens');
-                    var generatePexelsQueryInput = document.getElementById('content-rank-keyword-generate-pexels-query');
                     var generateSourceVideoEnabledInput = document.getElementById('content-rank-keyword-generate-source-video-enabled');
                     var generateSeoEnabledInput = document.getElementById('content-rank-keyword-generate-seo-enabled');
                     var generateCategoriesSelect = document.getElementById('content-rank-keyword-generate-categories');
@@ -3295,7 +3286,6 @@ class Content_Rank_Generator_Admin
                         generateModelInput,
                         generateTemperatureInput,
                         generateMaxTokensInput,
-                        generatePexelsQueryInput,
                         generateSeoEnabledInput
                     ].forEach(function(el) {
                         if (el && el.parentElement) {

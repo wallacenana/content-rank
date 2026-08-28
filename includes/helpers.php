@@ -6270,6 +6270,7 @@ class Content_Rank_Generator_Helper
         ));
         $prompt = strtr($template, $replacements);
         $prompt .= "\n\nREGRAS DE TITULO E KEYWORD:\n";
+        $prompt .= "- Gere tambem pexels_tags com ate 4 termos visuais, concretos e especificos para a busca de imagens. Inclua nomes proprios e elementos visuais diretamente ligados ao assunto, nunca termos genericos como filme, cinema, pessoas ou casa. Essa informacao e interna do backend e nao deve ser solicitada ao usuario.\n";
         $prompt .= "- Em pautas de lista, o titulo pode indicar no maximo 10 itens, mas nunca assuma 10 por padrao. Escolha apenas a quantidade necessaria para a pauta e nunca preencha a lista ate o limite maximo sem motivo editorial.\n";
         $prompt .= "- Use no focus_keyword apenas os termos essenciais da pauta. Nao adicione 'melhor', 'melhores', 'best' ou superlativos que nao estejam no titulo ou na fonte.\n";
         $prompt .= "- A keyword e uma referencia semantica, nao uma frase que precise ser copiada literalmente. Reescreva-a quando necessario para uma frase natural, com artigos, preposicoes, genero e numero corretos em portugues.\n";
@@ -6659,6 +6660,16 @@ class Content_Rank_Generator_Helper
             }
         }
         $source_outline_titles = self::build_source_outline_titles_for_prompt($item, 0, $generator);
+        $tmdb_movie_titles = array();
+        if (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])) {
+            foreach ($item['tmdb_movies'] as $tmdb_movie) {
+                if (!is_array($tmdb_movie) || empty($tmdb_movie['title'])) {
+                    continue;
+                }
+                $tmdb_movie_titles[] = trim((string) $tmdb_movie['title'])
+                    . (!empty($tmdb_movie['year']) ? ' (' . sanitize_text_field((string) $tmdb_movie['year']) . ')' : '');
+            }
+        }
         $selected_tags = Content_Rank_Generator::get_generator_selected_tags($generator);
         $selected_tags_csv = !empty($selected_tags) ? implode(', ', $selected_tags) : '';
 
@@ -6704,6 +6715,10 @@ class Content_Rank_Generator_Helper
         );
         if ($source_outline_titles !== '') {
             $hidden_context[] = 'TITULOS DOS ITENS DA FONTE, JA LOCALIZADOS PELO TMDB: ' . $source_outline_titles;
+        }
+        if (!empty($tmdb_movie_titles)) {
+            $hidden_context[] = 'TITULOS CONFIRMADOS PELO TMDB PARA ESTE CONTEUDO: ' . implode('; ', $tmdb_movie_titles);
+            $hidden_context[] = 'Use estes titulos confirmados exatamente como fornecidos. Nao traduza, substitua, invente ou altere os nomes das obras.';
         }
         if ($generated_title_outline_count > 0) {
             $hidden_context[] = 'FIDELIDADE ABSOLUTA AO TITULO: o titulo promete exatamente ' . $generated_title_outline_count . ' itens. Desenvolva exatamente ' . $generated_title_outline_count . ' itens, nem um a mais. Nunca mencione, enumere, recomende ou crie no conteudo itens adicionais encontrados na fonte.';

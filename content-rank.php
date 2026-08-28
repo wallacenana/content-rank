@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.141
+Version: 1.9.142
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.141';
+        const VERSION = '1.9.142';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -1137,7 +1137,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 . "{\n"
                 . "  \"content_html\": \"\"\n"
                 . "}\n"
-                . "Não inclua title, slug, resumo, meta_descricao, tags, pexels_tags, focus_keyword ou qualquer outra chave.\n"
+                . "Não inclua title, slug, resumo, meta_descricao, tags, focus_keyword ou qualquer outra chave.\n"
                 . "Não escreva texto fora do JSON.\n"
                 . "Se não houver conteúdo, ainda assim retorne algum erro/formato inválido.";
         }
@@ -3678,14 +3678,13 @@ if (!class_exists('Content_Rank_Generator')) {
         public static function get_default_prompt_template()
         {
             return "Você é um editor SEO. Sua tarefa é gerar apenas os elementos editoriais do artigo em {{generation_language}}.\n"
-                . "Retorne somente JSON válido com estas chaves: title, slug, excerpt, tags, pexels_tags, meta_description, focus_keyword.\n"
+                . "Retorne somente JSON válido com estas chaves: title, slug, excerpt, tags, meta_description, focus_keyword.\n"
                 . "Não gere content_html nesta etapa. O corpo do artigo será criado em uma segunda chamada interna.\n"
                 . "Use a fonte apenas como base factual. Não invente fatos, não copie frases e não use Markdown.\n"
                 . "O título deve ser natural, fiel aos fatos e adequado ao idioma final.\n"
                 . "A slug deve ser curta, limpa e coerente com o título.\n"
                 . "A meta description deve ser objetiva e curta.\n"
                 . "As tags devem ser geradas pela IA com base no conteúdo e ter no máximo 4 termos.\n"
-                . "Pexels_tags deve ser um array com no máximo 4 termos visuais, concretos e específicos, sem palavras genéricas.\n"
                 . "Se houver {{selected_tags}}, use-as apenas como referência opcional, nao como limite.\n"
                 . "Se a lista estiver vazia, ainda assim retorne tags coerentes com o conteúdo.\n"
                 . "Regras:\n"
@@ -3701,14 +3700,13 @@ if (!class_exists('Content_Rank_Generator')) {
         {
             return "Você é um editor de conteúdo especializado em criar artigos originais a partir de planilhas e palavras-chave.\n"
                 . "Escreva o texto final em {{generation_language}}.\n"
-                . "Retorne somente JSON válido com estas chaves: title, slug, excerpt, tags, pexels_tags, meta_description, focus_keyword.\n"
+                . "Retorne somente JSON válido com estas chaves: title, slug, excerpt, tags, meta_description, focus_keyword.\n"
                 . "Não gere content_html nesta etapa. O corpo do artigo será criado em uma segunda chamada interna.\n"
                 . "Use a keyword, a URL de origem e os dados da linha apenas como base factual.\n"
                 . "O título deve ser natural, fiel aos fatos e adequado ao idioma final.\n"
                 . "A slug final deve permanecer exatamente igual a {{final_slug}}.\n"
                 . "A meta description deve ser curta e objetiva.\n"
                 . "As tags devem ser geradas pela IA com base no conteúdo e ter no máximo 4 termos.\n"
-                . "Pexels_tags deve ser um array com no máximo 4 termos visuais, concretos e específicos, sem palavras genéricas.\n"
                 . "Se houver título na planilha, use-o como base principal; se não houver, crie um título forte e natural a partir da keyword.\n"
                 . "Keyword: {{keyword}}\n"
                 . "Slug final: {{final_slug}}\n"
@@ -8564,6 +8562,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 $query = self::get_default_pexels_query();
             }
 
+            // The AI supplies these terms in the internal SEO response; the user does not configure them.
             $pexels_tags = array();
             if (!empty($article['pexels_tags']) && is_array($article['pexels_tags'])) {
                 $pexels_tags = $article['pexels_tags'];
@@ -8571,10 +8570,6 @@ if (!class_exists('Content_Rank_Generator')) {
                 $pexels_tags = $article['tags'];
             }
             $pexels_tags = self::filter_pexels_tags(array_values(array_unique(array_filter(array_map('sanitize_text_field', $pexels_tags)))), 4);
-            $selected_tags = self::get_generator_selected_tags($generator);
-            if (empty($pexels_tags) && !empty($selected_tags)) {
-                $pexels_tags = self::filter_pexels_tags($selected_tags, 4);
-            }
             if (empty($pexels_tags)) {
                 $fallback_terms = array();
                 if (!empty($article['focus_keyword'])) {
@@ -8582,6 +8577,9 @@ if (!class_exists('Content_Rank_Generator')) {
                 }
                 if (!empty($article['title'])) {
                     $fallback_terms[] = $article['title'];
+                }
+                if (!empty($item['source_title'])) {
+                    $fallback_terms[] = $item['source_title'];
                 }
                 $fallback_terms = self::filter_pexels_tags($fallback_terms, 4);
                 if (!empty($fallback_terms)) {
