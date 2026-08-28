@@ -374,7 +374,13 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
                 $item['outline_target_h2_count'] = $title_outline_count;
             }
 
-            $use_source_video = !empty($generator['source_video_enabled']);
+            $content_media_source = method_exists('Content_Rank_Generator', 'normalize_content_media_source')
+                ? Content_Rank_Generator::normalize_content_media_source(
+                    isset($generator['content_media_source']) ? $generator['content_media_source'] : '',
+                    isset($generator['source_content_images_enabled']) ? $generator['source_content_images_enabled'] : null
+                )
+                : 'source';
+            $use_source_video = !empty($generator['source_video_enabled']) && $content_media_source === 'source';
             $source_video_embed_html = '';
             $source_video_url = '';
             $source_video_sections = !empty($item['source_page_video_sections']) && is_array($item['source_page_video_sections'])
@@ -387,22 +393,29 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
                     !empty($generator['content_selector']) ? $generator['content_selector'] : ''
                 );
             }
-            $has_section_videos = false;
-            if ($use_source_video) {
-                foreach ($source_video_sections as $source_video_section) {
-                    if (is_array($source_video_section) && !empty($source_video_section['videos']) && is_array($source_video_section['videos'])) {
-                        $has_section_videos = true;
-                        break;
-                    }
-                }
-            }
             $content_image_size = Content_Rank_Generator::get_content_image_size_for_generator($generator);
             $source_type = !empty($generator['source_type']) ? sanitize_key((string) $generator['source_type']) : 'rss';
             $is_keyword_list = Content_Rank_Generator::source_type_uses_keyword_list($source_type);
             $is_keyword_list_url_reference = Content_Rank_Generator::generator_uses_keyword_list_url_reference_mode($generator);
             $treat_like_rss = !$is_keyword_list || $is_keyword_list_url_reference;
             if ($treat_like_rss && $use_source_video) {
-                if (!$has_section_videos) {
+                // Regeneration follows the same article-level video rule as first generation.
+                foreach ($source_video_sections as $source_video_section) {
+                    if (!is_array($source_video_section) || empty($source_video_section['videos']) || !is_array($source_video_section['videos'])) {
+                        continue;
+                    }
+                    $first_source_video = reset($source_video_section['videos']);
+                    if (is_array($first_source_video)) {
+                        $source_video_embed_html = !empty($first_source_video['video_embed_html'])
+                            ? trim((string) $first_source_video['video_embed_html'])
+                            : '';
+                        $source_video_url = !empty($first_source_video['video_url'])
+                            ? esc_url_raw(trim((string) $first_source_video['video_url']))
+                            : '';
+                    }
+                    break;
+                }
+                if ($source_video_embed_html === '' && $source_video_url === '') {
                     $source_video_embed_html = !empty($item['source_video_embed_html']) ? trim((string) $item['source_video_embed_html']) : '';
                     $source_video_url = !empty($item['source_video_url']) ? esc_url_raw(trim((string) $item['source_video_url'])) : '';
                 }
@@ -426,16 +439,12 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
                 $source_video_url
             );
 
-            if ($has_section_videos) {
-                $article['content_html'] = Content_Rank_Generator_Helper::inject_source_video_sections_into_content(
-                    $article['content_html'],
-                    $source_video_sections
-                );
-            }
-
             $article['content_html'] = Content_Rank_Generator_Helper::ensure_content_starts_with_paragraph_html(
                 $article['content_html']
             );
+            if ($content_media_source === 'none') {
+                $article['content_html'] = (string) preg_replace('#<figure\b[^>]*>.*?</figure>|<iframe\b[^>]*>.*?</iframe>|<video\b[^>]*>.*?</video>|<audio\b[^>]*>.*?</audio>|<img\b[^>]*>#is', '', (string) $article['content_html']);
+            }
 
             $content_html = isset($article['content_html']) ? (string) $article['content_html'] : '';
 
@@ -446,7 +455,7 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
             if ($use_interval_content_images) {
                 $content_media_sections = Content_Rank_Generator::resolve_content_image_sections_for_generation($item, $generator, $article);
             }
-            if (!empty($content_media_sections) && is_array($content_media_sections)) {
+            if ($content_media_source === 'source' && !empty($content_media_sections) && is_array($content_media_sections)) {
                 $content_image_size = Content_Rank_Generator::get_content_image_size_for_generator($generator);
                 $existing_image_map = array();
                 if ($content_html !== '') {

@@ -713,9 +713,9 @@ class Content_Rank_Generator_Admin
                                 </div>
                                 <div data-tmdb-thumbnail-field class="hidden">
                                     <div class="mb-3">
-                                        <label class="content-rank-switch"><input type="checkbox" name="tmdb_thumbnail_auto_color" value="1" /><span class="content-rank-switch__track" aria-hidden="true"></span><span class="content-rank-switch__state" data-switch-state>Não</span></label>
+                                        <label class="content-rank-switch"><input type="checkbox" name="tmdb_thumbnail_auto_color" value="1" /><span class="content-rank-switch__track" aria-hidden="true"></span><span class="content-rank-switch__state">Cor automática</span></label>
                                     </div>
-                                    <label class="mb-1 block text-sm font-medium text-slate-700">Cor da faixa inferior</label>
+                                    <label data-tmdb-color-label class="mb-1 block text-sm font-medium text-slate-700">Cor da faixa inferior</label>
                                     <div data-tmdb-color-picker><input type="color" name="tmdb_thumbnail_bg_color" value="#c91414" class="h-11 w-20 cursor-pointer rounded-lg border border-slate-300 bg-white p-1" /></div>
                                     <label class="mt-3 mb-1 block text-sm font-medium text-slate-700">Estilo da thumbnail</label>
                                     <select name="tmdb_thumbnail_layout" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
@@ -731,11 +731,25 @@ class Content_Rank_Generator_Admin
                                         var tmdbAutoColor = document.querySelector('input[name="tmdb_thumbnail_auto_color"]');
                                         var tmdbColorPicker = document.querySelector('[data-tmdb-color-picker]');
                                          if (tmdbAutoColor && tmdbColorPicker) {
+                                             var tmdbColorLabel = document.querySelector('[data-tmdb-color-label]');
                                              var syncTmdbColorPicker = function () {
                                                  tmdbColorPicker.style.display = tmdbAutoColor.checked ? 'none' : '';
+                                                 if (tmdbColorLabel) tmdbColorLabel.style.display = tmdbAutoColor.checked ? 'none' : '';
                                              };
                                              tmdbAutoColor.addEventListener('change', syncTmdbColorPicker);
                                              syncTmdbColorPicker();
+                                         }
+                                         var contentMediaSource = document.querySelector('select[name="content_media_source"]');
+                                         var sourceImageSelector = document.querySelector('[data-rss-image-selector-field]');
+                                         var sourceVideoSelector = document.querySelector('[data-rss-video-selector-field]');
+                                         if (contentMediaSource && (sourceImageSelector || sourceVideoSelector)) {
+                                             var syncSourceImageSelector = function () {
+                                                 var visible = contentMediaSource.value === 'source' ? '' : 'none';
+                                                 if (sourceImageSelector) sourceImageSelector.style.display = visible;
+                                                 if (sourceVideoSelector) sourceVideoSelector.style.display = visible;
+                                             };
+                                             contentMediaSource.addEventListener('change', syncSourceImageSelector);
+                                             syncSourceImageSelector();
                                          }
                                          var tmdbThumbnailField = document.querySelector('[data-tmdb-thumbnail-field]');
                                          if (tmdbThumbnailField) {
@@ -775,10 +789,11 @@ class Content_Rank_Generator_Admin
                                 </div>
                                 <div class="grid gap-4 md:col-span-2 md:grid-cols-2" data-rss-source-media-toggle-field>
                                     <div>
-                                        <label class="mb-1 block text-sm font-medium text-slate-700">Usar imagens da fonte</label>
-                                        <select name="source_content_images_enabled" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                                            <option value="1" selected>Sim</option>
-                                            <option value="0">Não</option>
+                                        <label class="mb-1 block text-sm font-medium text-slate-700">Mídia dentro do conteúdo</label>
+                                        <select name="content_media_source" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                            <option value="none">Sem mídia</option>
+                                            <option value="source">Mídia da fonte</option>
+                                            <option value="tmdb">TMDB</option>
                                         </select>
                                     </div>
                                     <div>
@@ -1020,6 +1035,7 @@ class Content_Rank_Generator_Admin
                                         'pexels_query' => Content_Rank_Generator::get_default_pexels_query(),
                                         'source_video_enabled' => '0',
                                         'source_content_images_enabled' => '1',
+                                        'content_media_source' => 'source',
                                         'source_content_links_enabled' => '1',
                                         'video_selector_class' => '',
                                         'image_selector_class' => '',
@@ -1888,6 +1904,7 @@ class Content_Rank_Generator_Admin
                         setValue('tmdb_title_translation_enabled', defaults.tmdb_title_translation_enabled);
                         setValue('pexels_query', defaults.pexels_query);
                         setValue('source_video_enabled', defaults.source_video_enabled);
+                        setValue('content_media_source', defaults.content_media_source || 'source');
                         setValue('video_selector_class', defaults.video_selector_class);
                         setValue('content_selector', defaults.content_selector);
                         setValue('content_image_size', defaults.content_image_size);
@@ -1952,6 +1969,7 @@ class Content_Rank_Generator_Admin
                         setValue('tmdb_title_translation_enabled', typeof generator.tmdb_title_translation_enabled !== 'undefined' ? String(generator.tmdb_title_translation_enabled) : defaults.tmdb_title_translation_enabled);
                         setValue('pexels_query', generator.pexels_query || defaults.pexels_query);
                         setValue('source_video_enabled', String(typeof generator.source_video_enabled !== 'undefined' ? generator.source_video_enabled : defaults.source_video_enabled));
+                        setValue('content_media_source', generator.content_media_source || defaults.content_media_source || 'source');
                         setValue('video_selector_class', generator.video_selector_class || defaults.video_selector_class);
                         setValue('content_selector', generator.content_selector || defaults.content_selector);
                         setValue('content_image_size', generator.content_image_size || defaults.content_image_size);
