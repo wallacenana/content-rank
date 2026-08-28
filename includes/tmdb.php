@@ -337,6 +337,12 @@ final class Content_Rank_TMDB
         if (!in_array($layout, array('standard', 'skew', 'center_focus', 'spotlight', 'blur_background'), true) || ($is_single && !in_array($layout, array('spotlight', 'blur_background'), true))) {
             $layout = 'standard';
         }
+        // A single title still needs to look like a generated thumbnail,
+        // rather than a raw TMDB backdrop. Keep the horizontal canvas and
+        // present the poster over the treated background.
+        if ($is_single && $layout === 'standard') {
+            $layout = 'blur_background';
+        }
         $canvas = imagecreatetruecolor($width, $height);
         $rgb = self::hex_to_rgb($bg_color);
         if (strtolower(trim((string) $bg_color)) === 'auto' && !empty($movies[0])) {
@@ -544,6 +550,13 @@ final class Content_Rank_TMDB
             'error' => 0,
             'size' => filesize($tmp),
         ), intval($post_id), 'Thumbnail composta TMDB - ' . $term);
+        if (!is_wp_error($attachment_id) && intval($attachment_id) > 0) {
+            update_post_meta(
+                intval($attachment_id),
+                '_wp_attachment_image_alt',
+                sanitize_text_field((string) $term)
+            );
+        }
         // media_handle_sideload normalmente move o arquivo, mas nao devemos
         // deixar o temporario acumulando se o comportamento mudar ou falhar.
         if (!empty($tmp) && file_exists($tmp)) {
