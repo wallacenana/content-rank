@@ -401,13 +401,17 @@ class Content_Rank_Generator_Helper
         $existing_image_map = is_array($existing_image_map) ? $existing_image_map : array();
         $output = array();
         $h2_index = -1;
+        $first_content_block_is_h2 = !empty($blocks[0])
+            && is_array($blocks[0])
+            && ($blocks[0]['blockName'] ?? '') === 'core/heading'
+            && intval($blocks[0]['attrs']['level'] ?? 2) === 2;
         foreach ($blocks as $block) {
             $is_h2 = is_array($block) && ($block['blockName'] ?? '') === 'core/heading' && intval($block['attrs']['level'] ?? 2) === 2;
             if ($is_h2) {
                 $h2_index++;
             }
             $output[] = $block;
-            if (!$is_h2 || empty($sections[$h2_index])) {
+            if (!$is_h2 || empty($sections[$h2_index]) || ($first_content_block_is_h2 && $h2_index === 0)) {
                 continue;
             }
             $section = $sections[$h2_index];
@@ -4446,6 +4450,10 @@ class Content_Rank_Generator_Helper
         $section_index = -1;
         $pending_link_html = '';
         $inserted_any = false;
+        $first_content_block_is_h2 = !empty($blocks[0])
+            && is_array($blocks[0])
+            && ($blocks[0]['blockName'] ?? '') === 'core/heading'
+            && intval($blocks[0]['attrs']['level'] ?? 2) === 2;
 
         foreach ($blocks as $block_index => $block) {
             $block_name = is_array($block) && !empty($block['blockName']) ? (string) $block['blockName'] : '';
@@ -4480,7 +4488,7 @@ class Content_Rank_Generator_Helper
                 if ($matched_section !== null) {
                     $section_has_markup_image = self::outline_section_contains_image_markup($blocks, $block_index);
                     $section_accepts_image = $maximum_image_count <= 0 || $matched_index < $maximum_image_count;
-                    if ($use_images && $section_accepts_image && $is_heading_level_2 && !$section_has_markup_image && !self::outline_section_has_existing_image($matched_section, $existing_image_map, $matched_index)) {
+                    if ($use_images && $section_accepts_image && $is_heading_level_2 && !($first_content_block_is_h2 && $section_index === 0) && !$section_has_markup_image && !self::outline_section_has_existing_image($matched_section, $existing_image_map, $matched_index)) {
                         $section_image_html = self::build_outline_section_image_html($matched_section, $post_id, $image_size, $existing_image_map, $matched_index, $fallback_image_candidates, array_keys($excluded_lookup));
                         if ($section_image_html !== '') {
                             $result_blocks[] = array(
@@ -6658,6 +6666,24 @@ class Content_Rank_Generator_Helper
                 $source_site_name = preg_replace('/^www\./i', '', (string) $parts['host']);
             }
         }
+        $source_site_brand = '';
+        foreach (array('source_page_content_html', 'source_page_html', 'content_html') as $site_name_html_key) {
+            if (empty($item[$site_name_html_key])) {
+                continue;
+            }
+            $site_name_html = (string) $item[$site_name_html_key];
+            if (preg_match('/<meta[^>]+(?:property|name)=["\'](?:og:site_name|application-name)["\'][^>]+content=["\']([^"\']+)["\']/iu', $site_name_html, $site_name_matches)) {
+                $source_site_brand = trim(wp_strip_all_tags(html_entity_decode((string) $site_name_matches[1], ENT_QUOTES, 'UTF-8')));
+            } elseif (preg_match('/<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\'](?:og:site_name|application-name)["\']/iu', $site_name_html, $site_name_matches)) {
+                $source_site_brand = trim(wp_strip_all_tags(html_entity_decode((string) $site_name_matches[1], ENT_QUOTES, 'UTF-8')));
+            }
+            if ($source_site_brand !== '') {
+                break;
+            }
+        }
+        if ($source_site_brand === '') {
+            $source_site_brand = $source_site_name;
+        }
         $source_page_html = '';
         foreach (array('source_page_content_html', 'source_page_html', 'content_html') as $candidate_key) {
             if (!empty($item[$candidate_key])) {
@@ -6704,6 +6730,7 @@ class Content_Rank_Generator_Helper
             'Titulo gerado: {{generated_title}}',
             'kw: {{generated_focus_keyword}}',
             'Site de referencia: {{source_site_name}}',
+            'Nome do site de referencia: {{source_site_brand}}',
             'Slug final: {{generated_slug}}',
             'Modelo de prompt: {{prompt_model_name}}',
             'Idioma final: {{generation_language}}',
@@ -6775,6 +6802,7 @@ class Content_Rank_Generator_Helper
             '{{keyword}}' => isset($item['keyword']) ? $item['keyword'] : '',
             '{{source_url}}' => $source_url,
             '{{source_site_name}}' => $source_site_name,
+            '{{source_site_brand}}' => $source_site_brand,
             '{{source_permalink}}' => $item['permalink'],
             '{{source_page_title}}' => isset($item['source_page_title']) ? $item['source_page_title'] : '',
             '{{source_page_excerpt}}' => isset($item['source_page_excerpt']) ? $item['source_page_excerpt'] : '',
