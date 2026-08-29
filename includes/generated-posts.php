@@ -897,6 +897,21 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
                                         $post_id = intval($post->ID);
                                         $generator_id_row = intval(get_post_meta($post_id, '_content_rank_generator_id', true));
                                         $generator_name = self::get_generator_name($generator_id_row);
+                                        $generation_prompt_model_key = (string) get_post_meta($post_id, '_content_rank_generation_prompt_model_key', true);
+                                        if ($generation_prompt_model_key === '') {
+                                            $generation_prompt_model_key = (string) get_post_meta($post_id, '_content_rank_outline_content_type', true);
+                                        }
+                                        if ($generation_prompt_model_key === '' && $generator_id_row > 0) {
+                                            $generator_row = Content_Rank_Generator::get_generator($generator_id_row);
+                                            $generation_prompt_model_key = !empty($generator_row['prompt_model_key']) ? (string) $generator_row['prompt_model_key'] : '';
+                                        }
+                                        $generation_prompt_model_key = Content_Rank_Generator::normalize_prompt_model_key($generation_prompt_model_key);
+                                        $generation_prompt_model = $generation_prompt_model_key !== ''
+                                            ? Content_Rank_Generator::get_prompt_model($generation_prompt_model_key)
+                                            : array();
+                                        $generation_prompt_model_label = !empty($generation_prompt_model['name'])
+                                            ? (string) $generation_prompt_model['name']
+                                            : ($generation_prompt_model_key !== '' ? $generation_prompt_model_key : '-');
                                         $source_type = (string) get_post_meta($post_id, '_content_rank_source_type', true);
                                         $source_title = (string) get_post_meta($post_id, '_content_rank_source_title', true);
                                         $source_keyword = (string) get_post_meta($post_id, '_content_rank_source_keyword', true);
@@ -923,6 +938,7 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
                                             <td class="px-6 py-4">
                                                 <div class="text-sm font-medium leading-5 text-slate-700"><?php echo esc_html($generator_name !== '' ? $generator_name : ('Gerador #' . $generator_id_row)); ?></div>
                                                 <div class="mt-1 text-[11px] text-slate-500"><?php echo esc_html($source_type !== '' ? $source_type : '-'); ?></div>
+                                                <div class="mt-1 text-[11px] text-slate-500">Modelo de prompt: <?php echo esc_html($generation_prompt_model_label); ?></div>
                                             </td>
                                             <td class="px-6 py-4">
                                                 <?php if ($source_external_link !== ''): ?>

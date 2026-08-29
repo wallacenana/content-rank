@@ -642,6 +642,18 @@ class Content_Rank_Generator_Helper
             return '';
         }
 
+        // Remove headings accidentally generated before the introductory prose.
+        $content = (string) preg_replace(
+            '~^\s*(?:<!--\s*wp:heading\b[^>]*-->\s*)?<h[1-6]\b[^>]*>.*?</h[1-6]>\s*(?:<!--\s*/wp:heading\s*-->\s*)?~is',
+            '',
+            $content,
+            1
+        );
+        $content = trim($content);
+        if ($content === '') {
+            return '';
+        }
+
         if (strpos($content, '<!-- wp:') !== false && function_exists('parse_blocks') && function_exists('serialize_blocks')) {
             $blocks = parse_blocks($content);
             if (empty($blocks)) {
@@ -676,16 +688,8 @@ class Content_Rank_Generator_Helper
                 if (empty($blocks[$index]) || empty($blocks[$index]['blockName']) || $blocks[$index]['blockName'] !== 'core/heading') {
                     continue;
                 }
-
-                $level = 2;
-                if (isset($blocks[$index]['attrs']['level'])) {
-                    $level = intval($blocks[$index]['attrs']['level']);
-                }
-                if ($level >= 1 && $level <= 6) {
-                    unset($blocks[$index]);
-                }
+                unset($blocks[$index]);
             }
-
             $blocks = array_values($blocks);
 
             return trim(serialize_blocks($blocks));
@@ -743,6 +747,7 @@ class Content_Rank_Generator_Helper
             if ($child instanceof DOMElement && in_array(strtolower((string) $child->nodeName), array('h1', 'h2', 'h3', 'h4', 'h5', 'h6'), true)) {
                 $root->removeChild($child);
             }
+
         }
 
         $output = '';

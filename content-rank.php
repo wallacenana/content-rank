@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.145
+Version: 1.9.146
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.145';
+        const VERSION = '1.9.146';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -225,6 +225,7 @@ if (!class_exists('Content_Rank_Generator')) {
             add_action('wp_ajax_content_rank_process_staged_generation', array($this, 'handle_async_staged_generation'));
             add_action('wp_ajax_nopriv_content_rank_process_staged_generation', array($this, 'handle_async_staged_generation'));
             add_action('wp_ajax_content_rank_get_staged_generation_status', array($this, 'handle_staged_generation_status'));
+            add_action('wp_ajax_content_rank_cancel_staged_generation', array($this, 'handle_cancel_staged_generation'));
             add_filter('cron_schedules', array($this, 'add_cron_schedule'));
             add_filter('pre_reschedule_event', array($this, 'avoid_duplicate_cron_reschedule'), 10, 3);
             add_action('rest_api_init', array($this, 'register_rest_routes'));
@@ -4065,6 +4066,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 $body['prompt_cache_retention'] = $prompt_cache_retention;
             }
 
+            // error_log("prompt: " . print_r($prompt, true));
             $response = wp_remote_post($use_responses_api ? 'https://api.openai.com/v1/responses' : 'https://api.openai.com/v1/chat/completions', array(
                 'timeout' => 240,
                 'headers' => array(
@@ -4116,6 +4118,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 $text = trim((string) $data['choices'][0]['message']['content']);
             }
 
+            // error_log('[Content Rank][openai-response] stage=' . (isset($context['stage']) ? sanitize_key((string) $context['stage']) : 'unknown') . ' response=' . $text);
             return self::parse_ai_json($text, $context);
         }
 
@@ -8548,6 +8551,26 @@ if (!class_exists('Content_Rank_Generator')) {
                 update_post_meta($post_id, '_content_rank_source_timestamp', sanitize_text_field($item['date']));
             }
             update_post_meta($post_id, '_content_rank_generator_id', intval($generator['id']));
+            if (!empty($generator['model'])) {
+                update_post_meta($post_id, '_content_rank_generation_model', sanitize_text_field((string) $generator['model']));
+            }
+            if (!empty($generator['prompt_model_key'])) {
+                update_post_meta($post_id, '_content_rank_generation_prompt_model_key', sanitize_key((string) $generator['prompt_model_key']));
+            }
+            $generation_prompt_model_key = '';
+            if (!empty($article['outline_context']) && is_array($article['outline_context'])) {
+                if (!empty($article['outline_context']['recommended_prompt_model_key'])) {
+                    $generation_prompt_model_key = self::normalize_prompt_model_key((string) $article['outline_context']['recommended_prompt_model_key']);
+                } elseif (!empty($article['outline_context']['content_type'])) {
+                    $generation_prompt_model_key = self::get_prompt_model_key_for_content_type((string) $article['outline_context']['content_type'], $article['outline_context'], $generator);
+                }
+            }
+            if ($generation_prompt_model_key === '' && !empty($generator['prompt_model_key'])) {
+                $generation_prompt_model_key = self::normalize_prompt_model_key((string) $generator['prompt_model_key']);
+            }
+            if ($generation_prompt_model_key !== '') {
+                update_post_meta($post_id, '_content_rank_generation_prompt_model_key', $generation_prompt_model_key);
+            }
 
             self::sync_seo_meta($post_id, $generator, $article);
 
@@ -9030,6 +9053,28 @@ if (!class_exists('Content_Rank_Generator')) {
             wp_send_json_success(array('items' => $items));
         }
 
+        public function handle_cancel_staged_generation()
+        {
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error(array('message' => 'Acesso negado.'), 403);
+            }
+
+            check_ajax_referer('content_rank_cancel_staged_generation', 'nonce');
+            $post_id = isset($_POST['post_id']) ? absint($_POST['post_id']) : 0;
+            if ($post_id <= 0) {
+                wp_send_json_error(array('message' => 'Post inválido.'), 400);
+            }
+
+            delete_post_meta($post_id, self::GENERATION_PIPELINE_META);
+            delete_transient('content_rank_staged_generation_token_' . $post_id);
+            update_post_meta($post_id, '_content_rank_generation_pipeline_status', 'cancelled');
+            if (function_exists('wp_clear_scheduled_hook')) {
+                wp_clear_scheduled_hook(self::STAGED_GENERATION_HOOK, array($post_id));
+            }
+
+            wp_send_json_success(array('post_id' => $post_id, 'status' => 'cancelled'));
+        }
+
         public function render_staged_generation_toast()
         {
             if (!current_user_can('manage_options')) {
@@ -9065,6 +9110,7 @@ if (!class_exists('Content_Rank_Generator')) {
 
             $status_url = admin_url('admin-ajax.php');
             $nonce = wp_create_nonce('content_rank_staged_generation_status');
+            $cancel_nonce = wp_create_nonce('content_rank_cancel_staged_generation');
 ?>
             <div id="content-rank-staged-generation-toast" class="content-rank-staged-generation-toast" role="status" aria-live="polite" style="<?php echo empty($initial_items) ? 'display:none;' : ''; ?>">
                 <button type="button" class="content-rank-staged-generation-toast__close" aria-label="Fechar">&times;</button>
@@ -9079,6 +9125,7 @@ if (!class_exists('Content_Rank_Generator')) {
                     <span data-stage="content">Conteúdo</span>
                 </div>
                 <a class="content-rank-staged-generation-toast__link" href="#" target="_blank" rel="noopener">Abrir post</a>
+                <button type="button" class="content-rank-staged-generation-toast__cancel">Cancelar geração</button>
             </div>
             <style>
                 .content-rank-staged-generation-toast {
@@ -9176,6 +9223,21 @@ if (!class_exists('Content_Rank_Generator')) {
                     text-decoration: none
                 }
 
+                .content-rank-staged-generation-toast__cancel {
+                    display: block;
+                    margin-top: 10px;
+                    padding: 0;
+                    border: 0;
+                    background: transparent;
+                    color: #dc2626;
+                    cursor: pointer;
+                    font-size: 12px
+                }
+
+                .content-rank-staged-generation-toast__cancel[hidden] {
+                    display: none !important
+                }
+
                 .content-rank-staged-generation-toast.is-success {
                     border-color: #86efac;
                     background: #f0fdf4
@@ -9223,6 +9285,7 @@ if (!class_exists('Content_Rank_Generator')) {
                     var toastKey = '';
                     var toastStoragePrefix = 'content_rank_generation_toast_closed_';
                     var closeButton = toast.querySelector('.content-rank-staged-generation-toast__close');
+                    var cancelButton = toast.querySelector('.content-rank-staged-generation-toast__cancel');
                     var titleNode = toast.querySelector('.content-rank-staged-generation-toast__title');
                     var postNode = toast.querySelector('.content-rank-staged-generation-toast__post');
                     var stageNode = toast.querySelector('.content-rank-staged-generation-toast__stage');
@@ -9258,6 +9321,11 @@ if (!class_exists('Content_Rank_Generator')) {
                     function render(item) {
                         var stageIndex = stageOrder.indexOf(item.stage);
                         var status = item.status || 'processing';
+                        toast.classList.remove('is-cancelled');
+                        postNode.style.display = 'block';
+                        toast.querySelector('.content-rank-staged-generation-toast__track').style.display = 'block';
+                        toast.querySelector('.content-rank-staged-generation-toast__steps').style.display = 'flex';
+                        cancelButton.hidden = status !== 'processing';
                         toast.classList.toggle('is-success', status === 'completed');
                         toast.classList.toggle('is-error', status === 'failed');
                         titleNode.textContent = status === 'completed' ? 'Geração concluída' : (status === 'failed' ? 'Geração interrompida' : 'Geração em andamento');
@@ -9404,6 +9472,42 @@ if (!class_exists('Content_Rank_Generator')) {
                         window.clearInterval(timer);
                         timer = null;
                         toast.style.display = 'none';
+                    });
+                    cancelButton.addEventListener('click', function() {
+                        if (!postIds.length || cancelButton.disabled) return;
+                        cancelButton.disabled = true;
+                        cancelButton.textContent = 'Cancelando...';
+                        var requests = postIds.map(function(id) {
+                            var body = new URLSearchParams();
+                            body.append('action', 'content_rank_cancel_staged_generation');
+                            body.append('nonce', <?php echo wp_json_encode($cancel_nonce); ?>);
+                            body.append('post_id', id);
+                            return fetch(<?php echo wp_json_encode($status_url); ?>, {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+                                body: body.toString()
+                            });
+                        });
+                        Promise.all(requests).then(function() {
+                            window.clearInterval(timer);
+                            timer = null;
+                            toast.classList.remove('is-success', 'is-error');
+                            toast.querySelector('.content-rank-staged-generation-toast__title').textContent = 'Geração cancelada';
+                            toast.querySelector('.content-rank-staged-generation-toast__stage').textContent = 'O processamento foi interrompido.';
+                            cancelButton.hidden = true;
+                            toast.classList.add('is-cancelled');
+                            postNode.style.display = 'none';
+                            toast.querySelector('.content-rank-staged-generation-toast__track').style.display = 'none';
+                            toast.querySelector('.content-rank-staged-generation-toast__steps').style.display = 'none';
+                            linkNode.style.display = 'none';
+                            window.setTimeout(function() {
+                                if (!dismissed) toast.style.display = 'none';
+                            }, 2500);
+                        }).catch(function() {
+                            cancelButton.disabled = false;
+                            cancelButton.textContent = 'Cancelar geração';
+                        });
                     });
                     setToastContext(postIds, false);
                     if (items.length && !dismissed) {
@@ -9606,6 +9710,9 @@ if (!class_exists('Content_Rank_Generator')) {
             self::$staged_generation_request_processed = true;
 
             $state = get_post_meta($post_id, self::GENERATION_PIPELINE_META, true);
+            if ((string) get_post_meta($post_id, '_content_rank_generation_pipeline_status', true) === 'cancelled') {
+                return;
+            }
             $has_virtual_generator = is_array($state) && !empty($state['generator']) && is_array($state['generator']);
             if (!is_array($state) || empty($state['stage']) || (empty($state['generator_id']) && !$has_virtual_generator)) {
                 return;
@@ -9702,6 +9809,9 @@ if (!class_exists('Content_Rank_Generator')) {
                         $seo_article['outline_block_quantities'] = !empty($outline_context['outline_block_quantities']) ? $outline_context['outline_block_quantities'] : array();
                     }
 
+                    if ((string) get_post_meta($post_id, '_content_rank_generation_pipeline_status', true) === 'cancelled') {
+                        return;
+                    }
                     $result = self::create_post_from_generator_item($generator, $item, $seo_article, $post_id);
                     if (is_wp_error($result)) {
                         throw new RuntimeException($result->get_error_message());
@@ -9722,6 +9832,9 @@ if (!class_exists('Content_Rank_Generator')) {
                     throw new RuntimeException('Etapa de geracao desconhecida.');
                 }
 
+                if ((string) get_post_meta($post_id, '_content_rank_generation_pipeline_status', true) === 'cancelled') {
+                    return;
+                }
                 update_post_meta($post_id, self::GENERATION_PIPELINE_META, $state);
                 update_post_meta($post_id, '_content_rank_generation_pipeline_status', sanitize_key((string) $state['stage']));
                 self::insert_run_log($generator['id'], 'info', 'Etapa da pipeline concluida', array(
