@@ -7041,9 +7041,6 @@ class Content_Rank_Generator_Helper
         $content_article['thumbnail_titles'] = !empty($content_article['thumbnail_titles']) && is_array($content_article['thumbnail_titles'])
             ? array_values(array_filter(array_map('sanitize_text_field', $content_article['thumbnail_titles'])))
             : array();
-        error_log('[Content Rank][content-stage] titles_found ' . wp_json_encode($content_article['titles_found'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-        error_log('[Content Rank][content-stage] thumbnail_titles ' . wp_json_encode($content_article['thumbnail_titles'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-
         return $content_article;
     }
 

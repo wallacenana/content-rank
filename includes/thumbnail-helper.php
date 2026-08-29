@@ -32,10 +32,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
             );
             $existing_thumbnail_id = intval(get_post_thumbnail_id($post_id));
             if ($reuse_existing && $existing_thumbnail_id > 0 && wp_attachment_is_image($existing_thumbnail_id)) {
-                error_log('[Content Rank][thumbnail] reused-existing ' . wp_json_encode(array(
-                    'post_id' => $post_id,
-                    'attachment_id' => $existing_thumbnail_id,
-                ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                 return $existing_thumbnail_id;
             }
             $title = !empty($article['title'])
@@ -48,11 +44,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 'generator_image_source_mode' => isset($generator['image_source_mode']) ? (string) $generator['image_source_mode'] : '',
                 'titles_found' => !empty($article['titles_found']) && is_array($article['titles_found']) ? array_values($article['titles_found']) : array(),
             ));
-            error_log('[Content Rank][thumbnail] start ' . wp_json_encode(array(
-                'post_id' => $post_id,
-                'mode' => $image_source_mode,
-                'titles_found' => !empty($article['titles_found']) && is_array($article['titles_found']) ? array_values($article['titles_found']) : array(),
-            ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
             if ($image_source_mode === 'tmdb_composite') {
                 if (!class_exists('Content_Rank_TMDB')) {
@@ -91,13 +82,6 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                         ) : array();
                     }, $tmdb_movies),
                 ));
-                error_log('[Content Rank][thumbnail] tmdb-candidates ' . wp_json_encode(array(
-                    'post_id' => $post_id,
-                    'source_titles' => '',
-                    'titles_found' => $titles_found,
-                    'thumbnail_titles' => $thumbnail_titles,
-                    'movies' => $tmdb_movies,
-                ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                 $has_posters = false;
                 foreach ($tmdb_movies as $tmdb_movie) {
                     if (is_array($tmdb_movie) && !empty($tmdb_movie['poster_url'])) {

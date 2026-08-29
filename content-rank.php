@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.144
+Version: 1.9.145
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.144';
+        const VERSION = '1.9.145';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -4065,7 +4065,6 @@ if (!class_exists('Content_Rank_Generator')) {
                 $body['prompt_cache_retention'] = $prompt_cache_retention;
             }
 
-            error_log("prompt: " . $prompt);
             $response = wp_remote_post($use_responses_api ? 'https://api.openai.com/v1/responses' : 'https://api.openai.com/v1/chat/completions', array(
                 'timeout' => 240,
                 'headers' => array(
@@ -4117,7 +4116,6 @@ if (!class_exists('Content_Rank_Generator')) {
                 $text = trim((string) $data['choices'][0]['message']['content']);
             }
 
-            error_log("response: " . print_r($text, true));
             return self::parse_ai_json($text, $context);
         }
 
@@ -8694,13 +8692,6 @@ if (!class_exists('Content_Rank_Generator')) {
                 return false;
             }
 
-            error_log('[Content Rank][thumbnail] pexels-query ' . wp_json_encode(array(
-                'post_id' => intval($post_id),
-                'query' => $query,
-                'title' => !empty($article['title']) ? (string) $article['title'] : '',
-                'pexels_tags' => !empty($article['pexels_tags']) && is_array($article['pexels_tags']) ? $article['pexels_tags'] : array(),
-            ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-
             self::log_image_debug('pexels_start', array(
                 'post_id' => intval($post_id),
                 'query' => $query,
@@ -9691,11 +9682,6 @@ if (!class_exists('Content_Rank_Generator')) {
                     $seo_article['thumbnail_titles'] = !empty($content_article['thumbnail_titles']) && is_array($content_article['thumbnail_titles'])
                         ? array_values(array_filter(array_map('sanitize_text_field', $content_article['thumbnail_titles'])))
                         : array();
-                    error_log('[Content Rank][pipeline] content-result ' . wp_json_encode(array(
-                        'post_id' => $post_id,
-                        'titles_found' => $seo_article['titles_found'],
-                        'thumbnail_titles' => $seo_article['thumbnail_titles'],
-                    ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                     $review_products = !empty($item['review_products']) && is_array($item['review_products'])
                         ? $item['review_products']
                         : json_decode((string) get_post_meta($post_id, '_content_rank_review_products_json', true), true);
