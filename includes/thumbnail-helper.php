@@ -42,6 +42,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 'post_id' => $post_id,
                 'image_source_mode' => $image_source_mode,
                 'generator_image_source_mode' => isset($generator['image_source_mode']) ? (string) $generator['image_source_mode'] : '',
+                'titles_found' => !empty($article['titles_found']) && is_array($article['titles_found']) ? array_values($article['titles_found']) : array(),
             ));
 
             if ($image_source_mode === 'tmdb_composite') {
@@ -51,6 +52,36 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 $tmdb_movies = !empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])
                     ? $item['tmdb_movies']
                     : array();
+                $thumbnail_titles = !empty($article['thumbnail_titles']) && is_array($article['thumbnail_titles'])
+                    ? array_filter(array_map('sanitize_text_field', $article['thumbnail_titles']))
+                    : array();
+                $titles_found = !empty($article['titles_found']) && is_array($article['titles_found'])
+                    ? array_filter(array_map('sanitize_text_field', $article['titles_found']))
+                    : array();
+                // Older articles do not have thumbnail_titles yet. Use the
+                // complete list only as a compatibility fallback.
+                $thumbnail_queries = !empty($thumbnail_titles) ? $thumbnail_titles : $titles_found;
+                if (!empty($thumbnail_queries)) {
+                    $combined_titles = implode("\n", $thumbnail_queries);
+                    // Never let candidates from a previous generation survive
+                    // when resolving the current article's titles.
+                    $item['tmdb_movies'] = array();
+                    Content_Rank_TMDB::localize_article_movie_titles($generator, $item, $article, false, $combined_titles);
+                    $tmdb_movies = !empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? $item['tmdb_movies'] : array();
+                }
+                Content_Rank_Generator::log_image_debug('thumbnail_helper_tmdb_titles', array(
+                    'post_id' => $post_id,
+                    'titles_found' => $titles_found,
+                    'thumbnail_titles' => $thumbnail_titles,
+                    'source_titles' => '',
+                    'movies' => array_map(function ($movie) {
+                        return is_array($movie) ? array(
+                            'id' => !empty($movie['id']) ? intval($movie['id']) : 0,
+                            'source_query' => !empty($movie['source_query']) ? (string) $movie['source_query'] : '',
+                            'title' => !empty($movie['title']) ? (string) $movie['title'] : '',
+                        ) : array();
+                    }, $tmdb_movies),
+                ));
                 $has_posters = false;
                 foreach ($tmdb_movies as $tmdb_movie) {
                     if (is_array($tmdb_movie) && !empty($tmdb_movie['poster_url'])) {
@@ -58,7 +89,10 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                         break;
                     }
                 }
-                if (!$has_posters) {
+                // Do not fall back to stale source candidates when the final
+                // content already supplied titles_found. That fallback can
+                // select an unrelated old result if the targeted search fails.
+                if (!$has_posters && empty($thumbnail_queries)) {
                     Content_Rank_TMDB::localize_article_movie_titles($generator, $item, $article, false);
                     $tmdb_movies = !empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])
                         ? $item['tmdb_movies']

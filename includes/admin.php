@@ -1901,6 +1901,7 @@ class Content_Rank_Generator_Admin
                         setValue('pexels_query', defaults.pexels_query);
                         setValue('source_video_enabled', defaults.source_video_enabled);
                         setValue('content_media_source', defaults.content_media_source || 'source');
+                        setValue('source_content_links_enabled', typeof defaults.source_content_links_enabled !== 'undefined' ? String(defaults.source_content_links_enabled) : '1');
                         setValue('video_selector_class', defaults.video_selector_class);
                         setValue('content_selector', defaults.content_selector);
                         setValue('content_image_size', defaults.content_image_size);
@@ -1966,6 +1967,7 @@ class Content_Rank_Generator_Admin
                         setValue('pexels_query', generator.pexels_query || defaults.pexels_query);
                         setValue('source_video_enabled', String(typeof generator.source_video_enabled !== 'undefined' ? generator.source_video_enabled : defaults.source_video_enabled));
                         setValue('content_media_source', generator.content_media_source || defaults.content_media_source || 'source');
+                        setValue('source_content_links_enabled', typeof generator.source_content_links_enabled !== 'undefined' ? String(generator.source_content_links_enabled) : (typeof defaults.source_content_links_enabled !== 'undefined' ? String(defaults.source_content_links_enabled) : '1'));
                         setValue('video_selector_class', generator.video_selector_class || defaults.video_selector_class);
                         setValue('content_selector', generator.content_selector || defaults.content_selector);
                         setValue('content_image_size', generator.content_image_size || defaults.content_image_size);
