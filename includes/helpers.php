@@ -6707,7 +6707,6 @@ class Content_Rank_Generator_Helper
             'Slug final: {{generated_slug}}',
             'Modelo de prompt: {{prompt_model_name}}',
             'Idioma final: {{generation_language}}',
-            'LIMITE ABSOLUTO: o content_html final deve ter no maximo 1200 palavras. Se faltar espaco, corte detalhes secundarios; nunca ultrapasse esse limite.',
         );
         $hidden_context[] = 'IDENTIFICACAO PARA MIDIA: retorne titles_found com apenas os nomes exatos de filmes, series, animes ou outras obras realmente desenvolvidos no content_html. Nao inclua personagens, nomes apenas citados na fonte ou o titulo principal quando ele nao for uma obra.';
         $hidden_context[] = 'SELECAO DE THUMBNAIL: retorne thumbnail_titles com de 1 a 5 obras mais importantes para representar visualmente o content_html. Escolha pela relevancia real do conteudo, nao pela quantidade de itens da fonte. Para um conteudo sobre uma unica obra, retorne somente essa obra. Use apenas nomes que tambem estejam em titles_found. Nao inclua personagens.';
