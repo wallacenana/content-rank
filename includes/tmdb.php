@@ -100,6 +100,7 @@ final class Content_Rank_TMDB
                 'title' => $localized_title,
                 'original_title' => !empty($details['original_title']) ? $details['original_title'] : (!empty($result['original_title']) ? $result['original_title'] : ''),
                 'year' => !empty($details['release_date']) ? substr((string) $details['release_date'], 0, 4) : (!empty($result['release_date']) ? substr((string) $result['release_date'], 0, 4) : ''),
+                'overview' => !empty($details['overview']) ? sanitize_textarea_field((string) $details['overview']) : '',
                 'poster_url' => $poster_path !== '' ? 'https://image.tmdb.org/t/p/w780' . $poster_path : '',
                 'thumbnail_url' => $poster_path !== '' ? 'https://image.tmdb.org/t/p/w342' . $poster_path : '',
                 'backdrop_url' => !empty($details['backdrop_path']) ? 'https://image.tmdb.org/t/p/w1280' . (string) $details['backdrop_path'] : (!empty($result['backdrop_path']) ? 'https://image.tmdb.org/t/p/w1280' . (string) $result['backdrop_path'] : ''),
@@ -320,7 +321,9 @@ final class Content_Rank_TMDB
         $movie_count = count($movies);
         $layout = sanitize_key((string) $layout);
         if ($layout === 'rotate') {
-            $layouts = array('standard', 'skew', 'center_focus', 'spotlight', 'blur_background');
+            $layouts = $movie_count === 1
+                ? array('skew', 'spotlight', 'blur_background')
+                : array('standard', 'skew', 'center_focus', 'spotlight', 'blur_background');
             $layout = function_exists('wp_rand')
                 ? $layouts[wp_rand(0, count($layouts) - 1)]
                 : $layouts[array_rand($layouts)];
@@ -347,8 +350,7 @@ final class Content_Rank_TMDB
         $rgb = self::hex_to_rgb($bg_color);
         if (strtolower(trim((string) $bg_color)) === 'auto' && !empty($movies[0])) {
             $color_url = !empty($movies[0]['backdrop_url']) ? $movies[0]['backdrop_url'] : $movies[0]['poster_url'];
-            $color_response = wp_remote_get(esc_url_raw($color_url), array('timeout' => 20));
-            $color_image = !is_wp_error($color_response) ? @imagecreatefromstring(wp_remote_retrieve_body($color_response)) : false;
+            $color_image = self::load_composite_image($movies[0], $color_url);
             if ($color_image) {
                 $rgb = self::extract_average_rgb($color_image);
                 imagedestroy($color_image);
@@ -369,10 +371,7 @@ final class Content_Rank_TMDB
                 : (!empty($movies[0]['backdrop_url'])
                 ? (string) $movies[0]['backdrop_url']
                 : (string) $movies[0]['poster_url']);
-            $background_response = wp_remote_get(esc_url_raw($background_url), array('timeout' => 20));
-            $background_image = !is_wp_error($background_response)
-                ? @imagecreatefromstring(wp_remote_retrieve_body($background_response))
-                : false;
+            $background_image = self::load_composite_image($movies[0], $background_url);
             if ($background_image) {
                 $background_width = imagesx($background_image);
                 $background_height = imagesy($background_image);
@@ -444,11 +443,7 @@ final class Content_Rank_TMDB
             $image_url = $is_single && $layout !== 'blur_background' && !empty($movie['backdrop_url'])
                 ? (string) $movie['backdrop_url']
                 : (string) $movie['poster_url'];
-            $response = wp_remote_get(esc_url_raw($image_url), array('timeout' => 20));
-            if (is_wp_error($response)) {
-                continue;
-            }
-            $image = @imagecreatefromstring(wp_remote_retrieve_body($response));
+            $image = self::load_composite_image($movie, $image_url);
             if (!$image) {
                 continue;
             }
@@ -563,6 +558,28 @@ final class Content_Rank_TMDB
             wp_delete_file($tmp);
         }
         return $attachment_id;
+    }
+
+    private static function load_composite_image($image_data, $image_url)
+    {
+        $local_path = is_array($image_data) && !empty($image_data['local_path'])
+            ? (string) $image_data['local_path']
+            : '';
+        if ($local_path !== '' && is_readable($local_path)) {
+            $contents = @file_get_contents($local_path);
+            if ($contents !== false) {
+                $image = @imagecreatefromstring($contents);
+                if ($image) {
+                    return $image;
+                }
+            }
+        }
+
+        $response = wp_remote_get(esc_url_raw((string) $image_url), array('timeout' => 20));
+        if (is_wp_error($response)) {
+            return false;
+        }
+        return @imagecreatefromstring(wp_remote_retrieve_body($response));
     }
 
     private static function hex_to_rgb($color)

@@ -6710,6 +6710,19 @@ class Content_Rank_Generator_Helper
             ? trim((string) $item['review_products_prompt'])
             : '';
         $generator_editorial_context = self::get_generator_editorial_context($generator);
+        $tmdb_synopses_context = array();
+        if (!empty($generator['tmdb_title_translation_enabled']) && !empty($item['tmdb_movies']) && is_array($item['tmdb_movies'])) {
+            foreach ($item['tmdb_movies'] as $tmdb_movie) {
+                if (!is_array($tmdb_movie) || empty($tmdb_movie['title']) || empty($tmdb_movie['overview'])) {
+                    continue;
+                }
+                $movie_label = (string) $tmdb_movie['title'];
+                if (!empty($tmdb_movie['year'])) {
+                    $movie_label .= ' (' . sanitize_text_field((string) $tmdb_movie['year']) . ')';
+                }
+                $tmdb_synopses_context[] = '- ' . $movie_label . ': ' . sanitize_textarea_field((string) $tmdb_movie['overview']);
+            }
+        }
 
         $hidden_context = array(
             'Contexto interno:',
@@ -6724,6 +6737,12 @@ class Content_Rank_Generator_Helper
         );
         $hidden_context[] = 'IDENTIFICACAO PARA MIDIA: retorne titles_found com apenas os nomes exatos de filmes, series, animes ou outras obras realmente desenvolvidos no content_html. Nao inclua personagens, nomes apenas citados na fonte ou o titulo principal quando ele nao for uma obra.';
         $hidden_context[] = 'SELECAO DE THUMBNAIL: retorne thumbnail_titles com de 1 a 5 obras mais importantes para representar visualmente o content_html. Escolha pela relevancia real do conteudo, nao pela quantidade de itens da fonte. Para um conteudo sobre uma unica obra, retorne somente essa obra. Use apenas nomes que tambem estejam em titles_found. Nao inclua personagens.';
+        if (!empty($tmdb_synopses_context)) {
+            $hidden_context[] = 'SINOPSES LOCALIZADAS PELO TMDB. Use-as como contexto factual para desenvolver os itens correspondentes, sem copiar literalmente e sem inventar detalhes:';
+            foreach ($tmdb_synopses_context as $tmdb_synopsis) {
+                $hidden_context[] = $tmdb_synopsis;
+            }
+        }
         if ($generated_title_outline_count > 0) {
             $hidden_context[] = 'FIDELIDADE ABSOLUTA AO TITULO: o titulo promete exatamente ' . $generated_title_outline_count . ' itens. Desenvolva exatamente ' . $generated_title_outline_count . ' itens, nem um a mais. Nunca mencione, enumere, recomende ou crie no conteudo itens adicionais encontrados na fonte.';
         } else {

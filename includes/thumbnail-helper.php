@@ -264,6 +264,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     'title' => $title,
                     'poster_url' => esc_url_raw($image_url),
                     'backdrop_url' => esc_url_raw($image_url),
+                    'local_path' => function_exists('get_attached_file') ? (string) get_attached_file(intval($attachment_id)) : '',
                 )),
                 !empty($generator['tmdb_thumbnail_auto_color'])
                     ? 'auto'
