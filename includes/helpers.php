@@ -2405,16 +2405,15 @@ class Content_Rank_Generator_Helper
             }
         }
 
-        // Video capture is automatic: use the first valid video on the page.
-        $video_candidate = Content_Rank_Generator::extract_video_candidate_from_html($html, $base_url, '');
-        if (!empty($video_candidate['video_url'])) {
-            $media['video_url'] = $video_candidate['video_url'];
-        }
-        if (!empty($video_candidate['video_embed_html'])) {
-            $media['video_embed_html'] = $video_candidate['video_embed_html'];
-        }
-        if (!empty($video_candidate['video_source'])) {
-            $media['video_source'] = $video_candidate['video_source'];
+        // Source videos require an explicit wrapper and must come from YouTube.
+        if (trim((string) $video_selector_class) !== '') {
+            $video_candidate = Content_Rank_Generator::extract_video_candidate_from_html($html, $base_url, $video_selector_class);
+            $video_host = strtolower((string) wp_parse_url((string) ($video_candidate['video_url'] ?? ''), PHP_URL_HOST));
+            if (!empty($video_candidate['video_url']) && (strpos($video_host, 'youtube.') !== false || $video_host === 'youtu.be') ) {
+                $media['video_url'] = $video_candidate['video_url'];
+                $media['video_embed_html'] = !empty($video_candidate['video_embed_html']) ? $video_candidate['video_embed_html'] : '';
+                $media['video_source'] = 'youtube';
+            }
         }
 
         return $media;
@@ -2442,7 +2441,7 @@ class Content_Rank_Generator_Helper
         }
 
         $raw_html = self::fetch_source_page_html($url, 5, 'source_page_media');
-        $raw_video = self::extract_video_from_raw_source_html($raw_html, $url);
+        $raw_video = array();
         $featured_image = self::extract_featured_image_from_html($raw_html, $url);
         $html = self::strip_source_page_noise_from_html($raw_html);
         if ($html === '') {
@@ -2453,23 +2452,6 @@ class Content_Rank_Generator_Helper
         foreach (array('image_url', 'image_source', 'image_class', 'image_attr', 'image_tag') as $image_key) {
             $media[$image_key] = !empty($featured_image[$image_key]) ? $featured_image[$image_key] : '';
         }
-        foreach (array('video_url', 'video_embed_html', 'video_source') as $video_key) {
-            if (!empty($raw_video[$video_key])) {
-                $media[$video_key] = $raw_video[$video_key];
-            }
-        }
-        if ($media['video_url'] === '') {
-            foreach (array('og:video', 'og:video:url', 'twitter:player:stream') as $key) {
-                if (preg_match('/<meta[^>]+(?:property|name|itemprop)=["\']' . preg_quote($key, '/') . '["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $matches)) {
-                    $candidate = Content_Rank_Generator::resolve_url_against_base(html_entity_decode($matches[1], ENT_QUOTES | ENT_HTML5, get_bloginfo('charset')), $url);
-                    if ($candidate !== '') {
-                        $media['video_url'] = $candidate;
-                        break;
-                    }
-                }
-            }
-        }
-
         $media = wp_parse_args($media, $empty_media);
         return $media;
     }

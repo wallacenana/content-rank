@@ -432,7 +432,7 @@
             tavilyField.classList.toggle('hidden', isSatelliteMode || sourceType !== 'keyword_list');
         }
         if (tmdbThumbnailField) {
-            tmdbThumbnailField.classList.toggle('hidden', !imageSourceModeEl || imageSourceModeEl.value !== 'tmdb_composite');
+            tmdbThumbnailField.classList.remove('hidden');
         }
         var showSourceMediaControls = !isSatelliteMode && (sourceType === 'rss' || (isSpreadsheetSource && keywordListMode === 'url_reference'));
         var sourceContentImagesEnabledEl = byName('source_content_images_enabled');

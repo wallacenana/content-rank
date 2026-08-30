@@ -334,7 +334,7 @@ final class Content_Rank_TMDB
             $movie_count = count($movies);
             $is_single = $movie_count === 1;
         }
-        if (!in_array($layout, array('standard', 'skew', 'center_focus', 'spotlight', 'blur_background'), true) || ($is_single && !in_array($layout, array('spotlight', 'blur_background'), true))) {
+        if (!in_array($layout, array('standard', 'skew', 'center_focus', 'spotlight', 'blur_background'), true) || ($is_single && !in_array($layout, array('skew', 'spotlight', 'blur_background'), true))) {
             $layout = 'standard';
         }
         // A single title still needs to look like a generated thumbnail,

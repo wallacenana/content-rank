@@ -45,6 +45,10 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 'titles_found' => !empty($article['titles_found']) && is_array($article['titles_found']) ? array_values($article['titles_found']) : array(),
             ));
 
+            $thumbnail_layout = Content_Rank_Generator::normalize_tmdb_thumbnail_layout(
+                isset($generator['tmdb_thumbnail_layout']) ? $generator['tmdb_thumbnail_layout'] : 'rotate'
+            );
+
             if ($image_source_mode === 'tmdb_composite') {
                 if (!class_exists('Content_Rank_TMDB')) {
                     return new WP_Error('content_rank_tmdb_unavailable', 'A integracao com o TMDB nao esta disponivel.');
@@ -82,6 +86,19 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                         ) : array();
                     }, $tmdb_movies),
                 ));
+                if ($thumbnail_layout === 'none') {
+                    foreach ($tmdb_movies as $tmdb_movie) {
+                        if (!is_array($tmdb_movie) || empty($tmdb_movie['poster_url'])) {
+                            continue;
+                        }
+                        $original_result = Content_Rank_Generator::download_and_set_featured_image_from_url($post_id, (string) $tmdb_movie['poster_url'], $title, 'tmdb', '', '');
+                        if (!is_wp_error($original_result) && intval($original_result) > 0) {
+                            return intval($original_result);
+                        }
+                    }
+                    return false;
+                }
+
                 $has_posters = false;
                 foreach ($tmdb_movies as $tmdb_movie) {
                     if (is_array($tmdb_movie) && !empty($tmdb_movie['poster_url'])) {
@@ -112,7 +129,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     !empty($generator['tmdb_thumbnail_auto_color'])
                         ? 'auto'
                         : (!empty($generator['tmdb_thumbnail_bg_color']) ? $generator['tmdb_thumbnail_bg_color'] : '#c91414'),
-                    !empty($generator['tmdb_thumbnail_layout']) ? $generator['tmdb_thumbnail_layout'] : 'rotate'
+                    $thumbnail_layout
                 );
                 if (!is_wp_error($composite_result) && intval($composite_result) > 0) {
                     $composite_id = intval($composite_result);
@@ -167,7 +184,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                         'post_id' => $post_id,
                         'source_image_url' => $source_image_url,
                     ));
-                    return intval($source_result);
+                    return self::apply_thumbnail_layout($post_id, intval($source_result), $title, $generator, $item);
                 }
             }
 
@@ -180,7 +197,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     $is_keyword_list
                 );
                 if (!is_wp_error($pexels_result) && intval($pexels_result) > 0) {
-                    return intval($pexels_result);
+                    return self::apply_thumbnail_layout($post_id, intval($pexels_result), $title, $generator, $item);
                 }
             } elseif ($use_dalle) {
                 $dalle_result = Content_Rank_Generator::download_and_set_featured_image_from_dalle(
@@ -191,7 +208,7 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     $is_keyword_list
                 );
                 if (!is_wp_error($dalle_result) && intval($dalle_result) > 0) {
-                    return intval($dalle_result);
+                    return self::apply_thumbnail_layout($post_id, intval($dalle_result), $title, $generator, $item);
                 }
             }
 
@@ -210,6 +227,41 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
             ));
 
             return intval($fallback_id) > 0 ? intval($fallback_id) : false;
+        }
+
+        private static function apply_thumbnail_layout($post_id, $attachment_id, $title, $generator, $item)
+        {
+            $layout = Content_Rank_Generator::normalize_tmdb_thumbnail_layout(
+                isset($generator['tmdb_thumbnail_layout']) ? $generator['tmdb_thumbnail_layout'] : 'rotate'
+            );
+            if ($layout === 'none') {
+                return intval($attachment_id);
+            }
+
+            $image_url = wp_get_attachment_url(intval($attachment_id));
+            if (!$image_url || !class_exists('Content_Rank_TMDB')) {
+                return intval($attachment_id);
+            }
+
+            $result = Content_Rank_TMDB::create_composite_thumbnail_for_post(
+                intval($post_id),
+                $title,
+                array(array(
+                    'title' => $title,
+                    'poster_url' => esc_url_raw($image_url),
+                    'backdrop_url' => esc_url_raw($image_url),
+                )),
+                !empty($generator['tmdb_thumbnail_auto_color'])
+                    ? 'auto'
+                    : (!empty($generator['tmdb_thumbnail_bg_color']) ? $generator['tmdb_thumbnail_bg_color'] : '#c91414'),
+                $layout
+            );
+            if (!is_wp_error($result) && intval($result) > 0) {
+                set_post_thumbnail($post_id, intval($result));
+                return intval($result);
+            }
+
+            return intval($attachment_id);
         }
 
         private static function get_cached_source_html($item)

@@ -711,7 +711,7 @@ class Content_Rank_Generator_Admin
                                         <option value="tmdb_composite">TMDB - thumbnail composta</option>
                                     </select>
                                 </div>
-                                <div data-tmdb-thumbnail-field class="hidden">
+                                <div data-tmdb-thumbnail-field>
                                     <div class="mb-3">
                                         <label class="content-rank-switch"><input type="checkbox" name="tmdb_thumbnail_auto_color" value="1" /><span class="content-rank-switch__track" aria-hidden="true"></span><span class="content-rank-switch__state">Cor automática</span></label>
                                     </div>
@@ -719,6 +719,7 @@ class Content_Rank_Generator_Admin
                                     <div data-tmdb-color-picker><input type="color" name="tmdb_thumbnail_bg_color" value="#c91414" class="h-11 w-20 cursor-pointer rounded-lg border border-slate-300 bg-white p-1" /></div>
                                     <label class="mt-3 mb-1 block text-sm font-medium text-slate-700">Estilo da thumbnail</label>
                                     <select name="tmdb_thumbnail_layout" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                        <option value="none">Sem edição</option>
                                         <option value="rotate">Aleatório</option>
                                         <option value="standard">Painéis uniformes</option>
                                         <option value="skew">Skew para a direita</option>
@@ -778,7 +779,7 @@ class Content_Rank_Generator_Admin
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Usar vídeo da fonte</label>
-                                    <select name="source_video_enabled" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                    <select name="video_source_mode" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                                         <option value="0" selected>Não</option>
                                         <option value="1">Sim</option>
                                     </select>
@@ -1030,6 +1031,7 @@ class Content_Rank_Generator_Admin
                                         'tmdb_title_translation_enabled' => '0',
                                         'pexels_query' => Content_Rank_Generator::get_default_pexels_query(),
                                         'source_video_enabled' => '0',
+                                        'video_source_mode' => 'none',
                                         'source_content_images_enabled' => '1',
                                         'content_media_source' => 'source',
                                         'source_content_links_enabled' => '1',
@@ -1084,6 +1086,14 @@ class Content_Rank_Generator_Admin
                     var modal = document.getElementById('content-rank-generator-modal');
                     var backdrop = document.getElementById('content-rank-generator-backdrop');
                     var form = document.getElementById('content-rank-generator-form');
+                    var videoSourceModeField = form ? form.querySelector('select[name="video_source_mode"]') : null;
+                    if (videoSourceModeField) {
+                        videoSourceModeField.innerHTML = '<option value="none">Nenhum</option><option value="source">Fonte (YouTube)</option><option value="tmdb">TMDB (trailer)</option>';
+                        var videoSourceLabel = videoSourceModeField.parentNode ? videoSourceModeField.parentNode.querySelector('label') : null;
+                        if (videoSourceLabel) {
+                            videoSourceLabel.textContent = 'Fonte do v\u00EDdeo';
+                        }
+                    }
                     var titleEl = document.getElementById('content-rank-generator-modal-title');
                     var submitEl = document.getElementById('content-rank-generator-submit');
                     var internalLinksField = form.querySelector('[data-internal-links-field]');
@@ -1421,7 +1431,7 @@ class Content_Rank_Generator_Admin
                             imageSourceModeEl.value = normalizeImageSourceModeForType(sourceType, keywordListMode, imageSourceModeEl.value);
                         }
                         if (tmdbThumbnailField) {
-                            tmdbThumbnailField.classList.toggle('hidden', !imageSourceModeEl || imageSourceModeEl.value !== 'tmdb_composite');
+                            tmdbThumbnailField.classList.remove('hidden');
                         }
 
                         var promptEl = byName('prompt_template');
@@ -1899,7 +1909,7 @@ class Content_Rank_Generator_Admin
                         setValue('tmdb_thumbnail_auto_color', defaults.tmdb_thumbnail_auto_color);
                         setValue('tmdb_title_translation_enabled', defaults.tmdb_title_translation_enabled);
                         setValue('pexels_query', defaults.pexels_query);
-                        setValue('source_video_enabled', defaults.source_video_enabled);
+                        setValue('video_source_mode', defaults.video_source_mode || (String(defaults.source_video_enabled) === '1' ? 'source' : 'none'));
                         setValue('content_media_source', defaults.content_media_source || 'source');
                         setValue('source_content_links_enabled', typeof defaults.source_content_links_enabled !== 'undefined' ? String(defaults.source_content_links_enabled) : '1');
                         setValue('video_selector_class', defaults.video_selector_class);
@@ -1965,7 +1975,7 @@ class Content_Rank_Generator_Admin
                         setValue('tmdb_thumbnail_auto_color', String(typeof generator.tmdb_thumbnail_auto_color !== 'undefined' ? generator.tmdb_thumbnail_auto_color : defaults.tmdb_thumbnail_auto_color));
                         setValue('tmdb_title_translation_enabled', typeof generator.tmdb_title_translation_enabled !== 'undefined' ? String(generator.tmdb_title_translation_enabled) : defaults.tmdb_title_translation_enabled);
                         setValue('pexels_query', generator.pexels_query || defaults.pexels_query);
-                        setValue('source_video_enabled', String(typeof generator.source_video_enabled !== 'undefined' ? generator.source_video_enabled : defaults.source_video_enabled));
+                        setValue('video_source_mode', generator.video_source_mode || (String(generator.source_video_enabled) === '1' ? 'source' : (defaults.video_source_mode || 'none')));
                         setValue('content_media_source', generator.content_media_source || defaults.content_media_source || 'source');
                         setValue('source_content_links_enabled', typeof generator.source_content_links_enabled !== 'undefined' ? String(generator.source_content_links_enabled) : (typeof defaults.source_content_links_enabled !== 'undefined' ? String(defaults.source_content_links_enabled) : '1'));
                         setValue('video_selector_class', generator.video_selector_class || defaults.video_selector_class);
