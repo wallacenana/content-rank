@@ -705,9 +705,11 @@ class Content_Rank_Generator_Admin
                                     <select name="image_source_mode" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                                         <option value="rss">Fonte do RSS</option>
                                         <option value="rss_or_pexels">Fonte do RSS ou Pexels</option>
+                                        <option value="rss_or_tmdb">Fonte do RSS ou TMDB</option>
                                         <option value="rss_or_dalle">Fonte do RSS ou Dall-e</option>
                                         <option value="pexels">Pexels</option>
                                         <option value="dalle">Dall-e</option>
+                                        <option value="tmdb_or_pexels">TMDB ou Pexels</option>
                                         <option value="tmdb_composite">TMDB - thumbnail composta</option>
                                     </select>
                                 </div>
@@ -1203,7 +1205,7 @@ class Content_Rank_Generator_Admin
 
                     function normalizeImageSourceModeForType(sourceType, keywordListMode, value) {
                         var mode = String(value || '').trim();
-                        var allowed = ['rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite'];
+                        var allowed = ['rss', 'rss_or_pexels', 'rss_or_tmdb', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite', 'tmdb_or_pexels'];
                         if (allowed.indexOf(mode) === -1) {
                             return getDefaultImageSourceModeForType(sourceType, keywordListMode);
                         }

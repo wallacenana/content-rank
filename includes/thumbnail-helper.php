@@ -49,7 +49,8 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                 isset($generator['tmdb_thumbnail_layout']) ? $generator['tmdb_thumbnail_layout'] : 'rotate'
             );
 
-            if ($image_source_mode === 'tmdb_composite') {
+            $uses_tmdb_thumbnail = in_array($image_source_mode, array('tmdb_composite', 'rss_or_tmdb', 'tmdb_or_pexels'), true);
+            if ($uses_tmdb_thumbnail && $image_source_mode !== 'rss_or_tmdb') {
                 if (!class_exists('Content_Rank_TMDB')) {
                     return new WP_Error('content_rank_tmdb_unavailable', 'A integracao com o TMDB nao esta disponivel.');
                 }
@@ -96,7 +97,9 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                             return intval($original_result);
                         }
                     }
-                    return false;
+                    if ($image_source_mode === 'tmdb_composite') {
+                        return false;
+                    }
                 }
 
                 $has_posters = false;
@@ -144,7 +147,9 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                     'post_id' => $post_id,
                     'error' => is_wp_error($composite_result) ? $composite_result->get_error_message() : 'unknown',
                 ));
-                return $composite_result;
+                if ($image_source_mode === 'tmdb_composite') {
+                    return $composite_result;
+                }
             }
 
             $use_source_image = $treat_like_rss
@@ -185,6 +190,15 @@ if (!class_exists('Content_Rank_Thumbnail_Helper')) {
                         'source_image_url' => $source_image_url,
                     ));
                     return self::apply_thumbnail_layout($post_id, intval($source_result), $title, $generator, $item);
+                }
+            }
+
+            if ($image_source_mode === 'rss_or_tmdb') {
+                $tmdb_generator = $generator;
+                $tmdb_generator['image_source_mode'] = 'tmdb_composite';
+                $tmdb_result = self::set_featured_image($post_id, $tmdb_generator, $item, $article, false);
+                if (!is_wp_error($tmdb_result) && intval($tmdb_result) > 0) {
+                    return intval($tmdb_result);
                 }
             }
 

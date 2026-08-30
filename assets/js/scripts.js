@@ -236,7 +236,7 @@
 
     function normalizeImageSourceModeForType(sourceType, keywordListMode, value) {
         var mode = String(value || '').trim();
-        var allowed = ['rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite'];
+        var allowed = ['rss', 'rss_or_pexels', 'rss_or_tmdb', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite', 'tmdb_or_pexels'];
         if (allowed.indexOf(mode) === -1) {
             return getDefaultImageSourceModeForType(sourceType, keywordListMode);
         }

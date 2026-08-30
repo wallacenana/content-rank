@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.147
+Version: 1.9.148
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -64,7 +64,7 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.147';
+        const VERSION = '1.9.148';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
@@ -2073,7 +2073,7 @@ if (!class_exists('Content_Rank_Generator')) {
             $source_type = sanitize_key((string) $source_type);
             $image_source_mode = sanitize_key((string) $image_source_mode);
             $keyword_list_mode = sanitize_key((string) $keyword_list_mode);
-            $allowed = array('rss', 'rss_or_pexels', 'rss_or_dalle', 'pexels', 'dalle', 'tmdb_composite');
+            $allowed = array('rss', 'rss_or_pexels', 'rss_or_dalle', 'rss_or_tmdb', 'pexels', 'dalle', 'tmdb_composite', 'tmdb_or_pexels');
 
             if ($image_source_mode !== '' && in_array($image_source_mode, $allowed, true)) {
                 return $image_source_mode;
@@ -2141,12 +2141,12 @@ if (!class_exists('Content_Rank_Generator')) {
 
         public static function image_source_mode_uses_source_image($image_source_mode)
         {
-            return in_array(sanitize_key((string) $image_source_mode), array('rss', 'rss_or_pexels', 'rss_or_dalle'), true);
+            return in_array(sanitize_key((string) $image_source_mode), array('rss', 'rss_or_pexels', 'rss_or_dalle', 'rss_or_tmdb'), true);
         }
 
         public static function image_source_mode_uses_pexels($image_source_mode)
         {
-            return in_array(sanitize_key((string) $image_source_mode), array('rss_or_pexels', 'pexels'), true);
+            return in_array(sanitize_key((string) $image_source_mode), array('rss_or_pexels', 'pexels', 'tmdb_or_pexels'), true);
         }
 
         public static function image_source_mode_uses_dalle($image_source_mode)
