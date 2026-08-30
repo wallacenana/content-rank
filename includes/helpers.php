@@ -401,6 +401,7 @@ class Content_Rank_Generator_Helper
         $existing_image_map = is_array($existing_image_map) ? $existing_image_map : array();
         $output = array();
         $h2_index = -1;
+        $used_section_indexes = array();
         $first_content_block_is_h2 = !empty($blocks[0])
             && is_array($blocks[0])
             && ($blocks[0]['blockName'] ?? '') === 'core/heading'
@@ -411,10 +412,22 @@ class Content_Rank_Generator_Helper
                 $h2_index++;
             }
             $output[] = $block;
-            if (!$is_h2 || empty($sections[$h2_index]) || ($first_content_block_is_h2 && $h2_index === 0)) {
+            if (!$is_h2 || ($first_content_block_is_h2 && $h2_index === 0)) {
                 continue;
             }
-            $section = $sections[$h2_index];
+            $heading_html = '';
+            if (!empty($block['innerHTML'])) {
+                $heading_html = (string) $block['innerHTML'];
+            } elseif (!empty($block['innerContent']) && is_array($block['innerContent'])) {
+                $heading_html = implode('', array_map('strval', $block['innerContent']));
+            }
+            $heading_title = trim(wp_strip_all_tags($heading_html));
+            $section_index = self::find_best_media_section_index($sections, $heading_title, $used_section_indexes, $h2_index);
+            if ($section_index < 0 || empty($sections[$section_index])) {
+                continue;
+            }
+            $used_section_indexes[$section_index] = true;
+            $section = $sections[$section_index];
             if (!empty($section['videos'])) {
                 $output = array_merge($output, self::build_source_video_blocks_for_section($section, $content));
             } elseif (!empty($section['images'])) {
@@ -425,6 +438,40 @@ class Content_Rank_Generator_Helper
             }
         }
         return serialize_blocks($output);
+    }
+
+    private static function find_best_media_section_index($sections, $heading_title, $used_indexes, $fallback_index = 0)
+    {
+        $best_index = -1;
+        $best_score = 0;
+        foreach ((array) $sections as $index => $section) {
+            if (isset($used_indexes[$index]) || !is_array($section)) {
+                continue;
+            }
+            $section_title = !empty($section['h2'])
+                ? (string) $section['h2']
+                : (!empty($section['title']) ? (string) $section['title'] : '');
+            $score = self::score_outline_title_match($heading_title, $section_title);
+            if ($score > $best_score) {
+                $best_score = $score;
+                $best_index = (int) $index;
+            }
+        }
+
+        // A generated H2 with the work title is authoritative. Only use the
+        // old positional fallback when the heading contains no recognizable title.
+        if ($best_index >= 0 && $best_score >= 50) {
+            return $best_index;
+        }
+        if (isset($sections[$fallback_index]) && !isset($used_indexes[$fallback_index])) {
+            return (int) $fallback_index;
+        }
+        foreach ((array) $sections as $index => $section) {
+            if (!isset($used_indexes[$index]) && is_array($section)) {
+                return (int) $index;
+            }
+        }
+        return -1;
     }
 
     private static function build_source_video_blocks_for_section($section, $serialized_content)
