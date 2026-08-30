@@ -448,10 +448,13 @@ class Content_Rank_Generator_Helper
             if (isset($used_indexes[$index]) || !is_array($section)) {
                 continue;
             }
-            $section_title = !empty($section['h2'])
-                ? (string) $section['h2']
-                : (!empty($section['title']) ? (string) $section['title'] : '');
-            $score = self::score_outline_title_match($heading_title, $section_title);
+            $section_titles = !empty($section['match_titles']) && is_array($section['match_titles'])
+                ? $section['match_titles']
+                : array(!empty($section['h2']) ? (string) $section['h2'] : (!empty($section['title']) ? (string) $section['title'] : ''));
+            $score = 0;
+            foreach ($section_titles as $section_title) {
+                $score = max($score, self::score_outline_title_match($heading_title, $section_title));
+            }
             if ($score > $best_score) {
                 $best_score = $score;
                 $best_index = (int) $index;
@@ -462,14 +465,6 @@ class Content_Rank_Generator_Helper
         // old positional fallback when the heading contains no recognizable title.
         if ($best_index >= 0 && $best_score >= 50) {
             return $best_index;
-        }
-        if (isset($sections[$fallback_index]) && !isset($used_indexes[$fallback_index])) {
-            return (int) $fallback_index;
-        }
-        foreach ((array) $sections as $index => $section) {
-            if (!isset($used_indexes[$index]) && is_array($section)) {
-                return (int) $index;
-            }
         }
         return -1;
     }
@@ -4553,6 +4548,87 @@ class Content_Rank_Generator_Helper
         }
 
         return $inserted_any ? serialize_blocks($result_blocks) : $content;
+    }
+
+    /**
+     * Reorders source media by matching each source section to the final H2.
+     * The generated HTML is authoritative; source array position is not.
+     */
+    public static function remap_source_media_sections_to_generated_h2s($content, $sections)
+    {
+        $content = (string) $content;
+        $sections = is_array($sections) ? array_values(array_filter($sections, 'is_array')) : array();
+        if ($content === '' || empty($sections) || !function_exists('parse_blocks')) {
+            return array();
+        }
+
+        $blocks = parse_blocks($content);
+        if (!is_array($blocks) || empty($blocks)) {
+            return array();
+        }
+
+        $mapped = array();
+        $used = array();
+        $h2_count = 0;
+        foreach ($blocks as $block_index => $block) {
+            if (!is_array($block) || ($block['blockName'] ?? '') !== 'core/heading' || intval($block['attrs']['level'] ?? 2) !== 2) {
+                continue;
+            }
+            if ($h2_count === 0 && $block_index === 0) {
+                $h2_count++;
+                continue;
+            }
+            $h2_count++;
+            $heading_html = !empty($block['innerHTML'])
+                ? (string) $block['innerHTML']
+                : (!empty($block['innerContent']) && is_array($block['innerContent']) ? implode('', array_map('strval', $block['innerContent'])) : '');
+            $heading_title = trim(wp_strip_all_tags($heading_html));
+            $best_index = -1;
+            $best_score = 0;
+            foreach ($sections as $section_index => $section) {
+                if (isset($used[$section_index])) {
+                    continue;
+                }
+                $candidate_titles = array();
+                foreach (array('h2', 'title', 'heading_title') as $title_key) {
+                    if (!empty($section[$title_key])) {
+                        $candidate_titles[] = (string) $section[$title_key];
+                    }
+                }
+                $score = 0;
+                foreach ($candidate_titles as $candidate_title) {
+                    $score = max($score, self::score_outline_title_match($heading_title, $candidate_title));
+                }
+                if ($score > $best_score) {
+                    $best_score = $score;
+                    $best_index = $section_index;
+                }
+            }
+            if ($best_index >= 0 && $best_score >= 50) {
+                $used[$best_index] = true;
+                $mapped[] = $sections[$best_index];
+            }
+        }
+
+        return $mapped;
+    }
+
+    public static function extract_generated_h2_titles_for_tmdb($content)
+    {
+        $content = (string) $content;
+        if ($content === '' || !preg_match_all('/<h2\b[^>]*>(.*?)<\/h2>/isu', $content, $matches)) {
+            return '';
+        }
+
+        $titles = array();
+        foreach ($matches[1] as $heading_html) {
+            $title = trim(wp_strip_all_tags(html_entity_decode((string) $heading_html, ENT_QUOTES | ENT_HTML5, get_bloginfo('charset'))));
+            $title = preg_replace('/\s+/u', ' ', $title);
+            if ($title !== '' && !in_array($title, $titles, true)) {
+                $titles[] = $title;
+            }
+        }
+        return implode("\n", $titles);
     }
 
     public static function outline_section_contains_image_markup($blocks, $start_index)

@@ -164,6 +164,7 @@ final class Content_Rank_TMDB
             }
             $sections[] = array(
                 'h2' => (string) $movie['title'],
+                'match_titles' => array_values(array_filter(array((string) $movie['title'], (string) ($movie['original_title'] ?? ''), (string) ($movie['source_query'] ?? '')))),
                 'images' => array(array(
                     'url' => esc_url_raw($image_url),
                     'alt' => (string) $movie['title'],
@@ -185,6 +186,7 @@ final class Content_Rank_TMDB
             }
             return array(array(
                 'h2' => (string) $movie['title'],
+                'match_titles' => array_values(array_filter(array((string) $movie['title'], (string) ($movie['original_title'] ?? ''), (string) ($movie['source_query'] ?? '')))),
                 'videos' => array(array(
                     'video_url' => 'https://www.youtube.com/watch?v=' . rawurlencode((string) $video['key']),
                     'video_embed_html' => '',

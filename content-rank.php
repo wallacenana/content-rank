@@ -10013,11 +10013,21 @@ if (!class_exists('Content_Rank_Generator')) {
                 ? self::normalize_content_media_source($generator['content_media_source'])
                 : 'source';
             if (($use_tmdb_titles || $use_tmdb_thumbnail || $use_tmdb_content_images) && class_exists('Content_Rank_TMDB')) {
+                $tmdb_titles_override = Content_Rank_Generator_Helper::extract_generated_h2_titles_for_tmdb(
+                    !empty($article['content_html']) ? $article['content_html'] : ''
+                );
+                if ($tmdb_titles_override === '' && !empty($article['titles_found']) && is_array($article['titles_found'])) {
+                    $tmdb_titles_override = implode("\n", array_values(array_filter(array_map('sanitize_text_field', $article['titles_found']))));
+                }
+                if ($tmdb_titles_override === '') {
+                    $tmdb_titles_override = null;
+                }
                 $article = Content_Rank_TMDB::localize_article_movie_titles(
                     $generator,
                     $item,
                     $article,
-                    $use_tmdb_titles
+                    $use_tmdb_titles,
+                    $tmdb_titles_override
                 );
             }
             $tmdb_content_media_sections = array();
@@ -10170,7 +10180,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 if ($use_interval_content_images) {
                     $content_media_sections = self::resolve_content_image_sections_for_generation($item, $generator, $article);
                 }
-                if ($content_media_source !== 'none' && empty($tmdb_content_media_sections) && !empty($content_media_sections) && is_array($content_media_sections)) {
+                if ($content_media_source === 'source' && empty($tmdb_content_media_sections) && !empty($content_media_sections) && is_array($content_media_sections)) {
                     $content_image_size = self::get_content_image_size_for_generator($generator);
                     $use_source_content_images = self::generator_uses_source_content_images($generator);
                     $use_source_content_links = self::generator_uses_source_content_links($generator);
@@ -10188,7 +10198,12 @@ if (!class_exists('Content_Rank_Generator')) {
                             array(!empty($item['source_image_url']) ? trim((string) $item['source_image_url']) : '')
                         );
                     } else {
-                        $article['content_html'] = Content_Rank_Generator_Helper::inject_outline_section_media_into_content(
+                        $content_media_sections = Content_Rank_Generator_Helper::remap_source_media_sections_to_generated_h2s(
+                            $article['content_html'],
+                            $content_media_sections
+                        );
+                        if (!empty($content_media_sections)) {
+                            $article['content_html'] = Content_Rank_Generator_Helper::inject_outline_section_media_into_content(
                             $article['content_html'],
                             $content_media_sections,
                             $post_id,
@@ -10206,8 +10221,9 @@ if (!class_exists('Content_Rank_Generator')) {
                             ),
                             $existing_image_map,
                             array(),
-                            array(!empty($item['source_image_url']) ? trim((string) $item['source_image_url']) : '')
-                        );
+                                array(!empty($item['source_image_url']) ? trim((string) $item['source_image_url']) : '')
+                            );
+                        }
                     }
                     $article['content_html'] = Content_Rank_Generator_Helper::ensure_content_starts_with_paragraph_html($article['content_html']);
                     if ($article['content_html'] !== '') {
