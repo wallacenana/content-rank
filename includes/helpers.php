@@ -4943,6 +4943,27 @@ class Content_Rank_Generator_Helper
         return trim($title);
     }
 
+    /**
+     * A focus keyword can arrive in lowercase because it is stored for SEO.
+     * At the beginning of a paragraph it still needs normal sentence casing.
+     * Keep inline markup intact while fixing only the first visible letter.
+     */
+    public static function normalize_content_sentence_starts($content)
+    {
+        $content = (string) $content;
+        if ($content === '' || !function_exists('mb_strtoupper')) {
+            return $content;
+        }
+
+        return (string) preg_replace_callback(
+            '/(<p\b[^>]*>\s*(?:(?:<(?:strong|b|em|i|span|small|mark|a)\b[^>]*>\s*)*))([\p{Ll}])/u',
+            static function ($match) {
+                return $match[1] . mb_strtoupper($match[2], 'UTF-8');
+            },
+            $content
+        );
+    }
+
     public static function extract_content_image_limit_from_title($title)
     {
         $title = self::normalize_prompt_context_text($title);

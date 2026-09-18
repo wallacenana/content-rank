@@ -14,10 +14,9 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
         private const META_SOURCE_POST_ID = '_content_rank_link_suggestions_source_post_id';
         private const META_CUSTOM_PROMPT = '_content_rank_link_suggestions_custom_prompt';
         private const META_REQUESTED_COUNT = '_content_rank_link_suggestions_requested_count';
+        private const META_REWRITE_CONTEXTUAL = '_content_rank_link_suggestions_rewrite_contextual';
         private const META_APPLIED_AT = '_content_rank_link_suggestions_applied_at';
         private const META_APPLIED_COUNT = '_content_rank_link_suggestions_applied_count';
-        private const MAX_SOURCE_WORDS = 1000;
-        private const MAX_TARGET_POSTS = 25;
 
         public function __construct()
         {
@@ -39,7 +38,7 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
                 array($this, 'render_page')
             );
 
-            remove_submenu_page('content-rank', self::PAGE_SLUG);
+            // Keep this page accessible for manually testing existing posts.
         }
 
         public function register_row_action_filters()
@@ -107,207 +106,6 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
             return trim((string) $text);
         }
 
-        private static function extract_linkable_text_from_html($html)
-        {
-            $html = (string) $html;
-            if ($html === '') {
-                return '';
-            }
-
-            if (!class_exists('DOMDocument') || !class_exists('DOMXPath')) {
-                return self::normalize_plain_text(wp_strip_all_tags($html));
-            }
-
-            libxml_use_internal_errors(true);
-            $dom = new DOMDocument('1.0', 'UTF-8');
-            $loaded = @$dom->loadHTML('<?xml encoding="utf-8" ?><div id="content-rank-link-source-root">' . $html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-            if (!$loaded) {
-                return self::normalize_plain_text(wp_strip_all_tags($html));
-            }
-
-            $xpath = new DOMXPath($dom);
-            $root = $dom->getElementById('content-rank-link-source-root');
-            if (!$root) {
-                return self::normalize_plain_text(wp_strip_all_tags($html));
-            }
-
-            $nodes = $xpath->query('.//p | .//li | .//blockquote | .//td | .//th | .//figcaption | .//summary', $root);
-            if (!$nodes || $nodes->length === 0) {
-                return self::normalize_plain_text(wp_strip_all_tags($html));
-            }
-
-            $parts = array();
-            $skipped_paragraphs = 0;
-            for ($i = 0; $i < $nodes->length; $i++) {
-                $node = $nodes->item($i);
-                if (!$node || !property_exists($node, 'textContent')) {
-                    continue;
-                }
-
-                $text = self::normalize_plain_text((string) $node->textContent);
-                if ($text === '') {
-                    continue;
-                }
-
-                if (mb_strlen($text, 'UTF-8') < 20) {
-                    continue;
-                }
-
-                if (strtolower((string) $node->nodeName) === 'p' && $skipped_paragraphs < 1) {
-                    $skipped_paragraphs++;
-                    continue;
-                }
-
-                if (preg_match('/^(veja também|voce também pode gostar de|você também pode gostar de|assista online|assista agora|leia também|leia mais|continue lendo)$/iu', $text)) {
-                    continue;
-                }
-
-                $parts[] = $text;
-            }
-
-            $linkable_text = trim(implode(' ', $parts));
-            if ($linkable_text === '') {
-                $linkable_text = self::normalize_plain_text(wp_strip_all_tags($html));
-            }
-
-            return $linkable_text;
-        }
-
-        private static function normalize_link_suggestion_key($text)
-        {
-            $text = self::normalize_plain_text($text);
-            if ($text === '') {
-                return '';
-            }
-
-            if (function_exists('remove_accents')) {
-                $text = remove_accents($text);
-            }
-
-            $text = strtolower($text);
-            $text = preg_replace('/\([^)]*\)/u', ' ', $text);
-            $text = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $text);
-            $text = preg_replace('/\s+/u', ' ', $text);
-            return trim((string) $text);
-        }
-
-        private static function normalize_link_suggestion_anchor($anchor, $source_linkable_text = '')
-        {
-            $anchor = self::normalize_plain_text($anchor);
-            if ($anchor === '') {
-                return '';
-            }
-
-            $anchor_words = array_values(array_filter(preg_split('/\s+/u', $anchor), 'strlen'));
-            $word_count = count($anchor_words);
-            if ($word_count < 1) {
-                return '';
-            }
-
-            $generic_terms = array(
-                'trailer', 'mostra', 'mostrou', 'mostrando', 'novo', 'nova', 'filme', 'filmes',
-                'serie', 'series', 'série', 'séries', 'episodio', 'episodios', 'episódio', 'episódios',
-                'lanca', 'lança', 'lancou', 'lançou', 'lançado', 'lançada', 'produçao', 'produção',
-                'producoes', 'produções', 'drama', 'ação', 'acao', 'interno', 'interna', 'internos', 'internas',
-            );
-
-            $content_words = 0;
-            $generic_word_count = 0;
-            foreach ($anchor_words as $word) {
-                $normalized_word = self::normalize_link_suggestion_key($word);
-                if ($normalized_word === '') {
-                    continue;
-                }
-
-                if (in_array($normalized_word, $generic_terms, true)) {
-                    $generic_word_count++;
-                }
-
-                if (mb_strlen($normalized_word, 'UTF-8') >= 4) {
-                    $content_words++;
-                }
-            }
-
-            if ($content_words < 1 || $generic_word_count >= $word_count) {
-                return '';
-            }
-
-            $source_lookup = self::normalize_link_suggestion_key($source_linkable_text);
-            if ($source_lookup === '') {
-                return '';
-            }
-
-            if ($word_count === 1) {
-                $single_word = self::normalize_link_suggestion_key($anchor_words[0]);
-                if ($single_word === '' || mb_strlen($single_word, 'UTF-8') < 4 || in_array($single_word, $generic_terms, true)) {
-                    return '';
-                }
-                if (mb_stripos($source_lookup, $single_word, 0, 'UTF-8') !== false) {
-                    return self::normalize_plain_text($anchor_words[0]);
-                }
-                return '';
-            }
-
-            $best_fragment = '';
-            for ($size = min(10, $word_count); $size >= 2; $size--) {
-                for ($offset = 0; $offset <= $word_count - $size; $offset++) {
-                    $fragment = implode(' ', array_slice($anchor_words, $offset, $size));
-                    $fragment_lookup = self::normalize_link_suggestion_key($fragment);
-                    if ($fragment_lookup === '') {
-                        continue;
-                    }
-                    if (mb_stripos($source_lookup, $fragment_lookup, 0, 'UTF-8') !== false) {
-                        $best_fragment = self::normalize_plain_text($fragment);
-                        break 2;
-                    }
-                }
-            }
-
-            if ($best_fragment !== '') {
-                return $best_fragment;
-            }
-
-            for ($offset = 0; $offset < $word_count; $offset++) {
-                $single_word = self::normalize_link_suggestion_key($anchor_words[$offset]);
-                if ($single_word === '' || mb_strlen($single_word, 'UTF-8') < 4 || in_array($single_word, $generic_terms, true)) {
-                    continue;
-                }
-                if (mb_stripos($source_lookup, $single_word, 0, 'UTF-8') !== false) {
-                    return self::normalize_plain_text($anchor_words[$offset]);
-                }
-            }
-
-            if ($word_count <= 10) {
-                $anchor_lookup = self::normalize_link_suggestion_key($anchor);
-                if ($anchor_lookup !== '' && mb_stripos($source_lookup, $anchor_lookup, 0, 'UTF-8') !== false) {
-                    return $anchor;
-                }
-            }
-
-            return '';
-        }
-
-        private static function limit_plain_text_words($text, $max_words = self::MAX_SOURCE_WORDS)
-        {
-            $text = self::normalize_plain_text($text);
-            $max_words = max(1, intval($max_words));
-
-            if ($text === '') {
-                return '';
-            }
-
-            if (function_exists('wp_trim_words')) {
-                return trim((string) wp_trim_words($text, $max_words));
-            }
-
-            $parts = preg_split('/\s+/', $text);
-            if (!is_array($parts) || empty($parts)) {
-                return $text;
-            }
-
-            return trim(implode(' ', array_slice($parts, 0, $max_words)));
-        }
-
         private static function lift_execution_time_limit($seconds = 300)
         {
             $seconds = max(30, intval($seconds));
@@ -355,15 +153,6 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
 
             $source_title = self::normalize_plain_text(get_the_title($post));
             $source_content_html = (string) $post->post_content;
-            $source_linkable_text = self::extract_linkable_text_from_html($source_content_html);
-
-            $post_types = array_values(array_diff(get_post_types(array('public' => true), 'names'), array('attachment', 'revision', 'nav_menu_item')));
-            if (empty($post_types)) {
-                $post_types = array('post');
-            }
-
-            $candidates = self::query_candidate_posts($post_id, self::MAX_TARGET_POSTS, $post_types);
-
             return array(
                 'generator' => $generator,
                 'post' => $post,
@@ -371,9 +160,7 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
                     'id' => $post_id,
                     'title' => $source_title,
                     'content_html' => $source_content_html,
-                    'linkable_text' => $source_linkable_text,
                 ),
-                'candidates' => $candidates,
             );
         }
 
@@ -391,44 +178,6 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
                 'post_type' => $post->post_type,
                 'status' => $post->post_status,
             );
-        }
-
-        private static function query_candidate_posts($exclude_post_id = 0, $limit = 25, $post_types = array())
-        {
-            $exclude_post_id = intval($exclude_post_id);
-            $limit = max(1, min(50, intval($limit)));
-            $post_types = is_array($post_types) && !empty($post_types) ? array_values($post_types) : array('post');
-
-            $posts = get_posts(array(
-                'post_type' => $post_types,
-                'post_status' => array('publish'),
-                'posts_per_page' => $limit + 5,
-                'orderby' => 'date',
-                'order' => 'DESC',
-                'post__not_in' => $exclude_post_id > 0 ? array($exclude_post_id) : array(),
-            ));
-
-            if (empty($posts) || !is_array($posts)) {
-                return array();
-            }
-
-            $items = array();
-            foreach ($posts as $post) {
-                if (!$post instanceof WP_Post) {
-                    continue;
-                }
-
-                $items[] = array(
-                    'id' => intval($post->ID),
-                    'title' => self::normalize_plain_text(get_the_title($post)),
-                );
-
-                if (count($items) >= $limit) {
-                    break;
-                }
-            }
-
-            return $items;
         }
 
         private static function query_picker_posts($search = '', $page = 1, $per_page = 10)
@@ -562,461 +311,6 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
             return is_array($decoded) ? $decoded : array();
         }
 
-        private static function normalize_suggestion_item($item, $index, $candidate_lookup = array(), $source_linkable_text = '')
-        {
-            $item = is_array($item) ? $item : array();
-            $anchor = '';
-            foreach (array('anchor', 'anchor_phrase', 'phrase', 'keyword', 'kw', 'ancora', 'ancora_texto', 'text_anchor') as $key) {
-                if (!empty($item[$key])) {
-                    $anchor = self::normalize_plain_text((string) $item[$key]);
-                    break;
-                }
-            }
-
-            $post_id = 0;
-            foreach (array('post_id', 'id', 'target_post_id', 'target_id', 'postid') as $key) {
-                if (!empty($item[$key])) {
-                    $post_id = intval($item[$key]);
-                    break;
-                }
-            }
-
-            $title = '';
-            foreach (array('title', 'post_title', 'target_title', 'nome', 'nome_post', 'post') as $key) {
-                if (!empty($item[$key])) {
-                    $title = self::normalize_plain_text((string) $item[$key]);
-                    break;
-                }
-            }
-
-            if ($post_id <= 0 && $title !== '') {
-                $title_lookup = self::normalize_plain_text($title);
-                if (isset($candidate_lookup['title'][$title_lookup])) {
-                    $post_id = intval($candidate_lookup['title'][$title_lookup]['id']);
-                    if ($candidate_lookup['title'][$title_lookup]['title'] !== '') {
-                        $title = (string) $candidate_lookup['title'][$title_lookup]['title'];
-                    }
-                } else {
-                    $loose_title_lookup = self::normalize_link_suggestion_key($title);
-                    if ($loose_title_lookup !== '' && isset($candidate_lookup['loose_title'][$loose_title_lookup])) {
-                        $post_id = intval($candidate_lookup['loose_title'][$loose_title_lookup]['id']);
-                        if ($candidate_lookup['loose_title'][$loose_title_lookup]['title'] !== '') {
-                            $title = (string) $candidate_lookup['loose_title'][$loose_title_lookup]['title'];
-                        }
-                    }
-                }
-            }
-
-            if ($title === '' && $post_id > 0 && isset($candidate_lookup['id'][$post_id])) {
-                $title = (string) $candidate_lookup['id'][$post_id]['title'];
-            }
-
-            $apply_anchor = '';
-            if ($anchor !== '') {
-                $apply_anchor = self::normalize_link_suggestion_anchor($anchor, $source_linkable_text);
-            }
-            if ($apply_anchor === '' && $title !== '') {
-                $apply_anchor = self::normalize_link_suggestion_anchor($title, $source_linkable_text);
-            }
-            if ($apply_anchor === '' && $title !== '') {
-                $apply_anchor = $title;
-            }
-            if ($apply_anchor === '' && $anchor !== '') {
-                $apply_anchor = $anchor;
-            }
-
-            $reason = '';
-            foreach (array('reason', 'motivo', 'description', 'suggestion', 'sugestao', 'sugestão') as $key) {
-                if (!empty($item[$key])) {
-                    $reason = sanitize_textarea_field((string) $item[$key]);
-                    break;
-                }
-            }
-
-            return array(
-                'index' => intval($index),
-                'anchor' => $anchor,
-                'apply_anchor' => $apply_anchor,
-                'post_id' => $post_id,
-                'title' => $title,
-                'reason' => $reason,
-            );
-        }
-
-        private static function normalize_link_suggestions_response($response, $requested_count, $candidate_lookup = array(), $source_post_id = 0, $source_linkable_text = '')
-        {
-            $requested_count = max(1, intval($requested_count));
-            $source_post_id = intval($source_post_id);
-            $normalized = array(
-                'source_post_id' => 0,
-                'requested_count' => $requested_count,
-                'suggestions' => array(),
-            );
-
-            if (!is_array($response)) {
-                return $normalized;
-            }
-
-            if (!empty($response['source_post_id'])) {
-                $normalized['source_post_id'] = intval($response['source_post_id']);
-            }
-
-            $items = array();
-            if (!empty($response['suggestions']) && is_array($response['suggestions'])) {
-                $items = $response['suggestions'];
-            } elseif (!empty($response['links']) && is_array($response['links'])) {
-                $items = $response['links'];
-            } elseif (!empty($response['items']) && is_array($response['items'])) {
-                $items = $response['items'];
-            } elseif (!empty($response['results']) && is_array($response['results'])) {
-                $items = $response['results'];
-            } elseif (!empty($response['data']) && is_array($response['data'])) {
-                $nested = $response['data'];
-                if (!empty($nested['suggestions']) && is_array($nested['suggestions'])) {
-                    $items = $nested['suggestions'];
-                } elseif (!empty($nested['links']) && is_array($nested['links'])) {
-                    $items = $nested['links'];
-                } elseif (!empty($nested['items']) && is_array($nested['items'])) {
-                    $items = $nested['items'];
-                } elseif (!empty($nested['results']) && is_array($nested['results'])) {
-                    $items = $nested['results'];
-                }
-            } elseif (!empty($response) && array_values($response) === $response) {
-                $items = $response;
-            }
-
-            if (empty($items) && !empty($response) && is_array($response)) {
-                foreach ($response as $key => $value) {
-                    if (!is_string($key) && !is_int($key)) {
-                        continue;
-                    }
-                    if (!is_array($value)) {
-                        continue;
-                    }
-                    if (is_int($key) || ctype_digit((string) $key)) {
-                        $items[] = $value;
-                    }
-                }
-            }
-
-            $seen = array();
-            $seen_post_ids = array();
-            foreach ($items as $index => $item) {
-                $suggestion = self::normalize_suggestion_item($item, $index + 1, $candidate_lookup, $source_linkable_text);
-                if ($suggestion['anchor'] === '' || intval($suggestion['post_id']) <= 0) {
-                    continue;
-                }
-
-                if ($source_post_id > 0 && intval($suggestion['post_id']) === $source_post_id) {
-                    continue;
-                }
-
-                $anchor_key = self::normalize_link_suggestion_key($suggestion['anchor']);
-                $dedupe_key = intval($suggestion['post_id']) . '|' . $anchor_key;
-                if ($anchor_key === '' || isset($seen[$dedupe_key]) || isset($seen['anchor:' . $anchor_key])) {
-                    continue;
-                }
-                if (isset($seen_post_ids[intval($suggestion['post_id'])])) {
-                    continue;
-                }
-                $seen[$dedupe_key] = true;
-                $seen['anchor:' . $anchor_key] = true;
-                $seen_post_ids[intval($suggestion['post_id'])] = true;
-
-                $normalized['suggestions'][] = $suggestion;
-                if (count($normalized['suggestions']) >= $requested_count) {
-                    break;
-                }
-            }
-
-            return $normalized;
-        }
-
-        private static function build_link_suggestion_prompt($source, $candidates, $requested_count, $custom_prompt = '')
-        {
-            $source = is_array($source) ? $source : array();
-            $candidates = is_array($candidates) ? array_values($candidates) : array();
-            $requested_count = max(1, intval($requested_count));
-
-            $source_payload = array(
-                'id' => !empty($source['id']) ? intval($source['id']) : 0,
-                'title' => !empty($source['title']) ? (string) $source['title'] : '',
-                'content_html' => !empty($source['content_html']) ? (string) $source['content_html'] : '',
-                'linkable_text' => !empty($source['linkable_text']) ? (string) $source['linkable_text'] : '',
-            );
-
-            $candidate_payload = array();
-            foreach ($candidates as $candidate) {
-                if (!is_array($candidate)) {
-                    continue;
-                }
-                $candidate_payload[] = array(
-                    'id' => !empty($candidate['id']) ? intval($candidate['id']) : 0,
-                    'title' => !empty($candidate['title']) ? (string) $candidate['title'] : '',
-                );
-            }
-
-            $custom_prompt = self::normalize_plain_text($custom_prompt);
-
-            $lines = array(
-                'Analise o conteúdo de origem e encontre frases que possam receber links internos.',
-                'ID do post de origem: ' . (!empty($source_payload['id']) ? intval($source_payload['id']) : 0) . '.',
-                'Não invente títulos, IDs ou URLs.',
-                'Nunca sugira o post de origem.',
-                'Não repita o mesmo post alvo.',
-                'Seria interessante que fossem escolhidos termos por todo o conteúdo permitido, ou seja, do início ao fim e que evitasse que fossem muito próximos ou até mesmo no mesmo parágrafo.',
-                'Priorize nomes de obras e a frase complementar mais natural ao redor deles.',
-                'O anchor ideal é a menor frase natural que contenha o nome da obra, título, sigla ou termo forte, somado à frase complementar que dá contexto e autoridade.',
-                'Evite anchors genéricas isoladas quando existir uma frase maior e específica no conteúdo.',
-                'Cada sugestao deve ter somente: anchor e post_id.',
-                'Não use parágrafo inteiro. Prefira um trecho natural de 4 a 12 palavras que contenha o nome da obra + a frase complementar mais forte.',
-                'Não use o primeiro parágrafo, não use headings, legendas e botoes.',
-                'Retorne até ' . $requested_count . ' sugestões.',
-                'Não complete a lista repetindo o mesmo post_id.',
-                $custom_prompt !== '' ? 'Observação do usuário: ' . $custom_prompt : '',
-                'Conteudo de origem em JSON: ' . wp_json_encode($source_payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                'Posts candidatos em JSON: ' . wp_json_encode($candidate_payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                'FORMATO DE SAIDA',
-                'Retorne exclusivamente o JSON valido com exatamente esta estrutura:',
-                '{',
-                '  "suggestions": [',
-                '    {',
-                '      "anchor": "",',
-                '      "post_id": 0',
-                '    }',
-                '  ]',
-                '}',
-            );
-
-            $lines = array_values(array_filter($lines, 'strlen'));
-            return implode("\n", $lines);
-        }
-
-        private static function build_candidate_lookup($candidates)
-        {
-            $lookup = array(
-                'id' => array(),
-                'title' => array(),
-                'loose_title' => array(),
-            );
-
-            foreach ($candidates as $candidate) {
-                if (!is_array($candidate)) {
-                    continue;
-                }
-
-                $id = !empty($candidate['id']) ? intval($candidate['id']) : 0;
-                $title = !empty($candidate['title']) ? self::normalize_plain_text((string) $candidate['title']) : '';
-                $loose_title = !empty($candidate['title']) ? self::normalize_link_suggestion_key((string) $candidate['title']) : '';
-                if ($id > 0) {
-                    $lookup['id'][$id] = $candidate;
-                }
-                if ($title !== '') {
-                    $lookup['title'][self::normalize_plain_text($title)] = $candidate;
-                }
-                if ($loose_title !== '') {
-                    $lookup['loose_title'][$loose_title] = $candidate;
-                }
-            }
-
-            return $lookup;
-        }
-
-        private static function build_link_suggestions_fallback($source, $candidates, $requested_count)
-        {
-            $source = is_array($source) ? $source : array();
-            $candidates = is_array($candidates) ? array_values($candidates) : array();
-            $requested_count = max(1, intval($requested_count));
-
-            $source_linkable_text = !empty($source['linkable_text']) ? self::normalize_plain_text((string) $source['linkable_text']) : '';
-            $source_haystack = $source_linkable_text;
-            if ($source_haystack === '') {
-                return array();
-            }
-
-            $scores = array();
-            foreach ($candidates as $candidate) {
-                if (!is_array($candidate)) {
-                    continue;
-                }
-
-                $post_id = !empty($candidate['id']) ? intval($candidate['id']) : 0;
-                $title = !empty($candidate['title']) ? self::normalize_plain_text((string) $candidate['title']) : '';
-                if ($post_id <= 0 || $title === '') {
-                    continue;
-                }
-
-                $normalized_title = self::normalize_link_suggestion_key($title);
-                if ($normalized_title === '') {
-                    continue;
-                }
-
-                $score = 0;
-                if (mb_stripos($source_haystack, $title, 0, 'UTF-8') !== false) {
-                    $score += 500;
-                }
-
-                $tokens = array_values(array_filter(preg_split('/\s+/u', $normalized_title), 'strlen'));
-                $token_count = count($tokens);
-                if ($token_count > 0) {
-                    $max_window = min(4, $token_count);
-                    for ($window = $max_window; $window >= 1; $window--) {
-                        for ($offset = 0; $offset <= $token_count - $window; $offset++) {
-                            $phrase = implode(' ', array_slice($tokens, $offset, $window));
-                            if ($phrase === '') {
-                                continue;
-                            }
-                            if (mb_stripos(self::normalize_link_suggestion_key($source_haystack), $phrase, 0, 'UTF-8') !== false) {
-                                $score += ($window * 120) + 5;
-                            }
-                        }
-                    }
-                }
-
-                if ($score <= 0) {
-                    continue;
-                }
-
-                $scores[] = array(
-                    'candidate' => $candidate,
-                    'score' => $score,
-                );
-            }
-
-            if (empty($scores)) {
-                return array();
-            }
-
-            usort($scores, static function ($left, $right) {
-                $left_score = isset($left['score']) ? intval($left['score']) : 0;
-                $right_score = isset($right['score']) ? intval($right['score']) : 0;
-                if ($left_score === $right_score) {
-                    return 0;
-                }
-                return ($left_score > $right_score) ? -1 : 1;
-            });
-
-            $fallback = array();
-            $seen_post_ids = array();
-            foreach ($scores as $item) {
-                $candidate = isset($item['candidate']) && is_array($item['candidate']) ? $item['candidate'] : array();
-                $post_id = !empty($candidate['id']) ? intval($candidate['id']) : 0;
-                $title = !empty($candidate['title']) ? self::normalize_plain_text((string) $candidate['title']) : '';
-                if ($post_id <= 0 || $title === '' || isset($seen_post_ids[$post_id])) {
-                    continue;
-                }
-
-                $anchor = $title;
-                if (!empty($source_haystack) && mb_stripos($source_haystack, $title, 0, 'UTF-8') !== false) {
-                    $anchor = $title;
-                } else {
-                    $tokens = array_values(array_filter(preg_split('/\s+/u', self::normalize_link_suggestion_key($title)), 'strlen'));
-                    $candidate_anchor = '';
-                    for ($window = min(4, count($tokens)); $window >= 1; $window--) {
-                        for ($offset = 0; $offset <= count($tokens) - $window; $offset++) {
-                            $phrase = implode(' ', array_slice($tokens, $offset, $window));
-                            if ($phrase === '') {
-                                continue;
-                            }
-                            if (mb_stripos(self::normalize_link_suggestion_key($source_haystack), $phrase, 0, 'UTF-8') !== false) {
-                                $candidate_anchor = $phrase;
-                                break 2;
-                            }
-                        }
-                    }
-
-                    if ($candidate_anchor === '') {
-                        continue;
-                    }
-
-                    $anchor = $candidate_anchor;
-                }
-
-                $fallback[] = array(
-                    'index' => count($fallback) + 1,
-                    'anchor' => $anchor,
-                    'post_id' => $post_id,
-                    'title' => $title,
-                    'reason' => 'fallback',
-                );
-                $seen_post_ids[$post_id] = true;
-
-                if (count($fallback) >= $requested_count) {
-                    break;
-                }
-            }
-
-            return $fallback;
-        }
-
-        private static function resolve_post_by_id($post_id)
-        {
-            $post_id = intval($post_id);
-            if ($post_id <= 0) {
-                return null;
-            }
-
-            $post = get_post($post_id);
-            if (!($post instanceof WP_Post)) {
-                return null;
-            }
-
-            if ($post->post_status !== 'publish') {
-                return null;
-            }
-
-            return $post;
-        }
-
-        private static function build_internal_link_rules_from_suggestions($suggestions)
-        {
-            $suggestions = is_array($suggestions) ? $suggestions : array();
-            $rules = array();
-            $seen_post_ids = array();
-
-            foreach ($suggestions as $suggestion) {
-                if (!is_array($suggestion)) {
-                    continue;
-                }
-
-                $post_id = !empty($suggestion['post_id']) ? intval($suggestion['post_id']) : 0;
-                $anchor = !empty($suggestion['apply_anchor']) ? self::normalize_plain_text((string) $suggestion['apply_anchor']) : '';
-                if ($anchor === '' && !empty($suggestion['anchor'])) {
-                    $anchor = self::normalize_plain_text((string) $suggestion['anchor']);
-                }
-                if ($post_id <= 0 || $anchor === '') {
-                    continue;
-                }
-
-                if (isset($seen_post_ids[$post_id])) {
-                    continue;
-                }
-
-                $target_post = self::resolve_post_by_id($post_id);
-                if (!$target_post instanceof WP_Post) {
-                    continue;
-                }
-
-                $permalink = get_permalink($target_post);
-                if ($permalink === '') {
-                    continue;
-                }
-
-                $seen_post_ids[$post_id] = true;
-                $rules[] = array(
-                    'quantity' => 1,
-                    'phrase' => $anchor,
-                    'url' => $permalink,
-                    'target_blank' => 0,
-                    'nofollow' => 0,
-                    'sponsored' => 0,
-                    'ugc' => 0,
-                );
-            }
-
-            return $rules;
-        }
-
         private static function render_notice()
         {
             $notice = self::get_request_param('content_rank_notice', '');
@@ -1038,6 +332,9 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
             } elseif ($notice === 'error') {
                 $message = self::get_request_param('content_rank_message', 'Não foi possivel concluir a operacao.');
                 $class = 'notice-error';
+            } else {
+                $message = $notice;
+                $class = self::get_request_param('content_rank_notice_type', 'success') === 'error' ? 'notice-error' : 'notice-success';
             }
 
             if ($message === '') {
@@ -1056,7 +353,11 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
 
             $suggestions = !empty($plan['suggestions']) && is_array($plan['suggestions']) ? $plan['suggestions'] : array();
             if (empty($suggestions)) {
-                echo '<div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">A IA não retornou sugestões válidas.</div>';
+                $candidate_count = isset($plan['candidates_count']) ? intval($plan['candidates_count']) : 0;
+                if (!empty($plan['search_terms']) && is_array($plan['search_terms'])) {
+                    echo '<p class="mt-3 text-xs text-slate-500">Termos pesquisados: ' . esc_html(implode(', ', $plan['search_terms'])) . '</p>';
+                }
+                echo '<div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">' . ($candidate_count > 0 ? 'Nenhum encaixe válido encontrado nos parágrafos para os títulos candidatos.' : 'Nenhum post publicado com termos relevantes no título foi encontrado.') . '</div>';
                 return;
             }
 
@@ -1065,8 +366,14 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
             echo '<div class="flex flex-wrap items-start justify-between gap-3">';
             echo '<div>';
             echo '<h2 class="text-lg font-semibold text-slate-950">Sugestões salvas</h2>';
+            if (isset($plan['candidates_count'])) {
+                echo '<p class="mt-1 text-xs text-slate-500">' . esc_html(intval($plan['candidates_count'])) . ' título(s) passaram pelo filtro de correspondência.</p>';
+            }
             if (!empty($plan['generated_at'])) {
                 echo '<p class="mt-1 text-sm text-slate-500">Gerado em ' . esc_html($plan['generated_at']) . '</p>';
+            }
+            if (!empty($plan['applied_count'])) {
+                echo '<p class="mt-1 text-sm text-emerald-700">' . esc_html(intval($plan['applied_count'])) . ' link(s) aplicado(s) ao conteúdo.</p>';
             }
             echo '</div>';
             echo '<div class="text-sm text-slate-500">' . esc_html(count($suggestions)) . ' sugestao(oes)</div>';
@@ -1080,18 +387,21 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
             echo '<th class="px-6 py-3">Ancora</th>';
             echo '<th class="px-6 py-3">Post ID</th>';
             echo '<th class="px-6 py-3">Titulo</th>';
+            echo '<th class="px-6 py-3">Texto proposto</th>';
             echo '</tr></thead>';
             echo '<tbody class="divide-y divide-slate-100 bg-white">';
             foreach ($suggestions as $index => $suggestion) {
                 $anchor = !empty($suggestion['anchor']) ? (string) $suggestion['anchor'] : '-';
                 $post_id = !empty($suggestion['post_id']) ? intval($suggestion['post_id']) : 0;
                 $title = !empty($suggestion['title']) ? (string) $suggestion['title'] : '-';
+                $replacement = !empty($suggestion['replacement']) ? (string) $suggestion['replacement'] : 'Usar o texto existente';
 
                 echo '<tr class="align-top">';
                 echo '<td class="px-6 py-4 text-sm text-slate-600">' . esc_html(intval($index) + 1) . '</td>';
                 echo '<td class="px-6 py-4 text-sm text-slate-900">' . esc_html($anchor) . '</td>';
                 echo '<td class="px-6 py-4 text-sm text-slate-700">' . esc_html($post_id > 0 ? $post_id : '-') . '</td>';
                 echo '<td class="px-6 py-4 text-sm font-medium text-slate-900">' . esc_html($title) . '</td>';
+                echo '<td class="px-6 py-4 text-sm text-slate-700">' . esc_html($replacement) . '</td>';
                 echo '</tr>';
             }
             echo '</tbody>';
@@ -1100,296 +410,122 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
             echo '</div>';
         }
 
+        private static function save_plan($post_id, $plan)
+        {
+            update_post_meta($post_id, self::META_JSON, wp_slash(wp_json_encode($plan, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)));
+            update_post_meta($post_id, self::META_GENERATED_AT, $plan['generated_at']);
+            update_post_meta($post_id, self::META_SOURCE_POST_ID, $post_id);
+            update_post_meta($post_id, self::META_CUSTOM_PROMPT, wp_slash($plan['custom_prompt']));
+            update_post_meta($post_id, self::META_REQUESTED_COUNT, $plan['requested_count']);
+            update_post_meta($post_id, self::META_REWRITE_CONTEXTUAL, !empty($plan['rewrite_contextual']) ? 1 : 0);
+            delete_post_meta($post_id, self::META_APPLIED_AT);
+            delete_post_meta($post_id, self::META_APPLIED_COUNT);
+            Content_Rank_Contextual_Links::trace($plan, $post_id, 'persistence', 'plan_saved', array(
+                'accepted_count' => count($plan['suggestions']), 'rejected_count' => count($plan['rejections'] ?? array()),
+                'stored_plan_matches' => get_post_meta($post_id, self::META_JSON, true) === wp_json_encode($plan, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)));
+        }
+
+        private static function apply_saved_plan($post_id, $plan)
+        {
+            $content = (string) get_post_field('post_content', $post_id);
+            Content_Rank_Contextual_Links::trace($plan, $post_id, 'persistence', 'started', array(
+                'expected_hash' => $plan['content_hash'] ?? '', 'actual_hash' => hash('sha256', $content),
+                'planning_rejections' => $plan['rejections'] ?? array()));
+            if (empty($plan['content_hash']) || !hash_equals($plan['content_hash'], hash('sha256', $content))) {
+                Content_Rank_Contextual_Links::trace($plan, $post_id, 'persistence', 'stopped', array('reason' => 'content_changed_since_analysis'));
+                return new WP_Error('content_rank_links_changed', 'O conteúdo mudou desde a análise. Gere novas sugestões antes de aplicar.');
+            }
+            $result = Content_Rank_Contextual_Links::apply($content, $plan, $post_id, 'save_validation');
+            $result['planning_rejections'] = $plan['rejections'] ?? array();
+            $result['save_verified'] = false;
+            if ($result['applied_count'] > 0) {
+                Content_Rank_Contextual_Links::trace($plan, $post_id, 'persistence', 'write_requested', array('prepared_count' => $result['applied_count'],
+                    'expected_output_hash' => hash('sha256', $result['content_html'])));
+                $saved = wp_update_post(wp_slash(array('ID' => $post_id, 'post_content' => $result['content_html'])), true);
+                if (is_wp_error($saved)) {
+                    Content_Rank_Contextual_Links::trace($plan, $post_id, 'persistence', 'write_failed', array('message' => $saved->get_error_message()));
+                    return $saved;
+                }
+                $stored_content = (string) get_post_field('post_content', $post_id, 'raw');
+                $result['save_verified'] = $stored_content === $result['content_html'];
+                Content_Rank_Contextual_Links::trace($plan, $post_id, 'persistence', 'write_result', array('returned_post_id' => intval($saved),
+                    'stored_content_matches' => $result['save_verified'], 'actual_output_hash' => hash('sha256', $stored_content)));
+            } else {
+                Content_Rank_Contextual_Links::trace($plan, $post_id, 'persistence', 'write_skipped', array('reason' => 'no_valid_edits',
+                    'planning_rejections' => $plan['rejections'] ?? array(), 'save_rejections' => $result['rejections']));
+            }
+            update_post_meta($post_id, self::META_APPLIED_AT, current_time('mysql'));
+            update_post_meta($post_id, self::META_APPLIED_COUNT, $result['applied_count']);
+            Content_Rank_Contextual_Links::trace($plan, $post_id, 'persistence', 'finished', array('prepared_count' => $result['applied_count'],
+                'save_verified' => $result['save_verified'], 'stored_applied_count' => intval(get_post_meta($post_id, self::META_APPLIED_COUNT, true))));
+            return array_merge($plan, $result);
+        }
+
         public function handle_generate_link_suggestions()
         {
             if (!current_user_can('manage_options')) {
-                wp_die('Permissao negada.');
+                wp_die('Permissão negada.');
             }
-
             check_admin_referer('content_rank_generate_link_suggestions', 'content_rank_link_suggestions_nonce');
             self::lift_execution_time_limit(300);
-
             $post_id = isset($_POST['source_post_id']) ? intval($_POST['source_post_id']) : 0;
-            $requested_count = isset($_POST['suggestion_count']) ? intval($_POST['suggestion_count']) : 5;
-            $requested_count = max(1, min(25, $requested_count));
+            if (!current_user_can('edit_post', $post_id)) {
+                wp_die('Permissão negada.');
+            }
+            $count = max(1, min(4, isset($_POST['suggestion_count']) ? intval($_POST['suggestion_count']) : 4));
             $custom_prompt = isset($_POST['custom_prompt']) ? sanitize_textarea_field(wp_unslash($_POST['custom_prompt'])) : '';
-
+            $rewrite_contextual = !empty($_POST['rewrite_contextual']);
             $context = self::get_source_context($post_id);
             if (is_wp_error($context)) {
-                $this->redirect_with_notice($context->get_error_message(), 'error', array(
-                    'post_id' => $post_id,
-                ));
+                $this->redirect_with_notice($context->get_error_message(), 'error', array('post_id' => $post_id));
             }
-
-            $generator = $context['generator'];
-            $source = $context['source'];
-            $candidates = $context['candidates'];
-
-            $prompt = self::build_link_suggestion_prompt($source, $candidates, $requested_count, $custom_prompt);
-            $response = Content_Rank_Generator::request_openai_json($generator, $prompt, array(
-                'stage' => 'link_suggestions',
-                'source_type' => 'post',
-                'item_guid' => !empty($source['id']) ? 'post:' . intval($source['id']) : '',
-                'item_title' => !empty($source['title']) ? (string) $source['title'] : '',
-                'source_context_enriched' => 1,
-                'allow_missing_content_html' => 1,
-                'preserve_extra_fields' => 1,
-            ));
-
-            if (is_wp_error($response)) {
-                $this->redirect_with_notice($response->get_error_message(), 'error', array(
-                    'post_id' => $post_id,
-                ));
+            $plan = Content_Rank_Contextual_Links::plan($context['source']['content_html'], $context['generator'], $post_id, $context['source'], $count, $custom_prompt, $rewrite_contextual);
+            if (is_wp_error($plan)) {
+                $this->redirect_with_notice($plan->get_error_message(), 'error', array('post_id' => $post_id));
             }
-
-            $candidate_lookup = self::build_candidate_lookup($candidates);
-            $normalized = self::normalize_link_suggestions_response($response, $requested_count, $candidate_lookup, !empty($source['id']) ? intval($source['id']) : 0, !empty($source['linkable_text']) ? (string) $source['linkable_text'] : '');
-            $normalized['source_post_id'] = $post_id;
-            $normalized['requested_count'] = $requested_count;
-            $normalized['generated_at'] = current_time('mysql');
-            $normalized['custom_prompt'] = $custom_prompt;
-            $normalized['source'] = array(
-                'id' => intval($source['id']),
-                'title' => isset($source['title']) ? $source['title'] : '',
-            );
-            $normalized['candidates_count'] = count($candidates);
-
-            update_post_meta($post_id, self::META_JSON, wp_json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-            update_post_meta($post_id, self::META_GENERATED_AT, current_time('mysql'));
-            update_post_meta($post_id, self::META_SOURCE_POST_ID, $post_id);
-            update_post_meta($post_id, self::META_CUSTOM_PROMPT, $custom_prompt);
-            update_post_meta($post_id, self::META_REQUESTED_COUNT, $requested_count);
-            delete_post_meta($post_id, self::META_APPLIED_AT);
-            delete_post_meta($post_id, self::META_APPLIED_COUNT);
-
-            if (empty($normalized['suggestions'])) {
-                $this->redirect_with_notice('Não foi possivel montar sugestoes validas.', 'error', array(
-                    'post_id' => $post_id,
-                ));
-            }
-
-            $this->redirect_with_notice('generated', 'success', array(
-                'post_id' => $post_id,
-                'content_rank_count' => count($normalized['suggestions']),
+            self::save_plan($post_id, $plan);
+            $this->redirect_with_notice(empty($plan['suggestions']) ? 'Nenhum encaixe válido encontrado para os posts candidatos.' : 'generated', 'success', array(
+                'post_id' => $post_id, 'content_rank_count' => count($plan['suggestions']),
             ));
         }
 
         public function handle_apply_link_suggestions()
         {
             if (!current_user_can('manage_options')) {
-                wp_die('Permissao negada.');
+                wp_die('Permissão negada.');
             }
-
             check_admin_referer('content_rank_apply_link_suggestions', 'content_rank_link_suggestions_nonce');
-
             $post_id = isset($_POST['source_post_id']) ? intval($_POST['source_post_id']) : 0;
-            if ($post_id <= 0) {
-                $this->redirect_with_notice('Post invalido.', 'error', array(
-                    'post_id' => $post_id,
-                ));
+            if (!current_user_can('edit_post', $post_id)) {
+                wp_die('Permissão negada.');
             }
-
-            $plan = self::get_suggestions_meta($post_id);
-            $suggestions = !empty($plan['suggestions']) && is_array($plan['suggestions']) ? $plan['suggestions'] : array();
-            if (empty($suggestions)) {
-                $this->redirect_with_notice('Não existem sugestoes para aplicar.', 'error', array(
-                    'post_id' => $post_id,
-                ));
+            $result = self::apply_saved_plan($post_id, self::get_suggestions_meta($post_id));
+            if (is_wp_error($result)) {
+                $this->redirect_with_notice($result->get_error_message(), 'error', array('post_id' => $post_id));
             }
-
-            $rules = self::build_internal_link_rules_from_suggestions($suggestions);
-            if (empty($rules)) {
-                $this->redirect_with_notice('Nenhum post valido foi encontrado para aplicar os links.', 'error', array(
-                    'post_id' => $post_id,
-                ));
-            }
-
-            $content = (string) get_post_field('post_content', $post_id);
-            if ($content === '') {
-                $this->redirect_with_notice('O post não possui conteúdo para receber links.', 'error', array(
-                    'post_id' => $post_id,
-                ));
-            }
-
-            $generator = self::get_default_generator_context();
-            $generator['internal_links_json'] = wp_json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            $generator['internal_links_count'] = count($rules);
-
-            $updated_content = Content_Rank_Generator_Helper::apply_internal_links_to_content(
-                $content,
-                $generator,
-                array(
-                    'post_id' => $post_id,
-                )
-            );
-
-            if ($updated_content === '' || $updated_content === $content) {
-                $this->redirect_with_notice('Nenhum link foi inserido no conteúdo.', 'error', array(
-                    'post_id' => $post_id,
-                ));
-            }
-
-            $update_result = wp_update_post(array(
-                'ID' => $post_id,
-                'post_content' => $updated_content,
-            ), true);
-
-            if (is_wp_error($update_result)) {
-                $this->redirect_with_notice($update_result->get_error_message(), 'error', array(
-                    'post_id' => $post_id,
-                ));
-            }
-
-            update_post_meta($post_id, self::META_APPLIED_AT, current_time('mysql'));
-            update_post_meta($post_id, self::META_APPLIED_COUNT, count($rules));
-
-            $this->redirect_with_notice('applied', 'success', array(
-                'post_id' => $post_id,
-                'content_rank_count' => count($rules),
+            $this->redirect_with_notice($result['applied_count'] > 0 ? 'applied' : 'Nenhum link foi inserido no conteúdo.', 'success', array(
+                'post_id' => $post_id, 'content_rank_count' => $result['applied_count'],
             ));
         }
 
-        public static function generate_and_apply_link_suggestions_to_post($post_id, $generator = array(), $requested_count = 0, $custom_prompt = '', $content_html = '')
+        public static function generate_and_apply_link_suggestions_to_post($post_id, $generator = array(), $requested_count = 4, $custom_prompt = '', $content_html = '', $context = array(), $rewrite_contextual = null)
         {
-            $post_id = intval($post_id);
-            $post = $post_id > 0 ? get_post($post_id) : null;
+            $post = get_post($post_id);
             if (!$post instanceof WP_Post) {
                 return new WP_Error('content_rank_link_suggestions_post_missing', 'Post não encontrado.');
             }
-
-            self::lift_execution_time_limit(300);
-
-            $generator = is_array($generator) ? $generator : array();
-            $requested_count = intval($requested_count);
-            if ($requested_count <= 0) {
-                $requested_count = !empty($generator['internal_links_count']) ? intval($generator['internal_links_count']) : 5;
+            $content_html = $content_html !== '' ? $content_html : (string) $post->post_content;
+            $context['title'] = $context['title'] ?? $post->post_title;
+            $use_contextual = $rewrite_contextual === null
+                ? (!empty($generator['contextual_links_enabled']) || !empty($generator['contextual_links_rewrite_enabled']))
+                : !empty($rewrite_contextual);
+            $plan = Content_Rank_Contextual_Links::plan($content_html, $generator, $post_id, $context, $requested_count, $custom_prompt, $use_contextual);
+            if (is_wp_error($plan)) {
+                return $plan;
             }
-            $requested_count = max(1, min(25, $requested_count));
-            $custom_prompt = self::normalize_plain_text($custom_prompt);
-
-            $content_html = $content_html !== '' ? (string) $content_html : (string) $post->post_content;
-            if ($content_html === '') {
-                return array(
-                    'source_post_id' => $post_id,
-                    'requested_count' => $requested_count,
-                    'suggestions' => array(),
-                    'applied_count' => 0,
-                    'content_html' => '',
-                );
-            }
-
-            $source_title = self::normalize_plain_text(get_the_title($post));
-            $source_linkable_text = self::extract_linkable_text_from_html($content_html);
-
-            $post_types = array_values(array_diff(get_post_types(array('public' => true), 'names'), array('attachment', 'revision', 'nav_menu_item')));
-            if (empty($post_types)) {
-                $post_types = array('post');
-            }
-
-            $candidates = self::query_candidate_posts($post_id, self::MAX_TARGET_POSTS, $post_types);
-            if (empty($candidates)) {
-                return array(
-                    'source_post_id' => $post_id,
-                    'requested_count' => $requested_count,
-                    'suggestions' => array(),
-                    'applied_count' => 0,
-                    'content_html' => $content_html,
-                    'generated_at' => current_time('mysql'),
-                    'custom_prompt' => $custom_prompt,
-                    'source' => array(
-                        'id' => $post_id,
-                        'title' => $source_title,
-                    ),
-                    'candidates_count' => 0,
-                );
-            }
-
-            $source = array(
-                'id' => $post_id,
-                'title' => $source_title,
-                'content_html' => $content_html,
-                'linkable_text' => $source_linkable_text,
-            );
-            $prompt = self::build_link_suggestion_prompt($source, $candidates, $requested_count, $custom_prompt);
-            $response = Content_Rank_Generator::request_openai_json($generator, $prompt, array(
-                'stage' => 'link_suggestions',
-                'source_type' => 'post',
-                'item_guid' => 'post:' . $post_id,
-                'item_title' => $source_title,
-                'source_context_enriched' => 1,
-                'allow_missing_content_html' => 1,
-                'preserve_extra_fields' => 1,
-            ));
-
-            if (is_wp_error($response)) {
-                return $response;
-            }
-
-            $candidate_lookup = self::build_candidate_lookup($candidates);
-            $normalized = self::normalize_link_suggestions_response($response, $requested_count, $candidate_lookup, $post_id, $source_linkable_text);
-            $normalized['source_post_id'] = $post_id;
-            $normalized['requested_count'] = $requested_count;
-            $normalized['generated_at'] = current_time('mysql');
-            $normalized['custom_prompt'] = $custom_prompt;
-            $normalized['source'] = array(
-                'id' => $post_id,
-                'title' => $source_title,
-            );
-            $normalized['candidates_count'] = count($candidates);
-
-            update_post_meta($post_id, self::META_JSON, wp_json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-            update_post_meta($post_id, self::META_GENERATED_AT, current_time('mysql'));
-            update_post_meta($post_id, self::META_SOURCE_POST_ID, $post_id);
-            update_post_meta($post_id, self::META_CUSTOM_PROMPT, $custom_prompt);
-            update_post_meta($post_id, self::META_REQUESTED_COUNT, $requested_count);
-            delete_post_meta($post_id, self::META_APPLIED_AT);
-            delete_post_meta($post_id, self::META_APPLIED_COUNT);
-
-            if (empty($normalized['suggestions'])) {
-                return array_merge($normalized, array(
-                    'applied_count' => 0,
-                    'content_html' => $content_html,
-                ));
-            }
-
-            $rules = self::build_internal_link_rules_from_suggestions($normalized['suggestions']);
-            if (empty($rules)) {
-                return array_merge($normalized, array(
-                    'applied_count' => 0,
-                    'content_html' => $content_html,
-                ));
-            }
-
-            $working_generator = $generator;
-            $working_generator['internal_links_json'] = wp_json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            $working_generator['internal_links_count'] = count($rules);
-
-            $updated_content = Content_Rank_Generator_Helper::apply_internal_links_to_content(
-                $content_html,
-                $working_generator,
-                array(
-                    'post_id' => $post_id,
-                    'item_guid' => 'post:' . $post_id,
-                )
-            );
-
-            if ($updated_content !== '' && $updated_content !== $content_html) {
-                $update_result = wp_update_post(array(
-                    'ID' => $post_id,
-                    'post_content' => $updated_content,
-                ), true);
-                if (!is_wp_error($update_result)) {
-                    $content_html = $updated_content;
-                }
-            }
-
-            update_post_meta($post_id, self::META_APPLIED_AT, current_time('mysql'));
-            update_post_meta($post_id, self::META_APPLIED_COUNT, count($rules));
-
-            return array_merge($normalized, array(
-                'applied_count' => count($rules),
-                'content_html' => $content_html,
-            ));
+            self::save_plan($post_id, $plan);
+            $result = self::apply_saved_plan($post_id, $plan);
+            return $result;
         }
 
         public function handle_clear_link_suggestions()
@@ -1407,6 +543,7 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
                 delete_post_meta($post_id, self::META_SOURCE_POST_ID);
                 delete_post_meta($post_id, self::META_CUSTOM_PROMPT);
                 delete_post_meta($post_id, self::META_REQUESTED_COUNT);
+                delete_post_meta($post_id, self::META_REWRITE_CONTEXTUAL);
                 delete_post_meta($post_id, self::META_APPLIED_AT);
                 delete_post_meta($post_id, self::META_APPLIED_COUNT);
             }
@@ -1457,6 +594,9 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
 
             $selected_post_id = intval(self::get_request_param('post_id', 0));
             $plan = $selected_post_id > 0 ? self::get_suggestions_meta($selected_post_id) : array();
+            if (!empty($plan)) {
+                $plan['applied_count'] = intval(get_post_meta($selected_post_id, self::META_APPLIED_COUNT, true));
+            }
             $stored_generated_at = $selected_post_id > 0 ? (string) get_post_meta($selected_post_id, self::META_GENERATED_AT, true) : '';
             if ($stored_generated_at !== '') {
                 $plan['generated_at'] = $stored_generated_at;
@@ -1468,6 +608,9 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
             $stored_requested_count = $selected_post_id > 0 ? intval(get_post_meta($selected_post_id, self::META_REQUESTED_COUNT, true)) : 0;
             if ($stored_requested_count > 0 && empty($plan['requested_count'])) {
                 $plan['requested_count'] = $stored_requested_count;
+            }
+            if ($selected_post_id > 0 && !isset($plan['rewrite_contextual'])) {
+                $plan['rewrite_contextual'] = intval(get_post_meta($selected_post_id, self::META_REWRITE_CONTEXTUAL, true)) ? 1 : 0;
             }
 
             $selected_post = $selected_post_id > 0 ? get_post($selected_post_id) : null;
@@ -1520,8 +663,13 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
 
                                     <div>
                                         <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Qtd. links</label>
-                                        <input type="number" min="1" max="25" name="suggestion_count" value="<?php echo esc_attr(isset($plan['requested_count']) ? intval($plan['requested_count']) : 5); ?>" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
+                                        <input type="number" min="1" max="4" name="suggestion_count" value="<?php echo esc_attr(isset($plan['requested_count']) ? min(4, intval($plan['requested_count'])) : 4); ?>" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
                                     </div>
+
+                                    <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                                        <input type="checkbox" name="rewrite_contextual" value="1" <?php checked(!empty($plan['rewrite_contextual'])); ?> class="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-200" />
+                                        <span><strong class="font-semibold text-slate-900">Permitir reescrita contextual</strong><span class="mt-1 block text-xs text-slate-500">A IA pode propor uma pequena frase de ligação quando houver relação factual. O PHP valida e insere o link; se não houver ponte natural, não força.</span></span>
+                                    </label>
 
                                     <details class="group rounded-2xl border border-slate-200 bg-slate-50">
                                         <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-700">
@@ -1537,12 +685,14 @@ if (!class_exists('Content_Rank_Link_Suggestions')) {
                                 </form>
 
                                 <?php if (!empty($plan) && !empty($plan['suggestions']) && is_array($plan['suggestions'])): ?>
+                                    <?php if (empty($plan['applied_count'])): ?>
                                     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                                         <?php wp_nonce_field('content_rank_apply_link_suggestions', 'content_rank_link_suggestions_nonce'); ?>
                                         <input type="hidden" name="action" value="content_rank_apply_link_suggestions" />
                                         <input type="hidden" name="source_post_id" value="<?php echo esc_attr($selected_post_id); ?>" />
                                         <button type="submit" class="inline-flex w-full items-center justify-center rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-slate-800">Aplicar links</button>
                                     </form>
+                                    <?php endif; ?>
 
                                     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="mt-3" data-swal-confirm="Remover as sugestoes salvas deste post?">
                                         <?php wp_nonce_field('content_rank_clear_link_suggestions', 'content_rank_link_suggestions_nonce'); ?>

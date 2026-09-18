@@ -11,6 +11,19 @@ class Content_Rank_Generator_Admin
         add_action('admin_notices', array(__CLASS__, 'render_notice'));
     }
 
+    private static function render_analysis_settings($settings)
+    {
+        ?>
+        <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+            <div>
+                <label class="mb-1 block text-sm font-medium text-slate-700">Modelo de análise</label>
+                <input type="text" name="analysis_model" value="<?php echo esc_attr($settings['analysis_model']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+                <p class="mt-1 text-xs text-slate-500">Usado no planejamento e na seleção de links internos. A redação continua usando o modelo padrão.</p>
+            </div>
+        </div>
+        <?php
+    }
+
     public function admin_menu()
     {
         add_menu_page(
@@ -429,6 +442,7 @@ class Content_Rank_Generator_Admin
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Modelo padrão</label>
                                     <input type="text" name="default_model" value="<?php echo esc_attr($settings['default_model']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
                                 </div>
+                                <?php self::render_analysis_settings($settings); ?>
                                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div>
                                         <label class="mb-1 block text-sm font-medium text-slate-700">Temperatura padrão</label>
@@ -977,6 +991,22 @@ class Content_Rank_Generator_Admin
                                         <option value="0">Selecione uma categoria marcada</option>
                                     </select>
                                 </div>
+                                <div class="md:col-span-2 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                    <label for="content-rank-contextual-links" class="mb-1 block text-sm font-semibold text-slate-800">Links internos contextualizados</label>
+                                    <select id="content-rank-contextual-links" name="contextual_links_enabled" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                        <option value="0" <?php selected(empty($editing_generator['contextual_links_enabled'])); ?>>Não inserir</option>
+                                        <option value="1" <?php selected(!empty($editing_generator['contextual_links_enabled'])); ?>>Sim, inserir até 4 links por conteúdo</option>
+                                    </select>
+                                    <p class="mt-2 text-xs text-slate-500">Busca posts relacionados e usa o modelo de análise para escolher frases existentes. Ative somente nos geradores em que deseja essa linkagem.</p>
+                                </div>
+                                <div class="md:col-span-2 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                    <label for="content-rank-contextual-links-rewrite" class="mb-1 block text-sm font-semibold text-slate-800">Modo da linkagem contextual</label>
+                                    <select id="content-rank-contextual-links-rewrite" name="contextual_links_rewrite_enabled" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                        <option value="0" <?php selected(empty($editing_generator['contextual_links_rewrite_enabled'])); ?>>Usar somente frases já existentes</option>
+                                        <option value="1" <?php selected(!empty($editing_generator['contextual_links_rewrite_enabled'])); ?>>Reescrever o parágrafo e inserir o link (recomendado)</option>
+                                    </select>
+                                    <p class="mt-2 text-xs text-slate-500">Nesse modo, a IA escolhe um parágrafo posterior à introdução e pode inserir um novo parágrafo ou revisar um existente. Ela marca o link com href="xxx"; o PHP apenas troca xxx pela URL real e valida a alteração.</p>
+                                </div>
                                 <div class="md:col-span-2 w-full rounded-2xl essanao border border-slate-200 bg-slate-50 p-4" data-internal-links-field>
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
@@ -1067,6 +1097,8 @@ class Content_Rank_Generator_Admin
                                         'related_posts_style' => 'list',
                                         'related_posts_phrases' => Content_Rank_Generator::get_default_related_posts_phrases(),
                                         'internal_links_count' => '0',
+                                        'contextual_links_enabled' => '0',
+                                        'contextual_links_rewrite_enabled' => '1',
                                         'internal_links_json' => '[]',
                                     )); ?>;
                     var editId = <?php echo intval($edit_id); ?>;
@@ -1932,6 +1964,8 @@ class Content_Rank_Generator_Admin
                         setValue('related_posts_style', defaults.related_posts_style);
                         setValue('related_posts_phrases', defaults.related_posts_phrases);
                         setValue('internal_links_json', defaults.internal_links_json);
+                        setValue('contextual_links_enabled', defaults.contextual_links_enabled);
+                        setValue('contextual_links_rewrite_enabled', defaults.contextual_links_rewrite_enabled);
                         setValue('default_category_id', defaults.default_category_id);
                         setCheckboxGroup('category_ids[]', []);
                         setValue('tags_default', listToText(defaults.tags_default));
@@ -1998,6 +2032,7 @@ class Content_Rank_Generator_Admin
                         setValue('related_posts_style', generator.related_posts_style || defaults.related_posts_style);
                         setValue('related_posts_phrases', generator.related_posts_phrases || defaults.related_posts_phrases);
                         setValue('internal_links_json', generator.internal_links_json || defaults.internal_links_json);
+                        setValue('contextual_links_enabled', String(typeof generator.contextual_links_enabled !== 'undefined' ? generator.contextual_links_enabled : defaults.contextual_links_enabled));
                         setCheckboxGroup('category_ids[]', parseListValue(generator.category_ids));
                         setValue('default_category_id', typeof generator.default_category_id !== 'undefined' ? String(generator.default_category_id) : defaults.default_category_id);
                         setValue('tags_default', listToText(parseListValue(generator.tags_default)));
@@ -2360,6 +2395,7 @@ class Content_Rank_Generator_Admin
                                 <label class="mb-1 block text-sm font-medium text-slate-700">Modelo padrão</label>
                                 <input type="text" name="default_model" value="<?php echo esc_attr($settings['default_model']); ?>" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-0 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" />
                             </div>
+                            <?php self::render_analysis_settings($settings); ?>
                             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Temperatura padrão</label>

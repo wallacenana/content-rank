@@ -53,6 +53,7 @@ require_once __DIR__ . '/includes/thumbnail-helper.php';
 require_once __DIR__ . '/includes/pexels-media.php';
 require_once __DIR__ . '/includes/generated-posts.php';
 require_once __DIR__ . '/includes/content-plans.php';
+require_once __DIR__ . '/includes/contextual-links.php';
 require_once __DIR__ . '/includes/link-suggestions.php';
 require_once __DIR__ . '/includes/related-posts.php';
 require_once __DIR__ . '/includes/prompt-settings.php';
@@ -462,7 +463,7 @@ if (!class_exists('Content_Rank_Generator')) {
 
             $columns_to_check = array(
                 'tavily_enabled' => array(
-                    'definition' => 'tinyint(1) NOT NULL DEFAULT 0',
+                    'definition' => 'tinyint(1) NOT NULL DEFAULT 1',
                     'after' => 'keyword_list_mode',
                 ),
                 'content_image_interval_words' => array(
@@ -492,6 +493,14 @@ if (!class_exists('Content_Rank_Generator')) {
                 'video_source_mode' => array(
                     'definition' => "varchar(20) NOT NULL DEFAULT 'none'",
                     'after' => 'source_video_enabled',
+                ),
+                'contextual_links_enabled' => array(
+                    'definition' => 'tinyint(1) NOT NULL DEFAULT 0',
+                    'after' => 'internal_links_count',
+                ),
+                'contextual_links_rewrite_enabled' => array(
+                    'definition' => 'tinyint(1) NOT NULL DEFAULT 1',
+                    'after' => 'contextual_links_enabled',
                 ),
             );
 
@@ -663,6 +672,8 @@ if (!class_exists('Content_Rank_Generator')) {
                 related_posts_style varchar(20) NOT NULL DEFAULT 'list',
                 related_posts_phrases longtext DEFAULT NULL,
                 internal_links_count int(11) NOT NULL DEFAULT 0,
+                contextual_links_enabled tinyint(1) NOT NULL DEFAULT 0,
+                contextual_links_rewrite_enabled tinyint(1) NOT NULL DEFAULT 1,
                 internal_links_json longtext DEFAULT NULL,
                 source_link_phrases longtext DEFAULT NULL,
                 source_context_filters_json longtext DEFAULT NULL,
@@ -796,6 +807,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 'tavily_include_answer' => 1,
                 'tavily_search_depth' => 'basic',
                 'default_model' => 'gpt-4.1-mini',
+                'analysis_model' => 'gpt-4.1-mini',
                 'default_temperature' => 0.7,
                 'default_max_tokens' => 3000,
                 'semantic_dedup_enabled' => 1,
@@ -2439,6 +2451,12 @@ if (!class_exists('Content_Rank_Generator')) {
                 $current['tavily_search_depth'] = 'basic';
             }
             $current['default_model'] = isset($raw['default_model']) ? sanitize_text_field(wp_unslash($raw['default_model'])) : $current['default_model'];
+            if (isset($raw['analysis_model'])) {
+                $current['analysis_model'] = sanitize_text_field(wp_unslash($raw['analysis_model']));
+                if ($current['analysis_model'] === '') {
+                    $current['analysis_model'] = 'gpt-4.1-mini';
+                }
+            }
             $current['default_temperature'] = isset($raw['default_temperature']) ? floatval($raw['default_temperature']) : $current['default_temperature'];
             $current['default_max_tokens'] = isset($raw['default_max_tokens']) ? max(256, intval($raw['default_max_tokens'])) : $current['default_max_tokens'];
             $current['semantic_dedup_enabled'] = isset($raw['semantic_dedup_enabled']) ? (!empty($raw['semantic_dedup_enabled']) ? 1 : 0) : $current['semantic_dedup_enabled'];
@@ -3614,6 +3632,8 @@ if (!class_exists('Content_Rank_Generator')) {
             }
             $payload['related_posts_phrases'] = isset($raw['related_posts_phrases']) ? sanitize_textarea_field(wp_unslash($raw['related_posts_phrases'])) : '';
             $payload['internal_links_count'] = isset($raw['internal_links_count']) ? max(0, intval($raw['internal_links_count'])) : 0;
+            $payload['contextual_links_enabled'] = !empty($raw['contextual_links_enabled']) ? 1 : 0;
+            $payload['contextual_links_rewrite_enabled'] = !empty($raw['contextual_links_rewrite_enabled']) ? 1 : 0;
             $payload['source_link_phrases'] = isset($raw['source_link_phrases']) ? sanitize_textarea_field(wp_unslash($raw['source_link_phrases'])) : '';
             $source_context_exclude_phrases = isset($raw['source_context_exclude_phrases']) ? sanitize_textarea_field(wp_unslash($raw['source_context_exclude_phrases'])) : '';
             $source_context_rating_label = !empty($settings['source_context_rating_label']) ? sanitize_text_field($settings['source_context_rating_label']) : 'IMDb';
@@ -3761,6 +3781,8 @@ if (!class_exists('Content_Rank_Generator')) {
                 . "Objetivo:\n"
                 . "- Escrever um artigo com cara de texto humano, natural, completo e fiel aos fatos.\n"
                 . "- Abra com um lead comportamental que conecte o leitor ao tema de forma imediata.\n"
+                . "- Use o focus keyword como referência sem copiar uma capitalização inadequada. Se ele abrir a primeira frase, comece com letra maiúscula e mantenha nomes próprios corretamente capitalizados.\n"
+                . "- Toda frase deve começar com capitalização natural; nunca inicie um parágrafo com palavra minúscula por causa da keyword.\n"
                 . "- Use 2 a 3 parágrafos curtos na introdução, sem frases genéricas.\n"
                 . "- Use a estrutura editorial indicada pelo outline interno e pelo modelo selecionado.\n"
                 . "- Garanta no minimo 3 H2 no corpo do texto, mesmo em noticias curtas.\n"
@@ -3793,6 +3815,8 @@ if (!class_exists('Content_Rank_Generator')) {
                 . "Use apenas HTML simples no content_html.\n"
                 . "Objetivo:\n"
                 . "- Abra com um lead comportamental que conecte o leitor ao tema de forma imediata.\n"
+                . "- Use o focus keyword como referência sem copiar uma capitalização inadequada. Se ele abrir a primeira frase, comece com letra maiúscula e mantenha nomes próprios corretamente capitalizados.\n"
+                . "- Toda frase deve começar com capitalização natural; nunca inicie um parágrafo com palavra minúscula por causa da keyword.\n"
                 . "- Use 2 a 3 parágrafos curtos na introdução, sem frases genéricas.\n"
                 . "- Use a estrutura editorial indicada pelo outline interno e pelo modelo selecionado.\n"
                 . "- Escreva no formato piramide invertida, com os fatos mais importantes no início.\n"
@@ -4022,6 +4046,14 @@ if (!class_exists('Content_Rank_Generator')) {
             $model = trim((string) $settings['default_model']);
             $temperature = max(0.0, min(2.0, floatval($settings['default_temperature'])));
             $max_tokens = max(256, intval($settings['default_max_tokens']));
+            $stage = isset($context['stage']) ? (string) $context['stage'] : '';
+            if (in_array($stage, array('outline', 'content_plan', 'link_suggestions'), true)) {
+                $model = !empty($settings['analysis_model']) ? trim((string) $settings['analysis_model']) : 'gpt-4.1-mini';
+            }
+            if ($stage === 'link_suggestions') {
+                $temperature = 0;
+                $max_tokens = 1200;
+            }
             $use_responses_api = self::should_use_responses_api($model);
             $prompt_cache_retention = '24h';
             $response_schema = (isset($context['response_schema']) && is_array($context['response_schema'])) ? $context['response_schema'] : array();
@@ -4092,9 +4124,13 @@ if (!class_exists('Content_Rank_Generator')) {
                 $body['prompt_cache_retention'] = $prompt_cache_retention;
             }
 
-            // error_log("prompt: " . print_r($prompt, true));
+            if (in_array($stage, array('outline', 'content_plan', 'link_suggestions'), true)) {
+                // Let the analysis model use its supported default cache policy (mini models do not all support 24h).
+                unset($body['prompt_cache_retention']);
+            }
+            error_log("prompt: " . print_r($prompt, true));
             $response = wp_remote_post($use_responses_api ? 'https://api.openai.com/v1/responses' : 'https://api.openai.com/v1/chat/completions', array(
-                'timeout' => 240,
+                'timeout' => $stage === 'link_suggestions' ? 60 : 240,
                 'headers' => array(
                     'Authorization' => 'Bearer ' . $api_key,
                     'Content-Type' => 'application/json',
@@ -4103,6 +4139,7 @@ if (!class_exists('Content_Rank_Generator')) {
             ));
 
             if (is_wp_error($response)) {
+                $error_message = method_exists($response, 'get_error_message') ? $response->get_error_message() : 'WP_Error';
                 return $response;
             }
 
@@ -4144,7 +4181,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 $text = trim((string) $data['choices'][0]['message']['content']);
             }
 
-            // error_log('[Content Rank][openai-response] stage=' . (isset($context['stage']) ? sanitize_key((string) $context['stage']) : 'unknown') . ' response=' . $text);
+            error_log('[Content Rank][openai-response] stage=' . (isset($context['stage']) ? sanitize_key((string) $context['stage']) : 'unknown') . ' response=' . $text);
             return self::parse_ai_json($text, $context);
         }
 
@@ -9980,6 +10017,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 isset($article['content_html']) ? $article['content_html'] : '',
                 $generated_content_type
             );
+            $article['content_html'] = Content_Rank_Generator_Helper::normalize_content_sentence_starts($article['content_html']);
 
             // The AI must not publish invented image URLs. RSS images are
             // inserted later by the PHP source-media pipeline.
@@ -10296,6 +10334,30 @@ if (!class_exists('Content_Rank_Generator')) {
                             'permalink' => !empty($item['permalink']) ? $item['permalink'] : '',
                         ),
                     ), $post_id, $item['guid'], $item['permalink']);
+                }
+                if (!empty($generator['contextual_links_enabled'])) {
+                    // Optional enrichment must not turn an otherwise successful article into a failed job.
+                    try {
+                        $links_result = Content_Rank_Link_Suggestions::generate_and_apply_link_suggestions_to_post(
+                            $post_id, $generator, 4, '', '', $article, true
+                        );
+                        if (is_wp_error($links_result)) {
+                            self::insert_run_log($generator['id'], 'warning', 'Linkagem interna: ' . $links_result->get_error_message(), array(), $post_id);
+                        } else {
+                            self::insert_run_log($generator['id'], 'info', 'Linkagem interna concluída', array(
+                                'response' => array(
+                                    'post_id' => $post_id,
+                                    'rewrite_contextual' => 1,
+                                    'search_terms' => !empty($links_result['search_terms']) ? $links_result['search_terms'] : array(),
+                                    'candidates_count' => $links_result['candidates_count'],
+                                    'candidate_titles' => !empty($links_result['candidates']) ? wp_list_pluck($links_result['candidates'], 'title') : array(),
+                                    'applied_count' => $links_result['applied_count'],
+                                ),
+                            ), $post_id);
+                        }
+                    } catch (Throwable $links_error) {
+                        self::insert_run_log($generator['id'], 'warning', 'Linkagem interna: ' . $links_error->getMessage(), array(), $post_id);
+                    }
                 }
                 self::mark_item_processed($generator['id'], $item, $post_id);
                 self::insert_run_log($generator['id'], 'success', 'Post criado', array(
@@ -11031,6 +11093,8 @@ if (!class_exists('Content_Rank_Generator')) {
                 'related_posts_style' => $payload['related_posts_style'],
                 'related_posts_phrases' => $payload['related_posts_phrases'],
                 'internal_links_count' => $payload['internal_links_count'],
+                'contextual_links_enabled' => $payload['contextual_links_enabled'],
+                'contextual_links_rewrite_enabled' => $payload['contextual_links_rewrite_enabled'],
                 'updated_at' => $now,
             );
 
@@ -11144,6 +11208,8 @@ if (!class_exists('Content_Rank_Generator')) {
                 'related_posts_style' => isset($generator['related_posts_style']) ? $generator['related_posts_style'] : 'list',
                 'related_posts_phrases' => isset($generator['related_posts_phrases']) ? $generator['related_posts_phrases'] : '',
                 'internal_links_count' => isset($generator['internal_links_count']) ? intval($generator['internal_links_count']) : 0,
+                'contextual_links_enabled' => !empty($generator['contextual_links_enabled']) ? 1 : 0,
+                'contextual_links_rewrite_enabled' => !empty($generator['contextual_links_rewrite_enabled']) ? 1 : 0,
             );
 
             return self::save_generator($duplicated);
