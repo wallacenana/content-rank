@@ -64,16 +64,29 @@ final class Content_Rank_TMDB
             }
             $source_query = $query;
 
-            $search = self::search_movie($query, $language, $source_year);
+            // Keyword entries can be films or series; query both TMDB catalogs.
+            $movie_search = self::search_movie($query, $language, $source_year);
+            $tv_search = self::search_tv($query, $language, $source_year);
+            $media_search = self::choose_media_search($movie_search, $tv_search, $query, $source_year);
+            $media_type = !empty($media_search['media_type']) ? (string) $media_search['media_type'] : 'movie';
+            $search = !empty($media_search['response']) && is_array($media_search['response']) ? $media_search['response'] : array();
             if (empty($search['results'][0]) && preg_match('/\s[-|:–—]\s/u', $query)) {
                 $short_query = trim((string) preg_replace('/\s[-|:–—]\s.*$/u', '', $query));
                 if ($short_query !== '' && $short_query !== $query) {
-                    $search = self::search_movie($short_query, $language, $source_year);
+                    $movie_search = self::search_movie($short_query, $language, $source_year);
+                    $tv_search = self::search_tv($short_query, $language, $source_year);
+                    $media_search = self::choose_media_search($movie_search, $tv_search, $short_query, $source_year);
+                    $media_type = !empty($media_search['media_type']) ? (string) $media_search['media_type'] : 'movie';
+                    $search = !empty($media_search['response']) && is_array($media_search['response']) ? $media_search['response'] : array();
                     $query = $short_query;
                 }
             }
             if (empty($search['results'][0]) && $language !== 'en-US') {
-                $search = self::search_movie($query, 'en-US', $source_year);
+                $movie_search = self::search_movie($query, 'en-US', $source_year);
+                $tv_search = self::search_tv($query, 'en-US', $source_year);
+                $media_search = self::choose_media_search($movie_search, $tv_search, $query, $source_year);
+                $media_type = !empty($media_search['media_type']) ? (string) $media_search['media_type'] : 'movie';
+                $search = !empty($media_search['response']) && is_array($media_search['response']) ? $media_search['response'] : array();
             }
             if (empty($search['results'][0]) || empty($search['results'][0]['id'])) {
                 continue;
@@ -83,9 +96,13 @@ final class Content_Rank_TMDB
             if (empty($result['id'])) {
                 continue;
             }
-            $details = self::movie_details(intval($result['id']), $language);
-            $localized_title = !empty($details['title']) ? (string) $details['title'] : (string) $result['title'];
-            if ($language === 'pt-BR' && self::titles_match($localized_title, $query)) {
+            $details = $media_type === 'tv'
+                ? self::tv_details(intval($result['id']), $language)
+                : self::movie_details(intval($result['id']), $language);
+            $localized_title = $media_type === 'tv'
+                ? (!empty($details['name']) ? (string) $details['name'] : (string) $result['title'])
+                : (!empty($details['title']) ? (string) $details['title'] : (string) $result['title']);
+            if ($media_type === 'movie' && $language === 'pt-BR' && self::titles_match($localized_title, $query)) {
                 $alternative_title = self::get_brazilian_alternative_title(intval($result['id']));
                 if ($alternative_title === '') {
                     $alternative_title = self::get_brazilian_translation_title(intval($result['id']));
@@ -98,13 +115,18 @@ final class Content_Rank_TMDB
             $movies[] = array(
                 'id' => intval($result['id']),
                 'title' => $localized_title,
-                'original_title' => !empty($details['original_title']) ? $details['original_title'] : (!empty($result['original_title']) ? $result['original_title'] : ''),
-                'year' => !empty($details['release_date']) ? substr((string) $details['release_date'], 0, 4) : (!empty($result['release_date']) ? substr((string) $result['release_date'], 0, 4) : ''),
+                'original_title' => $media_type === 'tv'
+                    ? (!empty($details['original_name']) ? $details['original_name'] : (!empty($result['original_title']) ? $result['original_title'] : ''))
+                    : (!empty($details['original_title']) ? $details['original_title'] : (!empty($result['original_title']) ? $result['original_title'] : '')),
+                'year' => $media_type === 'tv'
+                    ? (!empty($details['first_air_date']) ? substr((string) $details['first_air_date'], 0, 4) : (!empty($result['release_date']) ? substr((string) $result['release_date'], 0, 4) : ''))
+                    : (!empty($details['release_date']) ? substr((string) $details['release_date'], 0, 4) : (!empty($result['release_date']) ? substr((string) $result['release_date'], 0, 4) : '')),
                 'overview' => !empty($details['overview']) ? sanitize_textarea_field((string) $details['overview']) : '',
                 'poster_url' => $poster_path !== '' ? 'https://image.tmdb.org/t/p/w780' . $poster_path : '',
                 'thumbnail_url' => $poster_path !== '' ? 'https://image.tmdb.org/t/p/w342' . $poster_path : '',
                 'backdrop_url' => !empty($details['backdrop_path']) ? 'https://image.tmdb.org/t/p/w1280' . (string) $details['backdrop_path'] : (!empty($result['backdrop_path']) ? 'https://image.tmdb.org/t/p/w1280' . (string) $result['backdrop_path'] : ''),
                 'source_query' => $source_query,
+                'media_type' => $media_type,
             );
             if ($localized_title === '' || self::titles_match($query, $localized_title)) {
                 continue;
@@ -731,6 +753,81 @@ final class Content_Rank_TMDB
         return 'pt-BR';
     }
 
+    private static function search_tv($query, $language, $year = 0)
+    {
+        $args = array(
+            'query' => $query,
+            'language' => $language,
+            'page' => 1,
+        );
+        if ((int) $year > 0) {
+            $args['first_air_date_year'] = (int) $year;
+        }
+        return self::request('search/tv', $args);
+    }
+
+    private static function normalize_media_search_response($response, $media_type)
+    {
+        $response = is_array($response) ? $response : array();
+        $results = !empty($response['results']) && is_array($response['results']) ? $response['results'] : array();
+        foreach ($results as &$result) {
+            if (!is_array($result)) {
+                continue;
+            }
+            if ($media_type === 'tv') {
+                if (empty($result['title']) && !empty($result['name'])) {
+                    $result['title'] = $result['name'];
+                }
+                if (empty($result['original_title']) && !empty($result['original_name'])) {
+                    $result['original_title'] = $result['original_name'];
+                }
+                if (empty($result['release_date']) && !empty($result['first_air_date'])) {
+                    $result['release_date'] = $result['first_air_date'];
+                }
+            }
+        }
+        unset($result);
+        $response['results'] = $results;
+        return $response;
+    }
+
+    private static function choose_media_search($movie_response, $tv_response, $query, $year = 0)
+    {
+        $movie_response = self::normalize_media_search_response($movie_response, 'movie');
+        $tv_response = self::normalize_media_search_response($tv_response, 'tv');
+        $movie_result = !empty($movie_response['results']) ? self::choose_search_result($movie_response['results'], $query, $year) : array();
+        $tv_result = !empty($tv_response['results']) ? self::choose_search_result($tv_response['results'], $query, $year) : array();
+        if (empty($movie_result['id']) && !empty($tv_result['id'])) {
+            return array('media_type' => 'tv', 'response' => $tv_response);
+        }
+        if (empty($tv_result['id']) || empty($movie_result['id'])) {
+            return array('media_type' => 'movie', 'response' => $movie_response);
+        }
+
+        $movie_exact = !empty($movie_result['title']) && self::titles_match($query, $movie_result['title']);
+        $tv_exact = !empty($tv_result['title']) && self::titles_match($query, $tv_result['title']);
+        if ($tv_exact && !$movie_exact) {
+            return array('media_type' => 'tv', 'response' => $tv_response);
+        }
+        if ($movie_exact && !$tv_exact) {
+            return array('media_type' => 'movie', 'response' => $movie_response);
+        }
+
+        // When both catalogs contain an exact title, prefer the TV result.
+        // Editorial list entries commonly describe series and the TV record
+        // carries the correct first-air date and backdrop for that use case.
+        if ($tv_exact) {
+            return array('media_type' => 'tv', 'response' => $tv_response);
+        }
+
+        $movie_year = !empty($movie_result['release_date']) ? (int) substr((string) $movie_result['release_date'], 0, 4) : 0;
+        $tv_year = !empty($tv_result['release_date']) ? (int) substr((string) $tv_result['release_date'], 0, 4) : 0;
+        if ((int) $year > 0 && $tv_year === (int) $year && $movie_year !== (int) $year) {
+            return array('media_type' => 'tv', 'response' => $tv_response);
+        }
+        return array('media_type' => 'movie', 'response' => $movie_response);
+    }
+
     private static function search_movie($query, $language, $year = 0)
     {
         $args = array(
@@ -751,6 +848,13 @@ final class Content_Rank_TMDB
         return self::request('movie/' . absint($movie_id), array(
             'language' => $language,
             'region' => 'BR',
+        ));
+    }
+
+    private static function tv_details($tv_id, $language)
+    {
+        return self::request('tv/' . absint($tv_id), array(
+            'language' => $language,
         ));
     }
 

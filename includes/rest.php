@@ -713,6 +713,61 @@ class Content_Rank_Generator_REST
             !empty($temp_generator['link_selector_class']) ? sanitize_text_field((string) $temp_generator['link_selector_class']) : ''
         );
 
+        // Webhooks should be able to acknowledge the request immediately and
+        // let the staged worker perform the slow external calls in the
+        // background. The existing synchronous behavior remains the default
+        // for the admin panel and older integrations.
+        $async_requested = !empty($payload['async']) || !empty($payload['queue']);
+        if ($async_requested) {
+            $queued_result = Content_Rank_Generator::queue_staged_generation($temp_generator, $selected_item);
+            if (is_wp_error($queued_result)) {
+                $wpdb->update(
+                    $tables['rows'],
+                    array(
+                        'row_status' => 'failed',
+                        'error_message' => $queued_result->get_error_message(),
+                        'updated_at' => current_time('mysql'),
+                    ),
+                    array('id' => intval($selected_row->id)),
+                    array('%s', '%s', '%s'),
+                    array('%d')
+                );
+
+                return new WP_REST_Response(array(
+                    'success' => false,
+                    'queued' => false,
+                    'message' => $queued_result->get_error_message(),
+                    'code' => $queued_result->get_error_code(),
+                ), 400);
+            }
+
+            $queued_post_id = is_array($queued_result) && !empty($queued_result['post_id'])
+                ? intval($queued_result['post_id'])
+                : intval($queued_result);
+            $wpdb->update(
+                $tables['rows'],
+                array(
+                    'row_status' => 'processing',
+                    'post_id' => $queued_post_id,
+                    'error_message' => '',
+                    'updated_at' => current_time('mysql'),
+                ),
+                array('id' => intval($selected_row->id)),
+                array('%s', '%d', '%s', '%s'),
+                array('%d')
+            );
+
+            return new WP_REST_Response(array(
+                'success' => true,
+                'queued' => true,
+                'done' => false,
+                'post_id' => $queued_post_id,
+                'item_guid' => $selected_item['guid'],
+                'item_title' => !empty($selected_item['source_title']) ? $selected_item['source_title'] : $selected_item['title'],
+                'message' => 'Item enfileirado para geracao em segundo plano.',
+            ), 202);
+        }
+
         if (!Content_Rank_Generator::claim_item_processing_slot($temp_generator['id'], $selected_item)) {
             return new WP_REST_Response(array(
                 'success' => false,

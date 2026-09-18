@@ -351,13 +351,11 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
                 $generated_content_type
             );
 
-            // RSS uses the source-media pipeline. Never publish image URLs
-            // invented by the model during regeneration.
-            $source_type_for_images = !empty($generator['source_type'])
-                ? sanitize_key((string) $generator['source_type'])
-                : 'rss';
-            if ($source_type_for_images === 'rss' && !empty($article['content_html'])) {
-                $article['content_html'] = (string) preg_replace('/<img\b[^>]*>/i', '', (string) $article['content_html']);
+            // Never publish image URLs invented by the model during
+            // regeneration. The PHP media pipeline inserts validated local
+            // attachments afterwards for every source type.
+            if (!empty($article['content_html']) && class_exists('Content_Rank_Generator_Helper')) {
+                $article['content_html'] = Content_Rank_Generator_Helper::strip_generated_image_markup_from_html($article['content_html']);
             }
 
             if (!empty($article['content_html']) && !empty($generator['random_bolds_enabled'])) {

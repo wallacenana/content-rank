@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.151
+Version: 1.9.152
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -65,13 +65,14 @@ if (!class_exists('Content_Rank_Generator')) {
     // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.WP.AlternativeFunctions.parse_url_parse_url, WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
     final class Content_Rank_Generator
     {
-        const VERSION = '1.9.151';
+        const VERSION = '1.9.152';
         const DB_VERSION = '1.8.5';
         const FEATURED_IMAGE_MIN_WIDTH = 1200;
         const FEATURED_IMAGE_MIN_HEIGHT = 675;
         const FEATURED_IMAGE_TARGET_RATIO = 1.7777777778;
         const FEATURED_IMAGE_RATIO_TOLERANCE = 0.12;
         const CRON_HOOK = 'content_rank_tick';
+        const CRON_SCHEDULE = 'alpha_one_minute';
         const STAGED_GENERATION_HOOK = 'content_rank_generation_stage';
         const GENERATION_PIPELINE_META = '_content_rank_generation_pipeline';
         const OPTION_KEY = 'content_rank_settings';
@@ -236,10 +237,10 @@ if (!class_exists('Content_Rank_Generator')) {
 
         public function add_cron_schedule($schedules)
         {
-            if (!isset($schedules['alpha_five_minutes'])) {
-                $schedules['alpha_five_minutes'] = array(
-                    'interval' => 300,
-                    'display'  => 'A cada 5 minutos',
+            if (!isset($schedules[self::CRON_SCHEDULE])) {
+                $schedules[self::CRON_SCHEDULE] = array(
+                    'interval' => 60,
+                    'display'  => 'A cada minuto',
                 );
             }
             return $schedules;
@@ -521,8 +522,25 @@ if (!class_exists('Content_Rank_Generator')) {
 
         public function ensure_cron_scheduled()
         {
-            if (!wp_next_scheduled(self::CRON_HOOK)) {
-                wp_schedule_event(time() + 300, 'alpha_five_minutes', self::CRON_HOOK);
+            $scheduled = wp_get_scheduled_event(self::CRON_HOOK);
+            if (!$scheduled) {
+                wp_schedule_event(time() + 60, self::CRON_SCHEDULE, self::CRON_HOOK);
+                return;
+            }
+
+            // Older installations have this hook registered every five minutes.
+            // Replacing that event keeps the staged-generation fallback from
+            // adding several minutes whenever the loopback worker is unavailable.
+            $expected_interval = 60;
+            $current_interval = isset($scheduled->interval) ? intval($scheduled->interval) : 0;
+            $current_schedule = isset($scheduled->schedule) ? (string) $scheduled->schedule : '';
+            if ($current_schedule !== self::CRON_SCHEDULE || $current_interval !== $expected_interval) {
+                wp_unschedule_event(
+                    intval($scheduled->timestamp),
+                    self::CRON_HOOK,
+                    isset($scheduled->args) && is_array($scheduled->args) ? $scheduled->args : array()
+                );
+                wp_schedule_event(time() + $expected_interval, self::CRON_SCHEDULE, self::CRON_HOOK);
             }
         }
 
@@ -6476,6 +6494,20 @@ if (!class_exists('Content_Rank_Generator')) {
                 return false;
             }
 
+            // A remote endpoint can return an HTML block page, JSON error or
+            // an empty response with a successful HTTP status. Do not turn
+            // that payload into a WordPress attachment: the browser would
+            // later render a broken image with only its alt text.
+            if (!self::is_valid_local_image_file($tmp)) {
+                self::log_image_debug('invalid_image_payload', array(
+                    'post_id' => $post_id,
+                    'source_label' => sanitize_key($source_label),
+                    'image_url' => $image_url,
+                ));
+                wp_delete_file($tmp);
+                return false;
+            }
+
             if (sanitize_key((string) $source_label) === 'pexels') {
                 $dimensions = @getimagesize($tmp);
                 $width = is_array($dimensions) && isset($dimensions[0]) ? absint($dimensions[0]) : 0;
@@ -6524,6 +6556,19 @@ if (!class_exists('Content_Rank_Generator')) {
                 return false;
             }
 
+            $attachment_file = get_attached_file((int) $attachment_id);
+            if (!self::is_valid_local_image_file($attachment_file)) {
+                self::log_image_debug('invalid_attachment_file', array(
+                    'post_id' => $post_id,
+                    'source_label' => sanitize_key($source_label),
+                    'image_url' => $image_url,
+                    'attachment_id' => intval($attachment_id),
+                    'file' => $attachment_file,
+                ));
+                wp_delete_attachment((int) $attachment_id, true);
+                return false;
+            }
+
             $attachment_update = wp_update_post(array(
                 'ID' => $attachment_id,
                 'post_title' => $title,
@@ -6558,10 +6603,43 @@ if (!class_exists('Content_Rank_Generator')) {
             return $attachment_id;
         }
 
+        /**
+         * Validate a downloaded/local image before exposing it in post HTML.
+         * This deliberately rejects HTML/JSON responses saved with an image
+         * extension, while still allowing SVG assets when they contain an SVG
+         * root element.
+         */
+        public static function is_valid_local_image_file($file)
+        {
+            $file = (string) $file;
+            if ($file === '' || !file_exists($file) || !is_readable($file)) {
+                return false;
+            }
+
+            $dimensions = @getimagesize($file);
+            if (is_array($dimensions) && !empty($dimensions['mime']) && strpos((string) $dimensions['mime'], 'image/') === 0) {
+                return true;
+            }
+
+            $extension = strtolower((string) pathinfo($file, PATHINFO_EXTENSION));
+            if ($extension !== 'svg') {
+                return false;
+            }
+
+            $contents = @file_get_contents($file);
+            return is_string($contents) && preg_match('/<svg\b/i', substr($contents, 0, 8192)) === 1;
+        }
+
         public static function build_attachment_image_figure_html($attachment_id, $size = 'medium', $alt_text = '', $align = 'alignleft')
         {
             $attachment_id = intval($attachment_id);
             if ($attachment_id <= 0) {
+                return '';
+            }
+
+            $attachment_file = get_attached_file($attachment_id);
+            $attachment_url = wp_get_attachment_url($attachment_id);
+            if (!self::is_valid_local_image_file($attachment_file) || !$attachment_url) {
                 return '';
             }
 
@@ -9593,9 +9671,9 @@ if (!class_exists('Content_Rank_Generator')) {
             $token = wp_generate_password(40, false, false);
             set_transient('content_rank_staged_generation_token_' . $post_id, $token, 10 * MINUTE_IN_SECONDS);
             $response = wp_remote_post(admin_url('admin-ajax.php'), array(
-                // A requisicao nao bloqueia, mas precisa de tempo suficiente
-                // para concluir o loopback antes de o cron de fallback assumir.
-                'timeout' => 1.0,
+                // A requisicao nao bloqueia. O timeout maior cobre DNS/TLS e
+                // proxies de producao sem prender o webhook esperando a etapa.
+                'timeout' => 5.0,
                 'blocking' => false,
                 'redirection' => 0,
                 'body' => array(
@@ -9934,6 +10012,17 @@ if (!class_exists('Content_Rank_Generator')) {
                     'request' => array('post_id' => $post_id, 'stage' => !empty($state['stage']) ? $state['stage'] : ''),
                     'response' => array('post_status' => 'draft'),
                 ), $post_id, !empty($item['guid']) ? $item['guid'] : '', !empty($item['permalink']) ? $item['permalink'] : '');
+            } elseif (!empty($state['generator']) && is_array($state['generator']) && !empty($state['generator']['list_id']) && !empty($item['guid'])) {
+                // Manual keyword-list requests use an in-memory generator
+                // (id 0), so there is no content_rank_items row to mark.
+                // Keep the imported row from remaining stuck in processing.
+                self::update_keyword_list_row_status_from_item(
+                    intval($state['generator']['list_id']),
+                    $item['guid'],
+                    'failed',
+                    0,
+                    $message
+                );
             }
             delete_post_meta($post_id, self::GENERATION_PIPELINE_META);
             update_post_meta($post_id, '_content_rank_generation_pipeline_status', 'failed');
@@ -10019,13 +10108,11 @@ if (!class_exists('Content_Rank_Generator')) {
             );
             $article['content_html'] = Content_Rank_Generator_Helper::normalize_content_sentence_starts($article['content_html']);
 
-            // The AI must not publish invented image URLs. RSS images are
-            // inserted later by the PHP source-media pipeline.
-            $source_type_for_images = !empty($generator['source_type'])
-                ? sanitize_key((string) $generator['source_type'])
-                : 'rss';
-            if ($source_type_for_images === 'rss' && !empty($article['content_html'])) {
-                $article['content_html'] = (string) preg_replace('/<img\b[^>]*>/i', '', (string) $article['content_html']);
+            // The AI must not publish image URLs. Every image is resolved by
+            // the PHP media pipeline after the post is created, regardless of
+            // whether the source is RSS, a keyword list or a spreadsheet.
+            if (!empty($article['content_html']) && class_exists('Content_Rank_Generator_Helper')) {
+                $article['content_html'] = Content_Rank_Generator_Helper::strip_generated_image_markup_from_html($article['content_html']);
             }
 
             // Reviews must resolve product placeholders before Gutenberg
