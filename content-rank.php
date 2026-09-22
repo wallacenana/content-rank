@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.156
+Version: 1.9.157
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -3863,13 +3863,13 @@ if (!class_exists('Content_Rank_Generator')) {
                 . "- Use 2 a 3 parágrafos curtos na introdução, sem frases genéricas.\n"
                 . "- Use a estrutura editorial indicada pelo outline interno e pelo modelo selecionado.\n"
                 . "- Escreva no formato piramide invertida, com os fatos mais importantes no início.\n"
-                . "- Garanta no minimo 3 H2 no corpo do texto, mesmo em noticias curtas.\n"
+                . "- Quando houver outline, use exclusivamente seus H2 e H3 e nao acrescente secoes por conta propria. Sem outline, ajuste os H2 a densidade real do material.\n"
                 . "- Se houver seções, mantenha a ordem definida pelo esboço interno; não reordene, não agrupe e não pule itens.\n"
                 . "- Depois de cada bloco principal, escreva 2 a 3 parágrafos curtos, com enredo factual e motivo real para o leitor se interessar.\n"
                 . "- Não insira imagens, links ou chamadas externas no HTML; o backend faz essa etapa depois.\n"
                 . "- A conclusão deve usar um único H2 específico e informativo, sem a palavra conclusão, diretamente ligado ao tema. Não use desafios ao leitor, chamadas genéricas ou frases como 'você está pronto' e 'o próximo passo'.\n"
                 . "- Escreva com tom humano, sem soar mecânico.\n"
-                . "- O texto deve ter no mínimo 500 e no máximo 1200 palavras. Nunca ultrapasse 1200 palavras.\n"
+                . "- Quando houver outline, desenvolva todos os fatos relevantes da fonte em profundidade; nao reduza uma fonte longa a um resumo curto.\n"
                 . "- Use parágrafos curtos e ajuste a estrutura conforme a densidade do tema e o outline interno.\n"
                 . "- Avance com fatos novos em cada bloco e evite repetição de ideias.\n"
                 . "- Não use Markdown.\n"
@@ -4096,6 +4096,9 @@ if (!class_exists('Content_Rank_Generator')) {
             if ($stage === 'link_suggestions') {
                 $temperature = 0;
                 $max_tokens = 1200;
+            }
+            if ($stage === 'content' && !empty($context['outline_storytelling'])) {
+                $max_tokens = max($max_tokens, 5000);
             }
             $use_responses_api = self::should_use_responses_api($model);
             $prompt_cache_retention = '24h';

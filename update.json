@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.156",
+  "version": "1.9.157",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-09-22",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Adicionado switch opcional por gerador para criar um outline storytelling antes da redação.</li><li>O novo estágio planeja H2, H3, progressão narrativa e elementos úteis, como tabelas, vídeos, personagens e linha do tempo, somente quando sustentados pelos dados.</li><li>Corrigida a persistência da configuração, exibida a etapa Outline no progresso e aplicada a estrutura de H2/H3 definida pelo outline antes do salvamento.</li></ul>",
+  "changelog": "<ul><li>Adicionado switch opcional por gerador para criar um outline storytelling antes da redação.</li><li>O outline de fontes longas agora pode organizar mais seções e aproveitar melhor fatos, personagens e desdobramentos.</li><li>O conteúdo com outline deixa de seguir o modo de notícia curta, recebe faixa de palavras proporcional à fonte e tem a estrutura de H2/H3 aplicada antes do salvamento.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

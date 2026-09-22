@@ -6927,6 +6927,10 @@ class Content_Rank_Generator_Helper
             $outline_structure_rules[] = 'ESTRUTURA LISTA: intro_without_h2, um H2 para cada item da lista na ordem solicitada e conclusion.';
             $outline_structure_rules[] = 'No modelo lista, cada item deve ser type=h2. Nao use H3 para substituir os itens e nao crie secoes de artigo entre eles.';
             $outline_structure_rules[] = 'O desenvolvimento deve tratar somente dos itens prometidos pelo titulo e pelas informacoes da fonte.';
+        } elseif ($outline_structure_key === 'noticia' && !empty($generator['outline_enabled'])) {
+            $outline_structure_rules[] = 'ESTRUTURA STORYTELLING RICA: use intro_without_h2, de 3 a 5 H2 de desenvolvimento e conclusion quando a quantidade de fatos exigir.';
+            $outline_structure_rules[] = 'A noticia deve contar uma historia completa, aproveitando os fatos concretos, personagens, contexto e desdobramentos da fonte; nao a reduza a um resumo curto.';
+            $outline_structure_rules[] = 'Use H3 somente quando um H2 precisar dividir subtemas reais. Nao crie H3 por decoracao.';
         } elseif ($outline_structure_key === 'noticia') {
             $outline_structure_rules[] = 'ESTRUTURA NOTICIA: intro_without_h2, no maximo 2 H2 de desenvolvimento e conclusion.';
             $outline_structure_rules[] = 'Priorize o fato principal, seus detalhes confirmados, contexto diretamente relacionado e desdobramentos. Nao transforme a noticia em guia, review ou artigo aprofundado.';
@@ -6963,7 +6967,9 @@ class Content_Rank_Generator_Helper
             "- Planeje tabela somente quando houver dados comparaveis ou uma sintese factual que fique mais clara em colunas. Planeje video somente se houver trailer ou video identificavel nos dados da fonte. Planeje personagens, historia ou linha do tempo apenas quando os dados forem relevantes e sustentados.",
             "- recommended_elements deve listar somente elementos uteis e apoiados pela fonte, indicando onde entram, por que ajudam e qual e a base factual. Uma lista vazia e valida.",
             "",
-            "O conteúdo final deve ter no máximo 1200 palavras. O outline deve ser enxuto e não criar seções apenas para aumentar o tamanho.",
+            !empty($generator['outline_enabled'])
+                ? "O outline deve cobrir todo o material factual relevante; nao reduza uma fonte longa a um resumo curto e nao crie secoes sem informacao nova. O tamanho final sera definido pela densidade dos fatos."
+                : "O conteúdo final deve ter no máximo 1200 palavras. O outline deve ser enxuto e não criar seções apenas para aumentar o tamanho.",
             "Mantenha o outline curto: cada pergunta, proposito, informacao nova e transicao deve ser uma frase breve com apenas uma ideia. Nao escreva explicacoes longas dentro do outline.",
             "Somente no modelo lista, entregue todos os itens prometidos pelo titulo. Nos demais modelos, nao transforme numeros ou detalhes secundarios em uma lista de secoes.",
             "Algum ou alguns h2, devem responder diretamente ao título \"$generated_title\", se promete habitos, fale de habitos, se promete cuidados, entregue cuidados, se promete erros, entregue erros e por ai vai, só entregue o que o título pede, é o mais importante e de preferencia, no segundo ou terceiro h2, se promete uma desgraça de passo a passo, entregue a desgraça do passo a passo",
@@ -7120,7 +7126,7 @@ class Content_Rank_Generator_Helper
             : '';
         $max_development_sections = $normalized_outline_type === 'artigo'
             ? 3
-            : ($normalized_outline_type === 'noticia' ? 2 : 0);
+            : ($normalized_outline_type === 'noticia' ? (!empty($generator['outline_enabled']) ? 5 : 2) : 0);
         // Keep other non-list models compact as well. Reviews are excluded
         // because each product may require its own section.
         if ($max_development_sections === 0 && in_array($normalized_outline_type, array('faq', 'tutorial', 'comparativo'), true)) {
@@ -7359,6 +7365,15 @@ class Content_Rank_Generator_Helper
         if ($tavily_context_text !== '') {
             $hidden_context[] = 'DADOS DO TAVILY — PESQUISA OBRIGATORIA: incorpore ao texto os fatos relevantes e verificaveis desta pesquisa, sem copiar trechos longos, sem inventar informacoes e sem tratar especulacoes como fatos. As fontes consultadas serao anexadas automaticamente ao final do artigo; nao crie uma lista de fontes dentro do content_html.';
             $hidden_context[] = $tavily_context_text;
+        }
+        if (!empty($outline_context['content_outline_generated'])) {
+            $reference_word_count = preg_match_all('/[\\p{L}\\p{N}]+/u', wp_strip_all_tags($source_page_html), $reference_word_matches);
+            $reference_word_count = $reference_word_count !== false ? intval($reference_word_count) : 0;
+            $target_min_words = max(900, min(1800, (int) round(max(1800, $reference_word_count) * 0.35)));
+            $target_max_words = max($target_min_words + 350, min(3000, (int) round(max(2400, $reference_word_count) * 0.8)));
+            $hidden_context[] = 'MODO STORYTELLING OBRIGATORIO: o outline foi ativado para transformar uma fonte rica em um artigo completo. Nao escreva uma noticia curta, um resumo ou frases genericas.';
+            $hidden_context[] = 'DENSIDADE OBRIGATORIA: desenvolva aproximadamente entre ' . $target_min_words . ' e ' . $target_max_words . ' palavras, usando os fatos concretos da fonte e do Tavily. Se houver muitos fatos, prefira detalha-los a encurta-los.';
+            $hidden_context[] = 'Estas regras de storytelling substituem qualquer instrucao anterior de noticia curta, limite de 1200 palavras ou minimo fixo de H2 presente no template do gerador.';
         }
         if (!empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'keyword_list') {
             $hidden_context[] = 'Nome do gerador: ' . (!empty($generator_editorial_context['name']) ? $generator_editorial_context['name'] : '[sem nome definido]');
@@ -7759,6 +7774,7 @@ class Content_Rank_Generator_Helper
             'excerpt_length' => !empty($item['excerpt']) ? strlen((string) $item['excerpt']) : 0,
             'content_length' => !empty($item['content']) ? strlen((string) $item['content']) : 0,
             'source_context_enriched' => !empty($item['source_context_enriched']) ? 1 : 0,
+            'outline_storytelling' => !empty($outline_context['content_outline_generated']) ? 1 : 0,
             'previous_response_id' => $content_previous_response_id,
             'response_schema' => $content_response_schema,
             'response_schema_name' => 'content_rank_content_html',
