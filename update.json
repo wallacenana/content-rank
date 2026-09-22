@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.157",
+  "version": "1.9.158",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-09-22",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Adicionado switch opcional por gerador para criar um outline storytelling antes da redação.</li><li>O outline de fontes longas agora pode organizar mais seções e aproveitar melhor fatos, personagens e desdobramentos.</li><li>O conteúdo com outline deixa de seguir o modo de notícia curta, recebe faixa de palavras proporcional à fonte e tem a estrutura de H2/H3 aplicada antes do salvamento.</li></ul>",
+  "changelog": "<ul><li>Outlines de notícias agora usam inventário factual com fatos confirmados, interpretações atribuídas, incertezas e conflitos entre fontes.</li><li>Removidas transformação do leitor, storytelling obrigatório, conclusões provocativas e previsões sem base factual no outline de notícias.</li><li>As seções só são criadas quando agrupam fatos novos suficientes, sem quantidade mínima de palavras ou de H2.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

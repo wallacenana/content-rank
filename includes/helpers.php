@@ -5987,6 +5987,26 @@ class Content_Rank_Generator_Helper
         if ($recommended_prompt_model_key !== '') {
             $lines[] = 'Modelo de prompt recomendado: ' . $recommended_prompt_model_key;
         }
+        foreach (array(
+            'confirmed_facts' => 'Fatos confirmados',
+            'attributed_interpretations' => 'Interpretacoes atribuidas',
+            'uncertain_points' => 'Pontos incertos',
+            'source_conflicts' => 'Divergencias entre fontes',
+        ) as $facts_key => $facts_label) {
+            if (empty($outline_context[$facts_key]) || !is_array($outline_context[$facts_key])) {
+                continue;
+            }
+            $lines[] = $facts_label . ':';
+            foreach ($outline_context[$facts_key] as $fact) {
+                $fact = trim((string) $fact);
+                if ($fact !== '') {
+                    $lines[] = '- ' . $fact;
+                }
+            }
+        }
+        if (!empty($outline_context['main_answer'])) {
+            $lines[] = 'Resposta principal factual: ' . sanitize_text_field((string) $outline_context['main_answer']);
+        }
 
         if (!empty($outline_context['outline_sections']) && is_array($outline_context['outline_sections'])) {
             $lines[] = 'Esboco editorial:';
@@ -6039,6 +6059,21 @@ class Content_Rank_Generator_Helper
                 }
                 if ($element_note !== '') {
                     $lines[] = '   Elemento editorial: ' . $element_note;
+                }
+                foreach (array(
+                    'facts' => 'Fatos',
+                    'attributions' => 'Atribuicoes',
+                    'uncertainties' => 'Incertezas',
+                ) as $section_facts_key => $section_facts_label) {
+                    if (empty($section[$section_facts_key]) || !is_array($section[$section_facts_key])) {
+                        continue;
+                    }
+                    foreach ($section[$section_facts_key] as $section_fact) {
+                        $section_fact = trim((string) $section_fact);
+                        if ($section_fact !== '') {
+                            $lines[] = '   ' . $section_facts_label . ': ' . $section_fact;
+                        }
+                    }
                 }
                 $index++;
             }
@@ -6371,6 +6406,49 @@ class Content_Rank_Generator_Helper
 
             return array_values(array_unique($normalized));
         };
+        $normalize_attributed_context_list = static function ($value) use ($normalize_context_list) {
+            if (!is_array($value)) {
+                return $normalize_context_list($value);
+            }
+            $normalized = array();
+            foreach ($value as $entry) {
+                if (is_array($entry)) {
+                    $source = '';
+                    foreach (array('source', 'vehicle', 'outlet', 'author', 'attribution') as $source_key) {
+                        if (!empty($entry[$source_key]) && is_scalar($entry[$source_key])) {
+                            $source = self::normalize_plain_text((string) $entry[$source_key]);
+                            break;
+                        }
+                    }
+                    $text = '';
+                    foreach (array('text', 'interpretation', 'statement', 'value') as $text_key) {
+                        if (isset($entry[$text_key]) && is_scalar($entry[$text_key])) {
+                            $text = self::normalize_plain_text((string) $entry[$text_key]);
+                            break;
+                        }
+                    }
+                    if ($source !== '' && $text !== '') {
+                        $entry = $source . ': ' . $text;
+                    } elseif ($text !== '') {
+                        $entry = $text;
+                    }
+                }
+                if (is_scalar($entry)) {
+                    $entry = self::normalize_plain_text((string) $entry);
+                    if ($entry !== '') {
+                        $normalized[] = $entry;
+                    }
+                }
+            }
+            return array_values(array_unique($normalized));
+        };
+        $outline_context['main_answer'] = !empty($analysis['main_answer'])
+            ? self::normalize_plain_text((string) $analysis['main_answer'])
+            : (!empty($outline_context['main_answer']) ? self::normalize_plain_text((string) $outline_context['main_answer']) : '');
+        $outline_context['confirmed_facts'] = $normalize_context_list($analysis['confirmed_facts'] ?? array());
+        $outline_context['attributed_interpretations'] = $normalize_attributed_context_list($analysis['attributed_interpretations'] ?? array());
+        $outline_context['uncertain_points'] = $normalize_context_list($analysis['uncertain_points'] ?? array());
+        $outline_context['source_conflicts'] = $normalize_context_list($analysis['source_conflicts'] ?? array());
         $sections = array();
         $raw_sections = array();
         if (!empty($analysis['outline_sections']) && is_array($analysis['outline_sections'])) {
@@ -6415,6 +6493,9 @@ class Content_Rank_Generator_Helper
             $section_element_note = !empty($section['element_note'])
                 ? sanitize_text_field((string) $section['element_note'])
                 : '';
+            $section_facts = $normalize_context_list($section['facts'] ?? array());
+            $section_attributions = $normalize_attributed_context_list($section['attributions'] ?? array());
+            $section_uncertainties = $normalize_context_list($section['uncertainties'] ?? array());
             // Keep the outline useful as editorial direction without allowing
             // each section to become a second article inside the prompt.
             $section_semantic = self::limit_plain_text_words($section_semantic, 16);
@@ -6467,6 +6548,9 @@ class Content_Rank_Generator_Helper
                 'transition' => $section_transition,
                 'content_format' => $section_content_format,
                 'element_note' => $section_element_note,
+                'facts' => $section_facts,
+                'attributions' => $section_attributions,
+                'uncertainties' => $section_uncertainties,
                 'word_budget' => isset($section['word_budget']) ? intval($section['word_budget']) : 0,
                 'notes' => !empty($section['notes']) ? sanitize_text_field((string) $section['notes']) : '',
             );
@@ -6835,6 +6919,42 @@ class Content_Rank_Generator_Helper
         return $prompt;
     }
 
+    /**
+     * News outlines are factual indexes, not narrative plans. Keep this
+     * prompt separate so the article model never receives speculative goals
+     * such as impact, transformation or a mandatory conclusion.
+     */
+    protected static function build_factual_news_outline_prompt($generator, $item, $seo_article, $outline_context, $source_html, $source_title, $generated_title, $generation_language)
+    {
+        $source_html = (string) $source_html;
+        $source_title = self::normalize_prompt_context_text((string) $source_title);
+        $generated_title = self::normalize_prompt_context_text((string) $generated_title);
+        $lines = array(
+            'Voce e um classificador factual de pauta jornalistica. Gere somente o outline, sem redigir o artigo.',
+            'IDIOMA OBRIGATORIO DO OUTLINE: ' . $generation_language . '.',
+            'Regra principal: nenhuma afirmacao nova pode nascer no outline. Organize somente informacoes explicitamente presentes na fonte principal.',
+            'Separe primeiro os dados em confirmed_facts, attributed_interpretations, uncertain_points e source_conflicts. Depois organize as secoes.',
+            'confirmed_facts: fatos diretamente sustentados pela fonte, sem inferencia.',
+            'attributed_interpretations: hipoteses, leituras ou suspeitas; comece cada item pelo veiculo ou autor responsavel, por exemplo "SlashFilm levanta a possibilidade de...".',
+            'uncertain_points: perguntas ou informacoes que a fonte deixa sem confirmacao. Preserve leituras alternativas sem escolher uma vencedora.',
+            'source_conflicts: divergencias reais entre fontes fornecidas. Se nao houver divergencia, use array vazio.',
+            'Nunca transforme uma hipotese em fato da obra. Nunca acrescente impacto narrativo, repercussao, futuro da serie, renovacao, proxima temporada ou conclusao provocativa sem fatos concretos suficientes.',
+            'Depois do inventario factual, crie outline_sections. A primeira secao deve ser a introducao, com title vazio e content_format paragraph.',
+            'Crie um H2 somente quando houver pelo menos dois fatos concretos novos sobre o mesmo assunto. Nao crie H2 para conclusao, impacto, relevancia ou futuro por obrigacao.',
+            'Cada secao deve conter apenas title, facts, attributions, uncertainties e content_format. Nao crie transicoes, reader_question, purpose ou promessa narrativa.',
+            'Use content_format paragraph por padrao. Use list, table, video, characters, history ou timeline somente quando os fatos da fonte exigirem esse formato.',
+            'Nao imponha quantidade minima de palavras, quantidade minima de secoes ou conclusao.',
+            'Retorne somente JSON valido com exatamente estas chaves: main_answer, confirmed_facts, attributed_interpretations, uncertain_points, source_conflicts, outline_sections.',
+            'Cada item de outline_sections deve conter exatamente: title, facts, attributions, uncertainties, content_format.',
+            'Titulo da pauta: ' . ($source_title !== '' ? $source_title : '[sem titulo]'),
+            'Titulo final: ' . ($generated_title !== '' ? $generated_title : '[sem titulo]'),
+            'Fonte principal:',
+            $source_html !== '' ? $source_html : '[sem conteudo da fonte]',
+        );
+
+        return implode("\n", array_values(array_filter($lines, 'strlen')));
+    }
+
     public static function build_content_outline_prompt($generator, $item, $seo_article, $outline_context = array())
     {
         $generator = is_array($generator) ? $generator : array();
@@ -6905,6 +7025,24 @@ class Content_Rank_Generator_Helper
                 );
                 break;
             }
+        }
+        $outline_prompt_model_type = !empty($outline_context['recommended_prompt_model_key'])
+            ? Content_Rank_Generator::normalize_prompt_model_key((string) $outline_context['recommended_prompt_model_key'])
+            : '';
+        $generator_prompt_model_type = !empty($generator['prompt_model_key'])
+            ? Content_Rank_Generator::normalize_prompt_model_key((string) $generator['prompt_model_key'])
+            : '';
+        if ($content_type === 'noticia' || $outline_prompt_model_type === 'noticia' || $generator_prompt_model_type === 'noticia') {
+            return self::build_factual_news_outline_prompt(
+                $generator,
+                $item,
+                $seo_article,
+                $outline_context,
+                $source_html,
+                $source_title,
+                $generated_title,
+                $generation_language
+            );
         }
         $source_outline_titles = '';
         $review_products_prompt = !empty($item['review_products_prompt'])
@@ -7009,7 +7147,24 @@ class Content_Rank_Generator_Helper
 
     public static function generate_content_outline_context($generator, $item, $seo_article, $outline_context = array())
     {
+        $requested_content_type = !empty($outline_context['content_type'])
+            ? Content_Rank_Generator::normalize_prompt_model_key((string) $outline_context['content_type'])
+            : '';
+        if ($requested_content_type === '') {
+            $requested_content_type = !empty($outline_context['recommended_prompt_model_key'])
+                ? Content_Rank_Generator::normalize_prompt_model_key((string) $outline_context['recommended_prompt_model_key'])
+                : (!empty($generator['prompt_model_key'])
+                    ? Content_Rank_Generator::normalize_prompt_model_key((string) $generator['prompt_model_key'])
+                    : '');
+        }
+        $is_factual_news_request = $requested_content_type === 'noticia';
         $outline_prompt = self::build_content_outline_prompt($generator, $item, $seo_article, $outline_context);
+        $outline_response_required = $is_factual_news_request
+            ? array('main_answer', 'confirmed_facts', 'attributed_interpretations', 'uncertain_points', 'source_conflicts', 'outline_sections')
+            : array('outline_sections');
+        $outline_section_required = $is_factual_news_request
+            ? array('title', 'facts', 'attributions', 'uncertainties', 'content_format')
+            : array('title', 'content_format');
         $outline_response = Content_Rank_Generator::request_openai_json($generator, $outline_prompt, array(
             'stage' => 'content_outline',
             'item_guid' => !empty($item['guid']) ? $item['guid'] : '',
@@ -7023,6 +7178,23 @@ class Content_Rank_Generator_Helper
                 'type' => 'object',
                 'additionalProperties' => false,
                 'properties' => array(
+                    'main_answer' => array('type' => 'string'),
+                    'confirmed_facts' => array(
+                        'type' => 'array',
+                        'items' => array('type' => 'string'),
+                    ),
+                    'attributed_interpretations' => array(
+                        'type' => 'array',
+                        'items' => array('type' => 'string'),
+                    ),
+                    'uncertain_points' => array(
+                        'type' => 'array',
+                        'items' => array('type' => 'string'),
+                    ),
+                    'source_conflicts' => array(
+                        'type' => 'array',
+                        'items' => array('type' => 'string'),
+                    ),
                     'editorial_conflict' => array('type' => 'string'),
                     'reader_transformation' => array('type' => 'string'),
                     'main_promise' => array('type' => 'string'),
@@ -7059,12 +7231,24 @@ class Content_Rank_Generator_Helper
                                 'transition' => array('type' => 'string'),
                                 'content_format' => array('type' => 'string', 'enum' => array('paragraph', 'list', 'table', 'video', 'characters', 'history', 'timeline', 'quote')),
                                 'element_note' => array('type' => 'string'),
+                                'facts' => array(
+                                    'type' => 'array',
+                                    'items' => array('type' => 'string'),
+                                ),
+                                'attributions' => array(
+                                    'type' => 'array',
+                                    'items' => array('type' => 'string'),
+                                ),
+                                'uncertainties' => array(
+                                    'type' => 'array',
+                                    'items' => array('type' => 'string'),
+                                ),
                             ),
-                            'required' => array('type', 'title', 'reader_question', 'purpose', 'new_information', 'transition', 'content_format', 'element_note'),
+                            'required' => $outline_section_required,
                         ),
                     ),
                 ),
-                'required' => array('editorial_conflict', 'reader_transformation', 'main_promise', 'reader_intent', 'recommended_elements', 'outline_sections'),
+                'required' => $outline_response_required,
             ),
         ));
         if (is_wp_error($outline_response)) {
@@ -7081,6 +7265,23 @@ class Content_Rank_Generator_Helper
         $is_keyword_only = $outline_source_type === 'keyword_list'
             || ($outline_source_type === 'spreadsheet' && !Content_Rank_Generator::generator_uses_keyword_list_url_reference_mode($generator));
         $result_context = self::normalize_outline_analysis_context($outline_response, $outline_context);
+        if ($is_factual_news_request) {
+            // The factual outline JSON intentionally omits editorial model
+            // metadata. Keep the request's type so post-processing and the
+            // content prompt remain on the factual news path.
+            $result_context['content_type'] = 'noticia';
+        }
+        $is_factual_news_outline = !empty($result_context['content_type'])
+            && Content_Rank_Generator::normalize_prompt_model_key((string) $result_context['content_type']) === 'noticia';
+        if ($is_factual_news_outline) {
+            $result_context['factual_news_outline'] = 1;
+            // The news outline has a factual contract of its own. Discard
+            // legacy narrative fields if a model returns them despite the
+            // dedicated schema, so they cannot leak into the article prompt.
+            foreach (array('editorial_conflict', 'reader_transformation', 'main_promise', 'reader_intent', 'recommended_elements', 'outline_notes') as $legacy_key) {
+                $result_context[$legacy_key] = in_array($legacy_key, array('recommended_elements'), true) ? array() : '';
+            }
+        }
         if (empty($result_context['outline_sections']) || !is_array($result_context['outline_sections'])) {
             return new WP_Error('content_rank_content_outline_empty', 'A IA nao retornou secoes para o esboco do conteudo.');
         }
@@ -7110,10 +7311,22 @@ class Content_Rank_Generator_Helper
                 continue;
             }
 
+            // A factual news H2 is valid only when it groups at least two
+            // concrete facts supplied by the model's factual inventory.
+            // Attributions and uncertainties alone must not become headings.
+            if ($is_factual_news_outline && in_array($section_type, array('h2', 'h3'), true)) {
+                $section_facts = !empty($section['facts']) && is_array($section['facts'])
+                    ? array_values(array_filter(array_map('trim', $section['facts']), 'strlen'))
+                    : array();
+                if (count($section_facts) < 2) {
+                    continue;
+                }
+            }
+
             $outline_sections[] = $section;
         }
 
-        if (!empty($closing_sections)) {
+        if (!empty($closing_sections) && !$is_factual_news_outline) {
             $conclusion_section = end($closing_sections);
             $conclusion_section['type'] = 'conclusion';
             $outline_sections[] = $conclusion_section;
@@ -7124,9 +7337,11 @@ class Content_Rank_Generator_Helper
         $normalized_outline_type = !empty($result_context['content_type'])
             ? Content_Rank_Generator::normalize_prompt_model_key((string) $result_context['content_type'])
             : '';
-        $max_development_sections = $normalized_outline_type === 'artigo'
+        $max_development_sections = $is_factual_news_outline
+            ? 0
+            : ($normalized_outline_type === 'artigo'
             ? 3
-            : ($normalized_outline_type === 'noticia' ? (!empty($generator['outline_enabled']) ? 5 : 2) : 0);
+            : ($normalized_outline_type === 'noticia' ? (!empty($generator['outline_enabled']) ? 5 : 2) : 0));
         // Keep other non-list models compact as well. Reviews are excluded
         // because each product may require its own section.
         if ($max_development_sections === 0 && in_array($normalized_outline_type, array('faq', 'tutorial', 'comparativo'), true)) {
@@ -7175,10 +7390,10 @@ class Content_Rank_Generator_Helper
                 $has_conclusion = true;
             }
         }
-        if (!$has_main_section) {
+        if (!$has_main_section && !$is_factual_news_outline) {
             return new WP_Error('content_rank_content_outline_incomplete', 'A IA retornou um esboco sem desenvolvimento ou conclusao.');
         }
-        if (!$has_conclusion) {
+        if (!$has_conclusion && !$is_factual_news_outline) {
             $result_context['outline_sections'][] = array(
                 'type' => 'conclusion',
                 'h2' => 'O que considerar a seguir',
@@ -7371,17 +7586,27 @@ class Content_Rank_Generator_Helper
             $reference_word_count = $reference_word_count !== false ? intval($reference_word_count) : 0;
             $target_min_words = max(900, min(1800, (int) round(max(1800, $reference_word_count) * 0.35)));
             $target_max_words = max($target_min_words + 350, min(3000, (int) round(max(2400, $reference_word_count) * 0.8)));
-            $hidden_context[] = 'MODO STORYTELLING OBRIGATORIO: o outline foi ativado para transformar uma fonte rica em um artigo completo. Nao escreva uma noticia curta, um resumo ou frases genericas.';
-            $hidden_context[] = 'DENSIDADE OBRIGATORIA: desenvolva aproximadamente entre ' . $target_min_words . ' e ' . $target_max_words . ' palavras, usando os fatos concretos da fonte e do Tavily. Se houver muitos fatos, prefira detalha-los a encurta-los.';
-            $hidden_context[] = 'Estas regras de storytelling substituem qualquer instrucao anterior de noticia curta, limite de 1200 palavras ou minimo fixo de H2 presente no template do gerador.';
+            if (!empty($outline_context['factual_news_outline'])) {
+                $hidden_context[] = 'MODO FACTUAL DE NOTICIA: use todos os fatos relevantes organizados no outline, sem criar narrativa, interpretacao ou frase generica.';
+                $hidden_context[] = 'Nao existe quantidade minima fixa de palavras ou secoes. A extensao deve acompanhar a quantidade real de fatos, sem resumir uma fonte extensa por falta de espaco.';
+            } else {
+                $hidden_context[] = 'MODO STORYTELLING OBRIGATORIO: o outline foi ativado para transformar uma fonte rica em um artigo completo. Nao escreva uma noticia curta, um resumo ou frases genericas.';
+                $hidden_context[] = 'DENSIDADE OBRIGATORIA: desenvolva aproximadamente entre ' . $target_min_words . ' e ' . $target_max_words . ' palavras, usando os fatos concretos da fonte e do Tavily. Se houver muitos fatos, prefira detalha-los a encurta-los.';
+                $hidden_context[] = 'Estas regras de storytelling substituem qualquer instrucao anterior de noticia curta, limite de 1200 palavras ou minimo fixo de H2 presente no template do gerador.';
+            }
         }
         if (!empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'keyword_list') {
             $hidden_context[] = 'Nome do gerador: ' . (!empty($generator_editorial_context['name']) ? $generator_editorial_context['name'] : '[sem nome definido]');
             $hidden_context[] = 'Categoria editorial: ' . (!empty($generator_editorial_context['category_text']) ? $generator_editorial_context['category_text'] : '[sem categoria definida]');
         }
         if ($outline_text !== '') {
-            $hidden_context[] = 'OUTLINE STORYTELLING OBRIGATORIO: use esta estrutura como plano editorial da redacao. Preserve a ordem, os H2 e H3, a progressao logica e os formatos recomendados. Nao invente elementos que o outline nao recomenda.';
+            $hidden_context[] = !empty($outline_context['factual_news_outline'])
+                ? 'OUTLINE FACTUAL OBRIGATORIO: use esta estrutura como organizacao de fatos, atribuicoes e incertezas. Preserve os H2 definidos e nao invente elementos ou interpretacoes.'
+                : 'OUTLINE STORYTELLING OBRIGATORIO: use esta estrutura como plano editorial da redacao. Preserve a ordem, os H2 e H3, a progressao logica e os formatos recomendados. Nao invente elementos que o outline nao recomenda.';
             $hidden_context[] = $outline_text;
+        }
+        if (!empty($outline_context['factual_news_outline'])) {
+            $hidden_context[] = 'OUTLINE FACTUAL DE NOTICIA: organize somente os fatos e as atribuicoes presentes no outline. Nao crie conclusao, impacto futuro, repercussao ou proxima temporada se isso nao estiver em uma secao factual do outline. Nao transforme incerteza em afirmacao.';
         }
         $hidden_context[] = 'Conteudo HTML filtrado da fonte: {{source_content}}';
 
