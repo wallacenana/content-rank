@@ -350,6 +350,7 @@ class Content_Rank_Generator_Admin
                                                         type="button"
                                                         data-edit-generator-id="<?php echo esc_attr($generator['id']); ?>"
                                                         data-tavily-enabled="<?php echo esc_attr(!empty($generator['tavily_enabled']) ? '1' : '0'); ?>"
+                                                        data-outline-enabled="<?php echo esc_attr(!empty($generator['outline_enabled']) ? '1' : '0'); ?>"
                                                         class="content-rank-generator-action-btn inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
                                                         aria-label="Editar"
                                                         title="Editar">
@@ -668,6 +669,14 @@ class Content_Rank_Generator_Admin
                                         <option value="1" <?php selected(isset($editing_generator['tavily_enabled']) ? intval($editing_generator['tavily_enabled']) : 0, 1); ?>>Sim</option>
                                     </select>
                                     <p class="mt-1 text-xs text-slate-500">Pesquisa fontes atuais antes da geração, orienta o conteúdo e acrescenta a lista de fontes ao final do artigo. Basta cadastrar a chave da API do Tavily nas configurações.</p>
+                                </div>
+                                <div data-outline-field>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Gerar outline storytelling antes do conteúdo</label>
+                                    <select name="outline_enabled" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                        <option value="0" <?php selected(isset($editing_generator['outline_enabled']) ? intval($editing_generator['outline_enabled']) : 0, 0); ?>>Não</option>
+                                        <option value="1" <?php selected(isset($editing_generator['outline_enabled']) ? intval($editing_generator['outline_enabled']) : 0, 1); ?>>Sim</option>
+                                    </select>
+                                    <p class="mt-1 text-xs text-slate-500">Cria a progressão editorial antes da redação, definindo H2, H3 e elementos úteis como tabelas, vídeos, personagens e contexto.</p>
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Status do gerador</label>
@@ -1052,6 +1061,7 @@ class Content_Rank_Generator_Admin
                                         'list_id' => '0',
                                         'keyword_list_mode' => 'keywords',
                                         'tavily_enabled' => '0',
+                                        'outline_enabled' => '0',
                                         'status' => 'active',
                                         'post_type' => 'post',
                                         'post_status' => 'draft',
@@ -1386,7 +1396,7 @@ class Content_Rank_Generator_Admin
                         // switches, this value must always be present in the
                         // admin POST so a generator cannot silently revert to
                         // disabled when the checkbox is not serialized.
-                        var names = ['tmdb_title_translation_enabled', 'source_video_enabled', 'source_content_images_enabled', 'source_content_links_enabled', 'random_bolds_enabled', 'source_context_keep_unrated', 'seo_enabled', 'related_posts_enabled', 'related_posts_same_category_only', 'related_posts_allow_fallback'];
+                        var names = ['outline_enabled', 'tmdb_title_translation_enabled', 'source_video_enabled', 'source_content_images_enabled', 'source_content_links_enabled', 'random_bolds_enabled', 'source_context_keep_unrated', 'seo_enabled', 'related_posts_enabled', 'related_posts_same_category_only', 'related_posts_allow_fallback'];
                         names.forEach(function(name) {
                             var select = form.querySelector('select[name="' + name + '"]');
                             if (!select || select.options.length !== 2) return;
@@ -1937,6 +1947,7 @@ class Content_Rank_Generator_Admin
                         setValue('list_id', defaults.list_id);
                         setValue('keyword_list_mode', defaults.keyword_list_mode);
                         setValue('tavily_enabled', defaults.tavily_enabled);
+                        setValue('outline_enabled', defaults.outline_enabled);
                         setValue('status', defaults.status);
                         setValue('post_type', defaults.post_type);
                         setValue('post_status', defaults.post_status);
@@ -2012,6 +2023,11 @@ class Content_Rank_Generator_Admin
                                 ? triggerButton.getAttribute('data-tavily-enabled')
                                 : (byName('tavily_enabled') ? byName('tavily_enabled').value : defaults.tavily_enabled));
                         setValue('tavily_enabled', String(tavilyValue) === '1' || tavilyValue === true ? '1' : '0');
+                        setValue('outline_enabled', typeof generator.outline_enabled !== 'undefined'
+                            ? generator.outline_enabled
+                            : (triggerButton && triggerButton.getAttribute('data-outline-enabled') !== null
+                                ? triggerButton.getAttribute('data-outline-enabled')
+                                : defaults.outline_enabled));
                         setValue('status', generator.status);
                         setValue('post_type', generator.post_type);
                         setValue('post_status', generator.post_status);
@@ -2124,6 +2140,17 @@ class Content_Rank_Generator_Admin
                                 // serialized by the browser on every save.
                                 tavilySelect.disabled = false;
                                 tavilySelect.value = tavilySelect.value === '1' ? '1' : '0';
+                            }
+                            var outlineSwitch = byName('outline_enabled');
+                            if (outlineSwitch && outlineSwitch.type === 'checkbox') {
+                                outlineSwitch.disabled = false;
+                                if (!outlineSwitch.checked && !form.querySelector('input[type="hidden"][name="outline_enabled"]')) {
+                                    var outlineHidden = document.createElement('input');
+                                    outlineHidden.type = 'hidden';
+                                    outlineHidden.name = 'outline_enabled';
+                                    outlineHidden.value = '0';
+                                    form.appendChild(outlineHidden);
+                                }
                             }
                             syncInternalLinksField();
                         });

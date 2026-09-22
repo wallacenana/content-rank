@@ -11,6 +11,7 @@
         list_id: '0',
         keyword_list_mode: 'keywords',
         tavily_enabled: '0',
+        outline_enabled: '0',
         status: 'active',
         post_type: 'post',
         post_status: 'draft',
@@ -133,6 +134,7 @@
     function convertBooleanSelectsToSwitches() {
         var booleanNames = [
             'generation_mode',
+            'outline_enabled',
             'tmdb_title_translation_enabled',
             'source_video_enabled',
             'source_content_images_enabled',
@@ -845,6 +847,7 @@
         setValue('list_id', defaults.list_id);
         setValue('keyword_list_mode', defaults.keyword_list_mode);
         setValue('tavily_enabled', defaults.tavily_enabled);
+        setValue('outline_enabled', defaults.outline_enabled);
         setValue('status', defaults.status);
         setValue('post_type', defaults.post_type);
         setValue('post_status', defaults.post_status);
@@ -912,6 +915,11 @@
                 ? triggerButton.getAttribute('data-tavily-enabled')
                 : (byName('tavily_enabled') ? byName('tavily_enabled').value : defaults.tavily_enabled));
         setValue('tavily_enabled', String(tavilyValue) === '1' || tavilyValue === true ? '1' : '0');
+        setValue('outline_enabled', typeof generator.outline_enabled !== 'undefined'
+            ? generator.outline_enabled
+            : (triggerButton && triggerButton.getAttribute('data-outline-enabled') !== null
+                ? triggerButton.getAttribute('data-outline-enabled')
+                : defaults.outline_enabled));
         setValue('status', generator.status);
         setValue('post_type', generator.post_type);
         setValue('post_status', generator.post_status);
@@ -998,6 +1006,14 @@
         if (tavilySelect) {
             tavilySelect.disabled = false;
             tavilySelect.value = tavilySelect.value === '1' ? '1' : '0';
+        }
+        var outlineSwitch = byName('outline_enabled');
+        if (outlineSwitch && outlineSwitch.type === 'checkbox' && !outlineSwitch.checked && !form.querySelector('input[type="hidden"][name="outline_enabled"]')) {
+            var outlineHidden = document.createElement('input');
+            outlineHidden.type = 'hidden';
+            outlineHidden.name = 'outline_enabled';
+            outlineHidden.value = '0';
+            form.appendChild(outlineHidden);
         }
     });
 

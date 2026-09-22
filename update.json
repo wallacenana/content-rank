@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.153",
+  "version": "1.9.154",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-09-22",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Corrigido o salvamento e a restauração da opção Tavily no editor de geradores.</li><li>Organizados os dados do Tavily exclusivamente no prompt final de conteúdo, com bloqueio de fontes Reddit.</li><li>Aprimorado o planejamento de outline e a seleção de títulos localizados e mídias.</li></ul>",
+  "changelog": "<ul><li>Adicionado switch opcional por gerador para criar um outline storytelling antes da redação.</li><li>O novo estágio planeja H2, H3, progressão narrativa e elementos úteis, como tabelas, vídeos, personagens e linha do tempo, somente quando sustentados pelos dados.</li><li>Corrigida a persistência da configuração do outline no editor e sua integração ao prompt final de conteúdo.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

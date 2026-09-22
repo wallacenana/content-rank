@@ -6005,6 +6005,8 @@ class Content_Rank_Generator_Helper
                     ? sanitize_text_field((string) $section['new_information'])
                     : (!empty($section['notes']) ? sanitize_text_field((string) $section['notes']) : '');
                 $transition = !empty($section['transition']) ? sanitize_text_field((string) $section['transition']) : '';
+                $content_format = !empty($section['content_format']) ? sanitize_key((string) $section['content_format']) : '';
+                $element_note = !empty($section['element_note']) ? sanitize_text_field((string) $section['element_note']) : '';
                 if ($block_type === 'intro_without_h2') {
                     $title = 'Introducao';
                     $purpose = 'Comece diretamente com o lead em paragrafos, sem H2.';
@@ -6015,6 +6017,9 @@ class Content_Rank_Generator_Helper
                 $line = $index . '. ' . $title;
                 if ($block_type !== '') {
                     $line .= ' [' . $block_type . ']';
+                }
+                if ($content_format !== '') {
+                    $line .= ' {formato: ' . $content_format . '}';
                 }
                 if ($word_budget > 0) {
                     $line .= ' ~' . $word_budget . ' palavras';
@@ -6032,7 +6037,26 @@ class Content_Rank_Generator_Helper
                 if ($transition !== '') {
                     $lines[] = '   Transicao: ' . $transition;
                 }
+                if ($element_note !== '') {
+                    $lines[] = '   Elemento editorial: ' . $element_note;
+                }
                 $index++;
+            }
+        }
+
+        if (!empty($outline_context['recommended_elements']) && is_array($outline_context['recommended_elements'])) {
+            $lines[] = 'Elementos editoriais recomendados:';
+            foreach ($outline_context['recommended_elements'] as $element) {
+                if (!is_array($element) || empty($element['type'])) {
+                    continue;
+                }
+                $element_line = '- ' . sanitize_key((string) $element['type']);
+                foreach (array('title', 'placement', 'purpose', 'source_basis') as $element_key) {
+                    if (!empty($element[$element_key])) {
+                        $element_line .= ' | ' . sanitize_text_field((string) $element[$element_key]);
+                    }
+                }
+                $lines[] = $element_line;
             }
         }
 
@@ -6285,6 +6309,30 @@ class Content_Rank_Generator_Helper
                 ? sanitize_textarea_field((string) $analysis[$narrative_key])
                 : (!empty($outline_context[$narrative_key]) ? sanitize_textarea_field((string) $outline_context[$narrative_key]) : '');
         }
+        $outline_context['recommended_elements'] = array();
+        $raw_elements = !empty($analysis['recommended_elements']) && is_array($analysis['recommended_elements'])
+            ? $analysis['recommended_elements']
+            : (!empty($analysis['editorial_elements']) && is_array($analysis['editorial_elements']) ? $analysis['editorial_elements'] : array());
+        $allowed_element_types = array('table', 'video', 'characters', 'history', 'timeline', 'list', 'quote');
+        foreach ($raw_elements as $element) {
+            if (is_string($element)) {
+                $element = array('type' => $element);
+            }
+            if (!is_array($element)) {
+                continue;
+            }
+            $element_type = sanitize_key(isset($element['type']) ? (string) $element['type'] : '');
+            if (!in_array($element_type, $allowed_element_types, true)) {
+                continue;
+            }
+            $outline_context['recommended_elements'][] = array(
+                'type' => $element_type,
+                'title' => self::limit_plain_text_words(!empty($element['title']) ? sanitize_text_field((string) $element['title']) : '', 14),
+                'placement' => self::limit_plain_text_words(!empty($element['placement']) ? sanitize_text_field((string) $element['placement']) : '', 18),
+                'purpose' => self::limit_plain_text_words(!empty($element['purpose']) ? sanitize_text_field((string) $element['purpose']) : '', 24),
+                'source_basis' => self::limit_plain_text_words(!empty($element['source_basis']) ? sanitize_text_field((string) $element['source_basis']) : '', 24),
+            );
+        }
         $outline_context['recommended_outline_model_key'] = !empty($analysis['recommended_outline_model_key']) ? sanitize_key((string) $analysis['recommended_outline_model_key']) : (!empty($outline_context['recommended_outline_model_key']) ? sanitize_key((string) $outline_context['recommended_outline_model_key']) : '');
         $outline_context['recommended_prompt_model_key'] = !empty($analysis['recommended_prompt_model_key'])
             ? Content_Rank_Generator::normalize_prompt_model_key((string) $analysis['recommended_prompt_model_key'])
@@ -6361,6 +6409,12 @@ class Content_Rank_Generator_Helper
             $section_transition = !empty($section['transition'])
                 ? sanitize_text_field((string) $section['transition'])
                 : '';
+            $section_content_format = !empty($section['content_format'])
+                ? sanitize_key((string) $section['content_format'])
+                : '';
+            $section_element_note = !empty($section['element_note'])
+                ? sanitize_text_field((string) $section['element_note'])
+                : '';
             // Keep the outline useful as editorial direction without allowing
             // each section to become a second article inside the prompt.
             $section_semantic = self::limit_plain_text_words($section_semantic, 16);
@@ -6368,6 +6422,7 @@ class Content_Rank_Generator_Helper
             $section_purpose = self::limit_plain_text_words($section_purpose, 18);
             $section_new_information = self::limit_plain_text_words($section_new_information, 24);
             $section_transition = self::limit_plain_text_words($section_transition, 16);
+            $section_element_note = self::limit_plain_text_words($section_element_note, 20);
             $section_type = !empty($section['type']) ? sanitize_key((string) $section['type']) : '';
             if ($section_type === '' && !empty($section['level'])) {
                 $section_type = sanitize_key((string) $section['level']);
@@ -6410,6 +6465,8 @@ class Content_Rank_Generator_Helper
                 'purpose' => $section_purpose,
                 'new_information' => $section_new_information,
                 'transition' => $section_transition,
+                'content_format' => $section_content_format,
+                'element_note' => $section_element_note,
                 'word_budget' => isset($section['word_budget']) ? intval($section['word_budget']) : 0,
                 'notes' => !empty($section['notes']) ? sanitize_text_field((string) $section['notes']) : '',
             );
@@ -6849,7 +6906,6 @@ class Content_Rank_Generator_Helper
                 break;
             }
         }
-        // The editorial content-outline pass is disabled temporarily.
         $source_outline_titles = '';
         $review_products_prompt = !empty($item['review_products_prompt'])
             ? trim((string) $item['review_products_prompt'])
@@ -6903,6 +6959,9 @@ class Content_Rank_Generator_Helper
             "- Um H3 deve explicar por que aquele ponto importa ou o que o leitor deve fazer com ele. Prefira construções como 'Comece pelo hábito mais fácil de repetir' em vez de apenas nomear o assunto.",
             "- Mantenha os H3 específicos, naturais e sustentados pela fonte. Não force curiosidade, não use frases de marketing e não transforme cada H3 em uma promessa exagerada.",
             "- A ultima secao e a conclusao: use type=conclusion e um unico H2 com titulo provocativo, especifico e diretamente ligado ao tema. Nao crie uma secao de fechamento separada nem outra conclusao depois dela. O titulo pode gerar curiosidade, mas nao pode usar desafios genericos como 'voce esta pronto', 'aceite o desafio', 'o proximo passo' ou 'agora e com voce'.",
+            "- Para cada secao, escolha content_format apenas quando houver necessidade editorial real: paragraph, list, table, video, characters, history ou timeline. Nao use tabela, video ou H3 por padrao.",
+            "- Planeje tabela somente quando houver dados comparaveis ou uma sintese factual que fique mais clara em colunas. Planeje video somente se houver trailer ou video identificavel nos dados da fonte. Planeje personagens, historia ou linha do tempo apenas quando os dados forem relevantes e sustentados.",
+            "- recommended_elements deve listar somente elementos uteis e apoiados pela fonte, indicando onde entram, por que ajudam e qual e a base factual. Uma lista vazia e valida.",
             "",
             "O conteúdo final deve ter no máximo 1200 palavras. O outline deve ser enxuto e não criar seções apenas para aumentar o tamanho.",
             "Mantenha o outline curto: cada pergunta, proposito, informacao nova e transicao deve ser uma frase breve com apenas uma ideia. Nao escreva explicacoes longas dentro do outline.",
@@ -6911,8 +6970,8 @@ class Content_Rank_Generator_Helper
             "Os títulos h2 e h3 devem ter no máximo 60 caracteres e sempre responderem a uma questão focada em SEO",
             "Não use dois pontos nos títulos",
             "Envie apenas o outline, sem comentários, sem explicações, sem markdown, incluindo todos os títulos H2 e H3.",
-            'Retorne somente JSON valido com editorial_conflict, reader_transformation, main_promise, reader_intent e outline_sections.',
-            'Cada item de outline_sections deve conter exatamente: type, title, reader_question, purpose, new_information, transition.',
+            'Retorne somente JSON valido com editorial_conflict, reader_transformation, main_promise, reader_intent, recommended_elements e outline_sections.',
+            'Cada item de outline_sections deve conter exatamente: type, title, reader_question, purpose, new_information, transition, content_format e element_note.',
             'Use type=h2 ou type=h3 para o desenvolvimento e type=conclusion somente para a ultima secao, com titulo H2 especifico.',
             'Nao crie duas secoes finais. A conclusao provocativa e o unico fechamento e deve ser o ultimo item de outline_sections.',
             'REGRAS ESPECIFICAS DO MODELO: estas regras prevalecem sobre qualquer regra estrutural generica acima:',
@@ -6962,6 +7021,21 @@ class Content_Rank_Generator_Helper
                     'reader_transformation' => array('type' => 'string'),
                     'main_promise' => array('type' => 'string'),
                     'reader_intent' => array('type' => 'string'),
+                    'recommended_elements' => array(
+                        'type' => 'array',
+                        'items' => array(
+                            'type' => 'object',
+                            'additionalProperties' => false,
+                            'properties' => array(
+                                'type' => array('type' => 'string', 'enum' => array('table', 'video', 'characters', 'history', 'timeline', 'list', 'quote')),
+                                'title' => array('type' => 'string'),
+                                'placement' => array('type' => 'string'),
+                                'purpose' => array('type' => 'string'),
+                                'source_basis' => array('type' => 'string'),
+                            ),
+                            'required' => array('type', 'title', 'placement', 'purpose', 'source_basis'),
+                        ),
+                    ),
                     'outline_sections' => array(
                         'type' => 'array',
                         'items' => array(
@@ -6977,12 +7051,14 @@ class Content_Rank_Generator_Helper
                                 'purpose' => array('type' => 'string'),
                                 'new_information' => array('type' => 'string'),
                                 'transition' => array('type' => 'string'),
+                                'content_format' => array('type' => 'string', 'enum' => array('paragraph', 'list', 'table', 'video', 'characters', 'history', 'timeline', 'quote')),
+                                'element_note' => array('type' => 'string'),
                             ),
-                            'required' => array('type', 'title', 'reader_question', 'purpose', 'new_information', 'transition'),
+                            'required' => array('type', 'title', 'reader_question', 'purpose', 'new_information', 'transition', 'content_format', 'element_note'),
                         ),
                     ),
                 ),
-                'required' => array('editorial_conflict', 'reader_transformation', 'main_promise', 'reader_intent', 'outline_sections'),
+                'required' => array('editorial_conflict', 'reader_transformation', 'main_promise', 'reader_intent', 'recommended_elements', 'outline_sections'),
             ),
         ));
         if (is_wp_error($outline_response)) {
@@ -7287,6 +7363,10 @@ class Content_Rank_Generator_Helper
         if (!empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'keyword_list') {
             $hidden_context[] = 'Nome do gerador: ' . (!empty($generator_editorial_context['name']) ? $generator_editorial_context['name'] : '[sem nome definido]');
             $hidden_context[] = 'Categoria editorial: ' . (!empty($generator_editorial_context['category_text']) ? $generator_editorial_context['category_text'] : '[sem categoria definida]');
+        }
+        if ($outline_text !== '') {
+            $hidden_context[] = 'OUTLINE STORYTELLING OBRIGATORIO: use esta estrutura como plano editorial da redacao. Preserve a ordem, os H2 e H3, a progressao logica e os formatos recomendados. Nao invente elementos que o outline nao recomenda.';
+            $hidden_context[] = $outline_text;
         }
         $hidden_context[] = 'Conteudo HTML filtrado da fonte: {{source_content}}';
 
@@ -7674,11 +7754,17 @@ class Content_Rank_Generator_Helper
 
         $seo_article = !empty($seo_stage['seo_article']) && is_array($seo_stage['seo_article']) ? $seo_stage['seo_article'] : array();
         $outline_context = !empty($seo_stage['outline_context']) && is_array($seo_stage['outline_context']) ? $seo_stage['outline_context'] : $outline_context;
-        // Temporarily skip the second AI outline pass. The source already has
-        // the editorial structure; the content stage should rewrite it directly.
-        $outline_context['outline_text'] = '';
-        $outline_context['outline_sections'] = array();
-        $outline_context['outline_response_id'] = '';
+        if (!empty($generator['outline_enabled'])) {
+            $generated_outline_context = self::generate_content_outline_context($generator, $item, $seo_article, $outline_context);
+            if (is_wp_error($generated_outline_context)) {
+                return $generated_outline_context;
+            }
+            $outline_context = $generated_outline_context;
+        } else {
+            $outline_context['outline_text'] = '';
+            $outline_context['outline_sections'] = array();
+            $outline_context['outline_response_id'] = '';
+        }
         self::build_source_outline_titles_for_prompt($item, 0, $generator);
         $content_article = self::generate_content_article_stage($generator, $item, $seo_article, $outline_context);
         if (is_wp_error($content_article)) {

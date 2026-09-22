@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.153
+Version: 1.9.154
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -467,6 +467,10 @@ if (!class_exists('Content_Rank_Generator')) {
                     'definition' => 'tinyint(1) NOT NULL DEFAULT 0',
                     'after' => 'keyword_list_mode',
                 ),
+                'outline_enabled' => array(
+                    'definition' => 'tinyint(1) NOT NULL DEFAULT 0',
+                    'after' => 'tavily_enabled',
+                ),
                 'content_image_interval_words' => array(
                     'definition' => 'int(11) NOT NULL DEFAULT 500',
                     'after' => 'content_image_size',
@@ -634,6 +638,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 list_id bigint(20) unsigned NOT NULL DEFAULT 0,
                 keyword_list_mode varchar(20) NOT NULL DEFAULT 'keywords',
                 tavily_enabled tinyint(1) NOT NULL DEFAULT 0,
+                outline_enabled tinyint(1) NOT NULL DEFAULT 0,
                 tmdb_title_translation_enabled tinyint(1) NOT NULL DEFAULT 0,
                 tmdb_thumbnail_bg_color varchar(7) NOT NULL DEFAULT '#c91414',
                 tmdb_thumbnail_layout varchar(30) NOT NULL DEFAULT 'rotate',
@@ -2391,6 +2396,7 @@ if (!class_exists('Content_Rank_Generator')) {
             // payload. MySQL returns tinyint values as strings, while older
             // admin clients may omit the key entirely.
             $generator['tavily_enabled'] = !empty($generator['tavily_enabled']) ? 1 : 0;
+            $generator['outline_enabled'] = !empty($generator['outline_enabled']) ? 1 : 0;
             $generator['tmdb_title_translation_enabled'] = !empty($generator['tmdb_title_translation_enabled']) ? 1 : 0;
             $generator['tmdb_thumbnail_bg_color'] = self::normalize_hex_color(isset($generator['tmdb_thumbnail_bg_color']) ? $generator['tmdb_thumbnail_bg_color'] : '#c91414');
             $generator['tmdb_thumbnail_layout'] = self::normalize_tmdb_thumbnail_layout(isset($generator['tmdb_thumbnail_layout']) ? $generator['tmdb_thumbnail_layout'] : 'rotate');
@@ -3577,6 +3583,9 @@ if (!class_exists('Content_Rank_Generator')) {
             $payload['tavily_enabled'] = array_key_exists('tavily_enabled', $raw)
                 ? (!empty($raw['tavily_enabled']) ? 1 : 0)
                 : (!empty($existing_generator['tavily_enabled']) ? 1 : 0);
+            $payload['outline_enabled'] = array_key_exists('outline_enabled', $raw)
+                ? (!empty($raw['outline_enabled']) ? 1 : 0)
+                : (!empty($existing_generator['outline_enabled']) ? 1 : 0);
             $payload['tmdb_title_translation_enabled'] = !empty($raw['tmdb_title_translation_enabled']) ? 1 : 0;
             $payload['tmdb_thumbnail_bg_color'] = self::normalize_hex_color(isset($raw['tmdb_thumbnail_bg_color']) ? wp_unslash($raw['tmdb_thumbnail_bg_color']) : '#c91414');
             $payload['tmdb_thumbnail_layout'] = self::normalize_tmdb_thumbnail_layout(isset($raw['tmdb_thumbnail_layout']) ? wp_unslash($raw['tmdb_thumbnail_layout']) : 'rotate');
@@ -3817,7 +3826,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 . "- Toda frase deve começar com capitalização natural; nunca inicie um parágrafo com palavra minúscula por causa da keyword.\n"
                 . "- Use 2 a 3 parágrafos curtos na introdução, sem frases genéricas.\n"
                 . "- Use a estrutura editorial indicada pelo outline interno e pelo modelo selecionado.\n"
-                . "- Garanta no minimo 3 H2 no corpo do texto, mesmo em noticias curtas.\n"
+                . "- Use somente os H2 e H3 definidos pelo outline; se nao houver outline, ajuste a quantidade ao conteudo e nunca force secoes artificiais.\n"
                 . "- Se houver seções, mantenha a ordem definida pelo esboço interno; não reordene, não agrupe e não pule itens.\n"
                 . "- Depois de cada bloco principal, escreva 2 a 3 parágrafos curtos, com enredo factual e motivo real para o leitor se interessar.\n"
                 . "- Não insira imagens, links ou chamadas externas no HTML; o backend faz essa etapa depois.\n"
@@ -3845,6 +3854,8 @@ if (!class_exists('Content_Rank_Generator')) {
                 . "Retorne apenas JSON válido com a chave content_html.\n"
                 . "Não gere title, slug, tags ou metadados nesta etapa.\n"
                 . "Use apenas HTML simples no content_html.\n"
+                . "Quando houver outline interno, siga exatamente seus H2, H3, ordem e formatos. Nao crie H3 que nao estejam previstos e nao force quantidade minima de H2 contra o outline.\n"
+                . "Use tabela, video, personagens, historia ou linha do tempo somente quando o outline recomendar e os dados da fonte sustentarem o elemento.\n"
                 . "Objetivo:\n"
                 . "- Abra com um lead comportamental que conecte o leitor ao tema de forma imediata.\n"
                 . "- Use o focus keyword como referência sem copiar uma capitalização inadequada. Se ele abrir a primeira frase, comece com letra maiúscula e mantenha nomes próprios corretamente capitalizados.\n"
@@ -9946,14 +9957,24 @@ if (!class_exists('Content_Rank_Generator')) {
 
                     $state['seo_article'] = !empty($result['seo_article']) && is_array($result['seo_article']) ? $result['seo_article'] : array();
                     $state['outline_context'] = !empty($result['outline_context']) && is_array($result['outline_context']) ? $result['outline_context'] : array();
-                    $state['outline_context']['outline_text'] = '';
-                    $state['outline_context']['outline_sections'] = array();
-                    $state['stage'] = 'content';
+                    if (!empty($generator['outline_enabled'])) {
+                        $state['stage'] = 'content_outline';
+                    } else {
+                        $state['outline_context']['outline_text'] = '';
+                        $state['outline_context']['outline_sections'] = array();
+                        $state['stage'] = 'content';
+                    }
                 } elseif ($stage === 'content_outline') {
-                    // Compatibility for jobs created before the outline pass
-                    // was disabled. Do not call the old AI outline endpoint.
-                    $state['outline_context']['outline_text'] = '';
-                    $state['outline_context']['outline_sections'] = array();
+                    $outline_result = Content_Rank_Generator_Helper::generate_content_outline_context(
+                        $generator,
+                        $item,
+                        !empty($state['seo_article']) && is_array($state['seo_article']) ? $state['seo_article'] : array(),
+                        !empty($state['outline_context']) && is_array($state['outline_context']) ? $state['outline_context'] : array()
+                    );
+                    if (is_wp_error($outline_result)) {
+                        throw new RuntimeException($outline_result->get_error_message());
+                    }
+                    $state['outline_context'] = is_array($outline_result) ? $outline_result : array();
                     $state['stage'] = 'content';
                 } elseif ($stage === 'content') {
                     $seo_article = !empty($state['seo_article']) && is_array($state['seo_article']) ? $state['seo_article'] : array();
@@ -11187,6 +11208,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 'list_id' => $payload['list_id'],
                 'keyword_list_mode' => $payload['keyword_list_mode'],
                 'tavily_enabled' => $payload['tavily_enabled'],
+                'outline_enabled' => $payload['outline_enabled'],
                 'tmdb_title_translation_enabled' => $payload['tmdb_title_translation_enabled'],
                 'tmdb_thumbnail_bg_color' => $payload['tmdb_thumbnail_bg_color'],
                 'tmdb_thumbnail_layout' => $payload['tmdb_thumbnail_layout'],
@@ -11262,7 +11284,9 @@ if (!class_exists('Content_Rank_Generator')) {
                 }
                 self::update_generator_schedule($generator_id);
                 $saved_generator = self::get_generator($generator_id);
-                if (!is_array($saved_generator) || intval($saved_generator['tavily_enabled']) !== intval($payload['tavily_enabled'])) {
+                if (!is_array($saved_generator)
+                    || intval($saved_generator['tavily_enabled']) !== intval($payload['tavily_enabled'])
+                    || intval($saved_generator['outline_enabled']) !== intval($payload['outline_enabled'])) {
                     return new WP_Error('content_rank_generator_save_verification_failed', 'O gerador foi salvo, mas a opção do Tavily não pôde ser confirmada.');
                 }
                 return $generator_id;
@@ -11278,7 +11302,9 @@ if (!class_exists('Content_Rank_Generator')) {
             $generator_id = intval($wpdb->insert_id);
             self::update_generator_schedule($generator_id);
             $saved_generator = self::get_generator($generator_id);
-            if (!is_array($saved_generator) || intval($saved_generator['tavily_enabled']) !== intval($payload['tavily_enabled'])) {
+            if (!is_array($saved_generator)
+                || intval($saved_generator['tavily_enabled']) !== intval($payload['tavily_enabled'])
+                || intval($saved_generator['outline_enabled']) !== intval($payload['outline_enabled'])) {
                 return new WP_Error('content_rank_generator_save_verification_failed', 'O gerador foi criado, mas a opção do Tavily não pôde ser confirmada.');
             }
             return $generator_id;
@@ -11313,6 +11339,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 'list_id' => $duplicated_list_id,
                 'keyword_list_mode' => isset($generator['keyword_list_mode']) ? $generator['keyword_list_mode'] : self::get_default_keyword_list_mode(),
                 'tavily_enabled' => !empty($generator['tavily_enabled']) ? 1 : 0,
+                'outline_enabled' => !empty($generator['outline_enabled']) ? 1 : 0,
                 'tmdb_title_translation_enabled' => !empty($generator['tmdb_title_translation_enabled']) ? 1 : 0,
                 'tmdb_thumbnail_bg_color' => isset($generator['tmdb_thumbnail_bg_color']) ? self::normalize_hex_color($generator['tmdb_thumbnail_bg_color']) : '#c91414',
                 'tmdb_thumbnail_layout' => isset($generator['tmdb_thumbnail_layout']) ? self::normalize_tmdb_thumbnail_layout($generator['tmdb_thumbnail_layout']) : 'rotate',
