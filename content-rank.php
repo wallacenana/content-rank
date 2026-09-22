@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.154
+Version: 1.9.155
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -9225,6 +9225,7 @@ if (!class_exists('Content_Rank_Generator')) {
             $stage_labels = array(
                 'planning' => 'Planejamento',
                 'seo' => 'SEO',
+                'content_outline' => 'Outline storytelling',
                 'content' => 'Conteúdo',
             );
 
@@ -9233,11 +9234,15 @@ if (!class_exists('Content_Rank_Generator')) {
                 $status = (string) get_post_meta($post_id, '_content_rank_generation_pipeline_status', true);
                 $error_message = (string) get_post_meta($post_id, '_content_rank_generation_pipeline_error', true);
                 $stage = is_array($state) && !empty($state['stage']) ? sanitize_key((string) $state['stage']) : '';
+                $status_generator = is_array($state) && !empty($state['generator']) && is_array($state['generator'])
+                    ? $state['generator']
+                    : (is_array($state) && !empty($state['generator_id']) ? self::get_generator(intval($state['generator_id'])) : array());
                 $items[] = array(
                     'post_id' => $post_id,
                     'title' => get_the_title($post_id),
                     'stage' => $stage,
                     'stage_label' => isset($stage_labels[$stage]) ? $stage_labels[$stage] : '',
+                    'outline_enabled' => is_array($status_generator) && !empty($status_generator['outline_enabled']) ? 1 : 0,
                     'status' => $stage !== '' ? 'processing' : ($status === 'failed' ? 'failed' : ($status === 'completed' ? 'completed' : 'idle')),
                     'error_message' => $error_message,
                     'edit_url' => self::get_post_edit_link($post_id),
@@ -9316,6 +9321,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 <div class="content-rank-staged-generation-toast__steps">
                     <span data-stage="planning">Planejamento</span>
                     <span data-stage="seo">SEO</span>
+                    <span data-stage="content_outline" data-outline-step style="display:none;">Outline</span>
                     <span data-stage="content">Conteúdo</span>
                 </div>
                 <a class="content-rank-staged-generation-toast__link" href="#" target="_blank" rel="noopener">Abrir post</a>
@@ -9468,10 +9474,11 @@ if (!class_exists('Content_Rank_Generator')) {
                     var postIds = items.map(function(item) {
                         return String(item.post_id);
                     });
-                    var stageOrder = ['planning', 'seo', 'content'];
+                    var stageOrder = ['planning', 'seo', 'content_outline', 'content'];
                     var stageNames = {
                         planning: 'Planejamento',
                         seo: 'SEO',
+                        content_outline: 'Outline storytelling',
                         content: 'Conteúdo'
                     };
                     var timer;
@@ -9513,22 +9520,31 @@ if (!class_exists('Content_Rank_Generator')) {
                     }
 
                     function render(item) {
-                        var stageIndex = stageOrder.indexOf(item.stage);
+                        var outlineEnabled = item.outline_enabled === 1 || item.outline_enabled === '1' || item.stage === 'content_outline';
+                        var visibleStageOrder = outlineEnabled ? stageOrder : ['planning', 'seo', 'content'];
+                        var stageIndex = visibleStageOrder.indexOf(item.stage);
                         var status = item.status || 'processing';
                         toast.classList.remove('is-cancelled');
                         postNode.style.display = 'block';
                         toast.querySelector('.content-rank-staged-generation-toast__track').style.display = 'block';
                         toast.querySelector('.content-rank-staged-generation-toast__steps').style.display = 'flex';
+                        var outlineStep = toast.querySelector('[data-outline-step]');
+                        if (outlineStep) {
+                            outlineStep.style.display = outlineEnabled ? '' : 'none';
+                        }
                         cancelButton.hidden = status !== 'processing';
                         toast.classList.toggle('is-success', status === 'completed');
                         toast.classList.toggle('is-error', status === 'failed');
                         titleNode.textContent = status === 'completed' ? 'Geração concluída' : (status === 'failed' ? 'Geração interrompida' : 'Geração em andamento');
                         postNode.textContent = item.title || ('Post #' + item.post_id);
                         stageNode.textContent = status === 'completed' ? 'Todas as etapas foram concluídas.' : (status === 'failed' ? ('Erro: ' + (item.error_message || 'A geração falhou.')) : ('Etapa atual: ' + (item.stage_label || stageNames[item.stage] || 'Processando')));
-                        trackNode.style.width = status === 'processing' ? '35%' : '100%';
+                        var progress = stageIndex >= 0 ? ((stageIndex + 1) / visibleStageOrder.length) * 100 : 8;
+                        trackNode.style.width = status === 'processing' ? Math.max(8, Math.min(95, progress)) + '%' : '100%';
                         trackNode.style.animationPlayState = status === 'processing' ? 'running' : 'paused';
-                        toast.querySelectorAll('[data-stage]').forEach(function(node, index) {
-                            node.classList.toggle('is-active', status === 'completed' || index <= stageIndex);
+                        toast.querySelectorAll('[data-stage]').forEach(function(node) {
+                            var nodeStage = node.getAttribute('data-stage');
+                            var nodeIndex = visibleStageOrder.indexOf(nodeStage);
+                            node.classList.toggle('is-active', status === 'completed' || (nodeIndex >= 0 && nodeIndex <= stageIndex));
                         });
                         linkNode.href = item.edit_url || '#';
                         linkNode.style.display = status === 'completed' && item.edit_url ? 'inline-block' : 'none';
