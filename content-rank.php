@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.158
+Version: 1.9.159
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -4090,14 +4090,30 @@ if (!class_exists('Content_Rank_Generator')) {
             $temperature = max(0.0, min(2.0, floatval($settings['default_temperature'])));
             $max_tokens = max(256, intval($settings['default_max_tokens']));
             $stage = isset($context['stage']) ? (string) $context['stage'] : '';
-            if (in_array($stage, array('outline', 'content_plan', 'link_suggestions'), true)) {
+            if (in_array($stage, array('outline', 'content_plan', 'link_suggestions', 'fact_pack', 'seo_validation', 'validation', 'content_revision'), true)) {
                 $model = !empty($settings['analysis_model']) ? trim((string) $settings['analysis_model']) : 'gpt-4.1-mini';
             }
             if ($stage === 'link_suggestions') {
                 $temperature = 0;
                 $max_tokens = 1200;
             }
-            if ($stage === 'content' && !empty($context['outline_storytelling'])) {
+            if ($stage === 'fact_pack') {
+                $temperature = 0;
+                $max_tokens = max($max_tokens, 4000);
+            }
+            if ($stage === 'validation') {
+                $temperature = 0;
+                $max_tokens = max($max_tokens, 3000);
+            }
+            if ($stage === 'seo_validation') {
+                $temperature = 0;
+                $max_tokens = max($max_tokens, 2200);
+            }
+            if ($stage === 'content_revision') {
+                $temperature = 0;
+                $max_tokens = max($max_tokens, 5000);
+            }
+            if ($stage === 'content' && !empty($context['outline_factual'])) {
                 $max_tokens = max($max_tokens, 5000);
             }
             $use_responses_api = self::should_use_responses_api($model);
@@ -4170,7 +4186,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 $body['prompt_cache_retention'] = $prompt_cache_retention;
             }
 
-            if (in_array($stage, array('outline', 'content_plan', 'link_suggestions'), true)) {
+            if (in_array($stage, array('outline', 'content_plan', 'link_suggestions', 'fact_pack', 'seo_validation', 'validation', 'content_revision'), true)) {
                 // Let the analysis model use its supported default cache policy (mini models do not all support 24h).
                 unset($body['prompt_cache_retention']);
             }
@@ -9227,9 +9243,12 @@ if (!class_exists('Content_Rank_Generator')) {
             $items = array();
             $stage_labels = array(
                 'planning' => 'Planejamento',
+                'research' => 'Pesquisa',
+                'fact_pack' => 'Fact pack',
                 'seo' => 'SEO',
-                'content_outline' => 'Outline storytelling',
+                'content_outline' => 'Outline',
                 'content' => 'Conteúdo',
+                'validation' => 'Validação factual',
             );
 
             foreach ($post_ids as $post_id) {
@@ -9323,9 +9342,12 @@ if (!class_exists('Content_Rank_Generator')) {
                 <div class="content-rank-staged-generation-toast__track"><span></span></div>
                 <div class="content-rank-staged-generation-toast__steps">
                     <span data-stage="planning">Planejamento</span>
+                    <span data-stage="research">Pesquisa</span>
+                    <span data-stage="fact_pack">Fact pack</span>
                     <span data-stage="seo">SEO</span>
                     <span data-stage="content_outline" data-outline-step style="display:none;">Outline</span>
                     <span data-stage="content">Conteúdo</span>
+                    <span data-stage="validation">Validação</span>
                 </div>
                 <a class="content-rank-staged-generation-toast__link" href="#" target="_blank" rel="noopener">Abrir post</a>
                 <button type="button" class="content-rank-staged-generation-toast__cancel">Cancelar geração</button>
@@ -9477,12 +9499,15 @@ if (!class_exists('Content_Rank_Generator')) {
                     var postIds = items.map(function(item) {
                         return String(item.post_id);
                     });
-                    var stageOrder = ['planning', 'seo', 'content_outline', 'content'];
+                    var stageOrder = ['planning', 'research', 'fact_pack', 'seo', 'content_outline', 'content', 'validation'];
                     var stageNames = {
                         planning: 'Planejamento',
+                        research: 'Pesquisa',
+                        fact_pack: 'Fact pack',
                         seo: 'SEO',
-                        content_outline: 'Outline storytelling',
-                        content: 'Conteúdo'
+                        content_outline: 'Outline',
+                        content: 'Conteúdo',
+                        validation: 'Validação factual'
                     };
                     var timer;
                     var dismissed = false;
@@ -9524,7 +9549,7 @@ if (!class_exists('Content_Rank_Generator')) {
 
                     function render(item) {
                         var outlineEnabled = item.outline_enabled === 1 || item.outline_enabled === '1' || item.stage === 'content_outline';
-                        var visibleStageOrder = outlineEnabled ? stageOrder : ['planning', 'seo', 'content'];
+                        var visibleStageOrder = outlineEnabled ? stageOrder : ['planning', 'research', 'fact_pack', 'seo', 'content', 'validation'];
                         var stageIndex = visibleStageOrder.indexOf(item.stage);
                         var status = item.status || 'processing';
                         toast.classList.remove('is-cancelled');
@@ -9948,6 +9973,12 @@ if (!class_exists('Content_Rank_Generator')) {
 
             try {
                 $stage = sanitize_key((string) $state['stage']);
+                // Resume older queued posts through the evidence stages before
+                // allowing their SEO/content work to continue.
+                if ($stage === 'seo' && empty($state['fact_pack'])) {
+                    $state['stage'] = 'research';
+                    $stage = 'research';
+                }
                 if ($stage === 'planning') {
                     $result = Content_Rank_Generator_Helper::prepare_generation_planning($generator, $item);
                     if (is_wp_error($result)) {
@@ -9962,6 +9993,35 @@ if (!class_exists('Content_Rank_Generator')) {
                         $state['outline_context']['recommended_prompt_model_key'] = 'review';
                         $state['outline_context']['recommended_outline_model_key'] = 'guide_long';
                         $state['outline_context']['outline_model_key'] = 'guide_long';
+                    }
+                    $state['stage'] = 'research';
+                } elseif ($stage === 'research') {
+                    $research_result = Content_Rank_Generator_Helper::prepare_generation_research(
+                        $generator,
+                        $item,
+                        !empty($state['outline_context']) && is_array($state['outline_context']) ? $state['outline_context'] : array()
+                    );
+                    if (is_wp_error($research_result)) {
+                        throw new RuntimeException($research_result->get_error_message());
+                    }
+                    $state['item'] = !empty($research_result['item']) && is_array($research_result['item']) ? $research_result['item'] : $item;
+                    $state['outline_context'] = !empty($research_result['outline_context']) && is_array($research_result['outline_context']) ? $research_result['outline_context'] : $state['outline_context'];
+                    $state['stage'] = 'fact_pack';
+                } elseif ($stage === 'fact_pack') {
+                    $fact_pack_result = Content_Rank_Generator_Helper::generate_fact_pack_stage(
+                        $generator,
+                        $item,
+                        !empty($state['outline_context']) && is_array($state['outline_context']) ? $state['outline_context'] : array()
+                    );
+                    if (is_wp_error($fact_pack_result)) {
+                        throw new RuntimeException($fact_pack_result->get_error_message());
+                    }
+                    $state['fact_pack'] = !empty($fact_pack_result['fact_pack']) && is_array($fact_pack_result['fact_pack'])
+                        ? $fact_pack_result['fact_pack']
+                        : array();
+                    $state['outline_context']['fact_pack'] = $state['fact_pack'];
+                    if (!empty($fact_pack_result['fact_pack_response_id'])) {
+                        $state['fact_pack_response_id'] = (string) $fact_pack_result['fact_pack_response_id'];
                     }
                     $state['stage'] = 'seo';
                 } elseif ($stage === 'seo') {
@@ -10035,22 +10095,56 @@ if (!class_exists('Content_Rank_Generator')) {
                     if ((string) get_post_meta($post_id, '_content_rank_generation_pipeline_status', true) === 'cancelled') {
                         return;
                     }
-                    $result = self::create_post_from_generator_item($generator, $item, $seo_article, $post_id);
-                    if (is_wp_error($result)) {
-                        throw new RuntimeException($result->get_error_message());
+                    $state['seo_article'] = $seo_article;
+                    $state['stage'] = 'validation';
+                    $state['validation_attempts'] = !empty($state['validation_attempts']) ? intval($state['validation_attempts']) : 0;
+                } elseif ($stage === 'validation') {
+                    $seo_article = !empty($state['seo_article']) && is_array($state['seo_article']) ? $state['seo_article'] : array();
+                    $outline_context = !empty($state['outline_context']) && is_array($state['outline_context']) ? $state['outline_context'] : array();
+                    $validation_result = Content_Rank_Generator_Helper::validate_generated_content_stage($generator, $item, $seo_article, $outline_context);
+                    if (is_wp_error($validation_result)) {
+                        throw new RuntimeException($validation_result->get_error_message());
                     }
+                    $validation_status = !empty($validation_result['status']) ? sanitize_key((string) $validation_result['status']) : 'needs_revision';
+                    if ($validation_status === 'needs_revision') {
+                        $attempts = !empty($state['validation_attempts']) ? intval($state['validation_attempts']) : 0;
+                        if ($attempts >= 2) {
+                            throw new RuntimeException('A validação factual continuou apontando problemas após duas correções pontuais.');
+                        }
+                        $revised_article = Content_Rank_Generator_Helper::revise_generated_content_stage(
+                            $generator,
+                            $item,
+                            $seo_article,
+                            $outline_context,
+                            !empty($validation_result['issues']) && is_array($validation_result['issues']) ? $validation_result['issues'] : array()
+                        );
+                        if (is_wp_error($revised_article)) {
+                            throw new RuntimeException($revised_article->get_error_message());
+                        }
+                        $state['seo_article'] = $revised_article;
+                        $state['validation_attempts'] = $attempts + 1;
+                        $state['stage'] = 'validation';
+                    } else {
+                        if ((string) get_post_meta($post_id, '_content_rank_generation_pipeline_status', true) === 'cancelled') {
+                            return;
+                        }
+                        $result = self::create_post_from_generator_item($generator, $item, $seo_article, $post_id);
+                        if (is_wp_error($result)) {
+                            throw new RuntimeException($result->get_error_message());
+                        }
 
-                    if (!empty($generator['list_id']) && !empty($item['guid'])) {
-                        self::update_keyword_list_row_status_from_item(intval($generator['list_id']), $item['guid'], 'generated', intval($post_id));
+                        if (!empty($generator['list_id']) && !empty($item['guid'])) {
+                            self::update_keyword_list_row_status_from_item(intval($generator['list_id']), $item['guid'], 'generated', intval($post_id));
+                        }
+                        delete_post_meta($post_id, self::GENERATION_PIPELINE_META);
+                        delete_post_meta($post_id, '_content_rank_generation_pipeline_error');
+                        update_post_meta($post_id, '_content_rank_generation_pipeline_status', 'completed');
+                        self::insert_run_log($generator['id'], 'success', 'Pipeline de geracao concluida', array(
+                            'request' => array('post_id' => $post_id, 'stage' => 'validation'),
+                            'response' => array('post_id' => $post_id, 'validation' => 'approved'),
+                        ), $post_id, !empty($item['guid']) ? $item['guid'] : '', !empty($item['permalink']) ? $item['permalink'] : '');
+                        return;
                     }
-                    delete_post_meta($post_id, self::GENERATION_PIPELINE_META);
-                    delete_post_meta($post_id, '_content_rank_generation_pipeline_error');
-                    update_post_meta($post_id, '_content_rank_generation_pipeline_status', 'completed');
-                    self::insert_run_log($generator['id'], 'success', 'Pipeline de geracao concluida', array(
-                        'request' => array('post_id' => $post_id, 'stage' => 'content'),
-                        'response' => array('post_id' => $post_id),
-                    ), $post_id, !empty($item['guid']) ? $item['guid'] : '', !empty($item['permalink']) ? $item['permalink'] : '');
-                    return;
                 } else {
                     throw new RuntimeException('Etapa de geracao desconhecida.');
                 }

@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.158",
+  "version": "1.9.159",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -12,7 +12,7 @@
   "last_updated": "2026-09-22",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Outlines de notícias agora usam inventário factual com fatos confirmados, interpretações atribuídas, incertezas e conflitos entre fontes.</li><li>Removidas transformação do leitor, storytelling obrigatório, conclusões provocativas e previsões sem base factual no outline de notícias.</li><li>As seções só são criadas quando agrupam fatos novos suficientes, sem quantidade mínima de palavras ou de H2.</li></ul>",
+  "changelog": "<ul><li>Nova etapa obrigatória de fact pack entre pesquisa e SEO, com fatos confirmados, interpretações atribuídas, incertezas, conflitos, entidades e datas.</li><li>SEO, outline e redação passam a receber o fact pack como base factual compartilhada, sem metas globais de tamanho.</li><li>Nova validação factual antes da publicação, com correções pontuais e nova conferência quando necessário.</li><li>Consultas Tavily ficam mais específicas e só são executadas depois da classificação.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

@@ -38,9 +38,9 @@ function check($condition, $message)
     $GLOBALS['checks']++;
     if (!$condition) { throw new RuntimeException($message); }
 }
-foreach (array('outline', 'content_plan', 'link_suggestions', 'seo', 'content', 'content_outline', 'outline_media_match') as $stage) {
+foreach (array('outline', 'content_plan', 'link_suggestions', 'fact_pack', 'seo_validation', 'validation', 'content_revision', 'seo_revision', 'seo', 'content', 'content_outline', 'outline_media_match') as $stage) {
     Content_Rank_Generator::request_openai_json(array(), 'Test', array('stage' => $stage, 'skip_language_instruction' => 1));
-    $analysis = in_array($stage, array('outline', 'content_plan', 'link_suggestions'), true);
+    $analysis = in_array($stage, array('outline', 'content_plan', 'link_suggestions', 'fact_pack', 'seo_validation', 'validation', 'content_revision'), true);
     check($request['body']['model'] === ($analysis ? 'gpt-4.1-mini' : 'gpt-4.1'), 'Incorrect model for ' . $stage);
     check(isset($request['body']['prompt_cache_retention']) !== $analysis, 'Unsupported analysis cache setting');
     if ($stage === 'link_suggestions') {
