@@ -7669,6 +7669,61 @@ class Content_Rank_Generator_Helper
         );
     }
 
+    /**
+     * Keeps the generated HTML aligned with the headings approved by the
+     * storytelling outline. The model may add a helpful heading of its own;
+     * when an outline is active, headings are a closed editorial structure.
+     */
+    public static function enforce_content_outline_structure($content_html, $outline_context = array())
+    {
+        $content_html = (string) $content_html;
+        $outline_context = is_array($outline_context) ? $outline_context : array();
+        $outline_sections = !empty($outline_context['outline_sections']) && is_array($outline_context['outline_sections'])
+            ? $outline_context['outline_sections']
+            : array();
+        $expected_headings = array();
+
+        foreach ($outline_sections as $section) {
+            if (!is_array($section)) {
+                continue;
+            }
+            $type = sanitize_key(isset($section['type']) ? (string) $section['type'] : '');
+            if (!in_array($type, array('h2', 'h3', 'conclusion'), true)) {
+                continue;
+            }
+            $title = !empty($section['title'])
+                ? (string) $section['title']
+                : (!empty($section['h2']) ? (string) $section['h2'] : '');
+            $title = trim(wp_strip_all_tags($title));
+            if ($title === '') {
+                continue;
+            }
+            $expected_headings[] = array(
+                'tag' => $type === 'h3' ? 'h3' : 'h2',
+                'title' => $title,
+            );
+        }
+
+        if (empty($expected_headings) || $content_html === '') {
+            return $content_html;
+        }
+
+        $heading_index = 0;
+        $content_html = preg_replace_callback(
+            '/<h([23])\\b[^>]*>.*?<\\/h\\1>/is',
+            function ($match) use (&$heading_index, $expected_headings) {
+                if (!isset($expected_headings[$heading_index])) {
+                    return '';
+                }
+                $heading = $expected_headings[$heading_index++];
+                return '<' . $heading['tag'] . '>' . esc_html($heading['title']) . '</' . $heading['tag'] . '>';
+            },
+            $content_html
+        );
+
+        return is_string($content_html) ? $content_html : (string) $content_html;
+    }
+
     public static function generate_content_article_stage($generator, $item, $seo_article, $outline_context = array())
     {
         $item = is_array($item) ? $item : array();
@@ -7717,6 +7772,13 @@ class Content_Rank_Generator_Helper
             return new WP_Error(
                 'content_rank_content_response_invalid',
                 'A resposta da OpenAI nao trouxe content_html valido para a etapa de conteudo.'
+            );
+        }
+
+        if (!empty($outline_context['content_outline_generated'])) {
+            $content_article['content_html'] = self::enforce_content_outline_structure(
+                $content_article['content_html'],
+                $outline_context
             );
         }
 
