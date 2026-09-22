@@ -133,7 +133,6 @@
     function convertBooleanSelectsToSwitches() {
         var booleanNames = [
             'generation_mode',
-            'tavily_enabled',
             'tmdb_title_translation_enabled',
             'source_video_enabled',
             'source_content_images_enabled',
@@ -429,7 +428,9 @@
             keywordListModeField.classList.toggle('hidden', isSatelliteMode || !isSpreadsheetSource);
         }
         if (tavilyField) {
-            tavilyField.classList.toggle('hidden', isSatelliteMode || sourceType !== 'keyword_list');
+            // Tavily is a per-generator setting and must remain visible for
+            // RSS, spreadsheet, keyword-list and satellite generators.
+            tavilyField.classList.remove('hidden');
         }
         if (tmdbThumbnailField) {
             tmdbThumbnailField.classList.remove('hidden');
@@ -893,7 +894,7 @@
         }
     }
 
-    function fillForm(generator) {
+    function fillForm(generator, triggerButton) {
         applyDefaults();
         if (!generator) {
             return;
@@ -905,6 +906,12 @@
         setValue('source_type', generator.source_type || defaults.source_type);
         setValue('list_id', typeof generator.list_id !== 'undefined' ? String(generator.list_id) : defaults.list_id);
         setValue('keyword_list_mode', generator.keyword_list_mode || defaults.keyword_list_mode);
+        var tavilyValue = typeof generator.tavily_enabled !== 'undefined'
+            ? generator.tavily_enabled
+            : (triggerButton && triggerButton.getAttribute('data-tavily-enabled') !== null
+                ? triggerButton.getAttribute('data-tavily-enabled')
+                : (byName('tavily_enabled') ? byName('tavily_enabled').value : defaults.tavily_enabled));
+        setValue('tavily_enabled', String(tavilyValue) === '1' || tavilyValue === true ? '1' : '0');
         setValue('status', generator.status);
         setValue('post_type', generator.post_type);
         setValue('post_status', generator.post_status);
@@ -985,6 +992,14 @@
     if (sourceContentLinksEnabledEl) {
         sourceContentLinksEnabledEl.addEventListener('change', syncSourceFields);
     }
+
+    form.addEventListener('submit', function () {
+        var tavilySelect = byName('tavily_enabled');
+        if (tavilySelect) {
+            tavilySelect.disabled = false;
+            tavilySelect.value = tavilySelect.value === '1' ? '1' : '0';
+        }
+    });
 
     convertBooleanSelectsToSwitches();
     cleanGeneratorControls();
@@ -1076,7 +1091,7 @@
             var generator = generators.find(function (item) {
                 return String(item.id) === id;
             });
-            fillForm(generator || null);
+            fillForm(generator || null, button);
             openModal(modal);
         });
     });

@@ -1,7 +1,7 @@
 {
   "name": "Content Rank",
   "slug": "content-rank",
-  "version": "1.9.152",
+  "version": "1.9.153",
   "homepage": "http://content-rank.com/",
   "download_url": "https://github.com/wallacenana/content-rank/archive/refs/heads/main.zip",
   "requires": "6.0",
@@ -9,10 +9,10 @@
   "requires_php": "7.4",
   "author": "Wallace Tavares e Codex",
   "author_url": "https://github.com/wallacenana",
-  "last_updated": "2026-08-28",
+  "last_updated": "2026-09-22",
   "sections": {
     "description": "Atualizacao via GitHub para o plugin Content Rank.",
-  "changelog": "<ul><li>Substituidos os icones das acoes por SVGs inline mais consistentes.</li><li>Corrigido o handler do play/pause dos geradores.</li><li>Tipo de geracao usa switch estilizado com o texto Satelite.</li></ul>",
+  "changelog": "<ul><li>Corrigido o salvamento e a restauração da opção Tavily no editor de geradores.</li><li>Organizados os dados do Tavily exclusivamente no prompt final de conteúdo, com bloqueio de fontes Reddit.</li><li>Aprimorado o planejamento de outline e a seleção de títulos localizados e mídias.</li></ul>",
     "installation": "Atualize diretamente pelo painel do WordPress.",
     "faq": "O pacote e distribuido a partir do branch main do repositorio.",
     "screenshots": ""

@@ -6,6 +6,32 @@ if (!defined('ABSPATH')) {
 
 final class Content_Rank_TMDB
 {
+    /**
+     * Localize one work title while preserving the resolved TMDB record on
+     * the item for the later media and article stages.
+     */
+    public static function localize_title($generator, &$item, $source_title)
+    {
+        $source_title = trim((string) $source_title);
+        if ($source_title === '') {
+            return '';
+        }
+
+        self::localize_article_movie_titles($generator, $item, array(), false, $source_title);
+        $source_key = self::normalize_title_key(self::normalize_source_title($source_title));
+        foreach (!empty($item['tmdb_movies']) && is_array($item['tmdb_movies']) ? $item['tmdb_movies'] : array() as $movie) {
+            if (!is_array($movie) || empty($movie['title'])) {
+                continue;
+            }
+            $movie_key = self::normalize_title_key((string) ($movie['source_query'] ?? ''));
+            if ($movie_key === $source_key || $source_key === '') {
+                return (string) $movie['title'];
+            }
+        }
+
+        return self::normalize_source_title($source_title);
+    }
+
     public static function translate_source_outline_titles($generator, &$item, $source_titles)
     {
         $generator = is_array($generator) ? $generator : array();
@@ -102,13 +128,20 @@ final class Content_Rank_TMDB
             $localized_title = $media_type === 'tv'
                 ? (!empty($details['name']) ? (string) $details['name'] : (string) $result['title'])
                 : (!empty($details['title']) ? (string) $details['title'] : (string) $result['title']);
-            if ($media_type === 'movie' && $language === 'pt-BR' && self::titles_match($localized_title, $query)) {
-                $alternative_title = self::get_brazilian_alternative_title(intval($result['id']));
-                if ($alternative_title === '') {
-                    $alternative_title = self::get_brazilian_translation_title(intval($result['id']));
+            // TMDB sometimes returns the original title from the localized
+            // details endpoint even when a Brazilian title exists. Search the
+            // explicit title/translation catalogs for both movies and TV.
+            if ($language === 'pt-BR' && self::titles_match($localized_title, $query)) {
+                $localized_fallback = $media_type === 'tv'
+                    ? self::get_brazilian_tv_alternative_title(intval($result['id']))
+                    : self::get_brazilian_alternative_title(intval($result['id']));
+                if ($localized_fallback === '') {
+                    $localized_fallback = $media_type === 'tv'
+                        ? self::get_brazilian_tv_translation_title(intval($result['id']))
+                        : self::get_brazilian_translation_title(intval($result['id']));
                 }
-                if ($alternative_title !== '') {
-                    $localized_title = $alternative_title;
+                if ($localized_fallback !== '') {
+                    $localized_title = $localized_fallback;
                 }
             }
             $poster_path = !empty($details['poster_path']) ? $details['poster_path'] : (!empty($result['poster_path']) ? $result['poster_path'] : '');
@@ -741,6 +774,44 @@ final class Content_Rank_TMDB
         return '';
     }
 
+    private static function get_brazilian_tv_alternative_title($tv_id)
+    {
+        $response = self::request('tv/' . absint($tv_id) . '/alternative_titles');
+        $titles = !empty($response['results']) && is_array($response['results'])
+            ? $response['results']
+            : (!empty($response['titles']) && is_array($response['titles']) ? $response['titles'] : array());
+        foreach ($titles as $title) {
+            if (!is_array($title) || strtoupper((string) ($title['iso_3166_1'] ?? '')) !== 'BR') {
+                continue;
+            }
+            $name = !empty($title['name']) ? trim((string) $title['name']) : trim((string) ($title['title'] ?? ''));
+            if ($name !== '') {
+                return $name;
+            }
+        }
+        return '';
+    }
+
+    private static function get_brazilian_tv_translation_title($tv_id)
+    {
+        $response = self::request('tv/' . absint($tv_id) . '/translations');
+        $translations = !empty($response['translations']) && is_array($response['translations']) ? $response['translations'] : array();
+        foreach ($translations as $translation) {
+            if (!is_array($translation)) {
+                continue;
+            }
+            $language = strtolower((string) ($translation['iso_639_1'] ?? ''));
+            $country = strtoupper((string) ($translation['iso_3166_1'] ?? ''));
+            $name = !empty($translation['data']['name'])
+                ? trim((string) $translation['data']['name'])
+                : trim((string) ($translation['data']['title'] ?? ''));
+            if ($language === 'pt' && ($country === 'BR' || $country === '') && $name !== '') {
+                return $name;
+            }
+        }
+        return '';
+    }
+
     private static function language_from_generator($generator)
     {
         $language = !empty($generator['generation_language']) ? strtolower(remove_accents((string) $generator['generation_language'])) : '';
@@ -860,6 +931,11 @@ final class Content_Rank_TMDB
 
     private static function request($path, $query_args = array())
     {
+        $cache_key = 'cr_tmdb_' . md5($path . '|' . wp_json_encode($query_args));
+        $cached = wp_cache_get($cache_key, 'content_rank_tmdb');
+        if (is_array($cached)) {
+            return $cached;
+        }
         $settings = Content_Rank_Generator::get_settings();
         $token = trim((string) ($settings['tmdb_read_access_token'] ?? ''));
         $api_key = trim((string) ($settings['tmdb_api_key'] ?? ''));
@@ -887,6 +963,7 @@ final class Content_Rank_TMDB
         if ($status < 200 || $status >= 300 || !is_array($body)) {
             return array('error' => 'TMDB retornou HTTP ' . intval($status) . '.');
         }
+        wp_cache_set($cache_key, $body, 'content_rank_tmdb', 1800);
         return $body;
     }
 }

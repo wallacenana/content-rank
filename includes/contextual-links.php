@@ -26,7 +26,7 @@ final class Content_Rank_Contextual_Links
     /** Words that commonly occur in editorial titles but do not identify a subject. */
     private static function meaningful_tokens($text)
     {
-        $stop = array_flip(explode(' ', 'a as o os um uma uns umas de do da dos das em no na nos nas para por com sem sobre entre que e ou se seu sua seus suas como quando onde porque quem qual quais mais muito the and for with from this that filme filmes serie series temporada temporadas season seasons novo nova novos novas melhores melhor tudo saiba veja confira trailer trailers noticia noticias personagem personagens querido querida volta traz trazer papel fixo elenco ator atriz atores atrizes interpreta interpretar interprete episodio episodios estreia estreou premiere lancamento revela revelacao mostra apresentado apresenta ganha ganhar ganhou chega chegou disponivel spin off showrunner cobertura materia matéria publicação publicacao introducao introdução rosto rosto por tras trás fans mundo universo producao segunda primeiro primeira terceiro terceira anos ano dia dias'));
+        $stop = array_flip(explode(' ', 'a as o os um uma uns umas de do da dos das em no na nos nas para por com sem sobre entre que e ou se seu sua seus suas como quando onde porque quem qual quais mais muito the and for with from this that filme filmes serie series temporada temporadas season seasons novo nova novos novas melhores melhor tudo saiba veja confira trailer trailers noticia noticias personagem personagens querido querida volta traz trazer papel fixo elenco ator atriz atores atrizes interpreta interpretar interprete episodio episodios estreia estreou premiere lancamento revela revelacao mostra apresentado apresenta ganha ganhar ganhou chega chegou disponivel spin off showrunner cobertura materia matéria publicação publicacao introducao introdução rosto rosto por tras trás fans mundo universo producao segunda primeiro primeira terceiro terceira anos ano dia dias final finais fim maior maiores menor menores ponto pontos resposta respostas segredo segredos misterio misterios misteriosa misterioso conteudo conteudos artigo artigos historia historias parte partes'));
         $words = preg_split('/\s+/u', self::key($text), -1, PREG_SPLIT_NO_EMPTY);
         $tokens = array();
         foreach ($words as $word) {
@@ -477,13 +477,38 @@ final class Content_Rank_Contextual_Links
         return $overlap >= 1 && $cast_bridge && count($anchor_tokens) >= 3;
     }
 
-    private static function contextual_replacement_is_relevant($replacement, $title)
+    private static function contextual_replacement_is_relevant($replacement, $title, $candidate_context = '')
     {
         $title_tokens = self::meaningful_tokens($title);
         if (empty($title_tokens)) {
             return false;
         }
-        return self::contextual_title_overlap($replacement, $title) >= min(3, count($title_tokens));
+        $title_overlap = self::contextual_title_overlap($replacement, $title);
+        if ($title_overlap < 1) {
+            return false;
+        }
+        // Contextual plans carry the destination excerpt. Require the proposed
+        // sentence to use facts from that excerpt, rather than accepting a
+        // generic sentence that merely mentions the same series or season.
+        if (trim((string) $candidate_context) !== '') {
+            $context_overlap = count(array_intersect(self::meaningful_tokens($replacement), self::meaningful_tokens($candidate_context)));
+            if ($context_overlap < 2) {
+                return false;
+            }
+            $text = mb_strtolower(remove_accents(wp_strip_all_tags((string) $replacement)), 'UTF-8');
+            $factual_bridge = preg_match('/\b(interpret[aoe]|elenco|ator|atriz|papel|personagem|creditad[oa]|creditos|inclui|vive|retorna|criad[oa]|dirigid[oa]|produzid[oa]|aparece|estreia|confirmad[oa])\b/u', $text);
+            $generic_fill = preg_match('/\b(adiciona|contribui|intensifica|desenvolvimento|complexidade|camada|complementa|reforca|ganha importancia|tensao crescente|presenca marcante|impacto na trama)\b/u', $text);
+            if (!$factual_bridge || $generic_fill) {
+                return false;
+            }
+        } else {
+            // Preserve compatibility with older saved plans that did not keep
+            // candidate excerpts, while still requiring a meaningful title link.
+            if ($title_overlap < min(3, count($title_tokens))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static function anchor_matches_title($anchor, $title)
@@ -578,6 +603,13 @@ final class Content_Rank_Contextual_Links
             return array('paragraph_id' => $paragraph['id'], 'section' => $paragraph['section'], 'paragraph' => $paragraph['text']);
         }, array_values($paragraphs));
         $candidate_payload = self::candidate_prompt_payload($candidates, !empty($rewrite_contextual));
+        // Preserve destination facts for deterministic validation after the AI response.
+        $plan['candidate_facts'] = array();
+        foreach ($candidate_payload as $candidate_fact) {
+            if (is_array($candidate_fact) && !empty($candidate_fact['id'])) {
+                $plan['candidate_facts'][intval($candidate_fact['id'])] = $candidate_fact;
+            }
+        }
         $prompt = "Compare os títulos candidatos com os parágrafos do conteúdo pronto. Selecione até {$limit} links internos úteis e relevantes ao contexto.\n"
             . "Retorne somente JSON com links: [{post_id, anchor, paragraph, replacement}]. replacement deve ser uma string vazia.\n"
             . "post_id deve ser um ID fornecido. paragraph deve copiar literalmente o parágrafo completo fornecido, para que o PHP localize o trecho.\n"
@@ -656,7 +688,7 @@ final class Content_Rank_Contextual_Links
         $validated = self::apply($html, $plan, $post_id, 'initial_validation');
         $plan['rejections'] = $validated['rejections'];
         $repairable = array_filter($validated['rejections'], static function ($rejection) {
-            return in_array($rejection['reason'], array('missing_link_markup', 'invalid_link_markup', 'unspecific_anchor', 'unsafe_replacement'), true);
+            return in_array($rejection['reason'], array('missing_link_markup', 'invalid_link_markup', 'unspecific_anchor', 'unsafe_replacement', 'contextual_replacement_rejected'), true);
         });
         self::trace($plan, $post_id, 'repair', 'decision', array('will_retry' => $rewrite_contextual && !empty($repairable),
             'rejected_count' => count($validated['rejections']), 'repairable_count' => count($repairable),
@@ -714,6 +746,7 @@ final class Content_Rank_Contextual_Links
         }
         $paragraphs = self::paragraphs($html);
         $allowed = array_column($plan['candidates'] ?? array(), 'title', 'id');
+        $allowed_facts = is_array($plan['candidate_facts'] ?? null) ? $plan['candidate_facts'] : array();
         $seen_posts = array_fill_keys(array_merge(array(intval($post_id)), self::linked_post_ids($html)), true);
         $seen_paragraphs = array();
         $seen_anchors = array();
@@ -792,10 +825,15 @@ final class Content_Rank_Contextual_Links
             }
             if ($rewrite_contextual && $contextual_markup !== '') {
                 $placeholder_url = self::contextual_paragraph_link_html($contextual_markup, 'xxx', $anchor);
-                if ($placeholder_url === '' || !self::contextual_anchor_is_specific($anchor, $allowed[$id])) {
-                    $reject($placeholder_url === '' ? 'invalid_link_markup' : 'unspecific_anchor', array('anchor' => $anchor,
+                $candidate_context = !empty($allowed_facts[$id]['context']) ? (string) $allowed_facts[$id]['context'] : '';
+                $contextual_relevant = trim($candidate_context) === ''
+                    ? true
+                    : self::contextual_replacement_is_relevant($contextual_markup, $allowed[$id], $candidate_context);
+                if ($placeholder_url === '' || !self::contextual_anchor_is_specific($anchor, $allowed[$id]) || !$contextual_relevant) {
+                    $reject($placeholder_url === '' ? 'invalid_link_markup' : (!self::contextual_anchor_is_specific($anchor, $allowed[$id]) ? 'unspecific_anchor' : 'contextual_replacement_rejected'), array('anchor' => $anchor,
                         'candidate_title' => $allowed[$id], 'matched_title_tokens' => self::contextual_title_overlap($anchor, $allowed[$id]),
-                        'required_title_tokens' => min(3, count(self::meaningful_tokens($allowed[$id])))));
+                        'required_title_tokens' => min(3, count(self::meaningful_tokens($allowed[$id]))),
+                        'replacement_relevant' => $contextual_relevant));
                     continue;
                 }
                 $replacement = preg_replace_callback('/<a\s+href=["\']xxx["\'][^>]*>[^<]+<\/a>/iu', static function () use ($anchor) {
@@ -823,9 +861,13 @@ final class Content_Rank_Contextual_Links
                 $reject($anchor_key === '' ? 'empty_anchor' : 'anchor_already_used');
                 continue;
             }
-            if ($use_replacement && (!self::contextual_anchor_is_specific($anchor, $allowed[$id]) || !self::contextual_replacement_is_relevant($replacement, $allowed[$id]) || !self::replacement_is_safe($paragraphs[$paragraph_id]['text'], $replacement))) {
+            $candidate_context = !empty($allowed_facts[$id]['context']) ? (string) $allowed_facts[$id]['context'] : '';
+            $replacement_relevant = trim($candidate_context) === ''
+                ? self::contextual_replacement_is_relevant($replacement, $allowed[$id])
+                : self::contextual_replacement_is_relevant($replacement, $allowed[$id], $candidate_context);
+            if ($use_replacement && (!self::contextual_anchor_is_specific($anchor, $allowed[$id]) || !$replacement_relevant || !self::replacement_is_safe($paragraphs[$paragraph_id]['text'], $replacement))) {
                 $reject('legacy_replacement_rejected', array('anchor_specific' => self::contextual_anchor_is_specific($anchor, $allowed[$id]),
-                    'replacement_relevant' => self::contextual_replacement_is_relevant($replacement, $allowed[$id]),
+                    'replacement_relevant' => $replacement_relevant,
                     'replacement_safe' => self::replacement_is_safe($paragraphs[$paragraph_id]['text'], $replacement)));
                 continue;
             }

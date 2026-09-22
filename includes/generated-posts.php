@@ -502,6 +502,12 @@ if (!class_exists('Content_Rank_Generated_Posts')) {
             $content_html = Content_Rank_Generator_Helper::ensure_content_starts_with_paragraph_html($content_html);
             $content_html = Content_Rank_Generator_Helper::remove_unmatched_trailing_quotes_from_html($content_html);
 
+            $content_html = Content_Rank_Generator_Helper::append_tavily_sources_to_content(
+                $content_html,
+                $generator,
+                $item
+            );
+
             $article['content_html'] = $content_html;
             $post_data = Content_Rank_Generator::build_post_data($generator, $article, $item);
             $post_data['ID'] = intval($post_id);

@@ -3420,7 +3420,10 @@ class Content_Rank_Generator_Helper
         }
 
         $settings = class_exists('Content_Rank_Generator') ? Content_Rank_Generator::get_settings() : array();
-        if (empty($settings['tavily_enabled'])) {
+        // A generator explicitly enabled for Tavily passes true here and is
+        // authoritative. The global switch remains available for optional
+        // callers that do not belong to a generator.
+        if ($enabled_override !== true && empty($settings['tavily_enabled'])) {
             return array();
         }
 
@@ -3475,9 +3478,14 @@ class Content_Rank_Generator_Helper
                     continue;
                 }
 
+                $result_url = !empty($result['url']) ? esc_url_raw((string) $result['url']) : '';
+                if (!self::tavily_source_url_is_allowed($result_url)) {
+                    continue;
+                }
+
                 $normalized_result = array(
                     'title' => !empty($result['title']) ? self::normalize_plain_text((string) $result['title']) : '',
-                    'url' => !empty($result['url']) ? esc_url_raw((string) $result['url']) : '',
+                    'url' => $result_url,
                     'content' => !empty($result['content']) ? self::normalize_plain_text((string) $result['content']) : '',
                     'score' => isset($result['score']) ? floatval($result['score']) : 0.0,
                 );
@@ -3500,6 +3508,22 @@ class Content_Rank_Generator_Helper
         return $context;
     }
 
+    /**
+     * Return a safe, user-facing explanation when the mandatory Tavily pass
+     * cannot run. Keep the API key itself out of all diagnostics.
+     */
+    public static function get_tavily_configuration_error($respect_global = true)
+    {
+        $settings = class_exists('Content_Rank_Generator') ? Content_Rank_Generator::get_settings() : array();
+        if ($respect_global && empty($settings['tavily_enabled'])) {
+            return 'A pesquisa Tavily está desativada nas configurações globais. Ative-a e salve uma chave da API antes de habilitar o Tavily no gerador.';
+        }
+        if (empty($settings['tavily_api_key']) || trim((string) $settings['tavily_api_key']) === '') {
+            return 'A pesquisa Tavily está habilitada, mas a chave da API não foi configurada.';
+        }
+        return '';
+    }
+
     public static function format_tavily_context_for_prompt($context, $max_chars = 6000)
     {
         if (!is_array($context) || empty($context)) {
@@ -3512,6 +3536,250 @@ class Content_Rank_Generator_Helper
         }
 
         return self::limit_prompt_html_chars($encoded, max(500, intval($max_chars)));
+    }
+
+    /**
+     * Reddit is discussion material, not an editorial source for generated
+     * articles. Keep it out of both the prompt and the published source list.
+     */
+    public static function tavily_source_url_is_allowed($url)
+    {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return false;
+        }
+        $host = wp_parse_url($url, PHP_URL_HOST);
+        $host = strtolower((string) $host);
+        if ($host === '') {
+            return false;
+        }
+        return !preg_match('/(^|\.)reddit\.com$/i', $host)
+            && !preg_match('/(^|\.)redd\.it$/i', $host);
+    }
+
+    /**
+     * Format Tavily evidence for the content-writing prompt only. Explicit
+     * fields make the evidence easier for the model to separate from the
+     * source article and prevent a raw JSON blob from obscuring URLs.
+     */
+    public static function format_tavily_content_context_for_prompt($context, $max_chars = 9000)
+    {
+        if (!is_array($context)) {
+            return '';
+        }
+
+        $lines = array();
+        $query = !empty($context['query']) ? self::normalize_plain_text((string) $context['query']) : '';
+        $answer = !empty($context['answer']) ? self::normalize_plain_text((string) $context['answer']) : '';
+        if ($query !== '') {
+            $lines[] = 'CONSULTA: ' . $query;
+        }
+        if ($answer !== '') {
+            $lines[] = 'RESPOSTA SINTETICA DO TAVILY: ' . $answer;
+        }
+
+        $source_index = 0;
+        if (!empty($context['results']) && is_array($context['results'])) {
+            foreach ($context['results'] as $result) {
+                if (!is_array($result) || empty($result['url']) || !self::tavily_source_url_is_allowed($result['url'])) {
+                    continue;
+                }
+                $source_index++;
+                $title = !empty($result['title']) ? self::normalize_plain_text((string) $result['title']) : '[sem titulo]';
+                $url = esc_url_raw((string) $result['url']);
+                $content = !empty($result['content']) ? self::normalize_plain_text((string) $result['content']) : '[sem trecho]';
+                $score = isset($result['score']) ? number_format((float) $result['score'], 3, '.', '') : '';
+                $lines[] = 'FONTE ' . $source_index . ':';
+                $lines[] = 'Titulo: ' . $title;
+                $lines[] = 'URL: ' . $url;
+                if ($score !== '') {
+                    $lines[] = 'Relevancia Tavily: ' . $score;
+                }
+                $lines[] = 'Trecho factual: ' . $content;
+            }
+        }
+
+        if ($source_index === 0) {
+            return '';
+        }
+        return self::limit_prompt_html_chars(implode("\n", $lines), max(1000, intval($max_chars)));
+    }
+
+    /**
+     * Build a compact factual-search query from the source headline/H1.
+     * Editorial filler is removed while the work name and useful event
+     * markers (season, episode, finale, year and numbers) are preserved.
+     */
+    public static function build_tavily_search_query($item, $generator = array())
+    {
+        $item = is_array($item) ? $item : array();
+        $generator = is_array($generator) ? $generator : array();
+        $raw = self::extract_source_h1_title($item);
+        if ($raw === '') {
+            foreach (array('source_title', 'source_page_title', 'title', 'keyword', 'item_title', 'feed_title') as $candidate_key) {
+                if (!empty($item[$candidate_key])) {
+                    $raw = self::normalize_prompt_context_text((string) $item[$candidate_key]);
+                    if ($raw !== '') {
+                        break;
+                    }
+                }
+            }
+        }
+        $raw = self::normalize_plain_text($raw);
+        if ($raw === '') {
+            return '';
+        }
+
+        // The H1 usually has "work: editorial headline" structure. Keep the
+        // title segment intact except for articles, then retain only factual
+        // event terms from the remainder.
+        $has_detail_separator = (bool) preg_match('/\s*(?:[:|]|\s-\s)\s*/u', $raw);
+        $parts = preg_split('/\s*(?:[:|]|\s-\s)\s*/u', $raw, 2);
+        $title_part = !empty($parts[0]) ? (string) $parts[0] : $raw;
+        $detail_part = isset($parts[1]) ? (string) $parts[1] : '';
+        $stopwords = array(
+            'a', 'an', 'as', 'at', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'for', 'from',
+            'in', 'na', 'nas', 'no', 'nos', 'of', 'on', 'or', 'os', 'para', 'por', 'the', 'um',
+            'uma', 'with', 'com', 'que', 'this', 'that',
+        );
+        $editorial_fillers = array(
+            'aberto', 'aberta', 'acontece', 'aconteceu', 'anuncia', 'anunciado', 'anunciou',
+            'deixa', 'deixando', 'deixou', 'demonstra', 'explica', 'expõe', 'expoe', 'finalmente',
+            'grande', 'maior', 'mostra', 'mostrando', 'pergunta', 'principal', 'revela',
+            'revelação', 'revelacao', 'revelado', 'revelou', 'segredo', 'sobre', 'torna',
+            'crucial', 'importante', 'novo', 'nova', 'novas', 'novos', 'tudo', 'toda', 'todos',
+            'everything', 'reveals', 'revealed', 'question', 'crucial', 'open', 'ending',
+        );
+        $keep_markers = array(
+            'temporada', 'temporadas', 'season', 'seasons', 'episodio', 'episódio', 'episode',
+            'episodes', 'final', 'finale', 'trailer', 'estreia', 'premiere', 'lancamento',
+            'lançamento', 'release', 'filme', 'serie', 'série', 'movie', 'series', 'ano',
+        );
+        $tokenize = static function ($text) {
+            $text = preg_replace('/[^\p{L}\p{N}\s\x27-]+/u', ' ', (string) $text);
+            $tokens = preg_split('/\s+/u', trim((string) $text));
+            return is_array($tokens) ? array_values(array_filter($tokens, 'strlen')) : array();
+        };
+        $normalize_token = static function ($token) {
+            $token = trim((string) $token, " \t\n\r\0\x0B.,;!?()[]{}\"'");
+            return function_exists('mb_strtolower') ? mb_strtolower($token, 'UTF-8') : strtolower($token);
+        };
+        $title_tokens = array();
+        $title_source_tokens = $tokenize($title_part);
+        if (!$has_detail_separator) {
+            $title_source_tokens = $tokenize($raw);
+        }
+        $saw_event_marker = false;
+        foreach ($title_source_tokens as $token) {
+            $normalized = $normalize_token($token);
+            $plain_normalized = function_exists('remove_accents') ? remove_accents($normalized) : $normalized;
+            $is_number = (bool) preg_match('/^\d{1,4}$/', $normalized);
+            $is_marker = in_array($normalized, $keep_markers, true) || in_array($plain_normalized, $keep_markers, true);
+            if ($normalized === '' || in_array($normalized, $stopwords, true) || in_array($normalized, $editorial_fillers, true) || in_array($plain_normalized, $editorial_fillers, true)) {
+                continue;
+            }
+            if (!$has_detail_separator && $saw_event_marker && !$is_number && !$is_marker) {
+                continue;
+            }
+            $title_tokens[] = $token;
+            if ($is_number || $is_marker) {
+                $saw_event_marker = true;
+            }
+        }
+        $detail_tokens = array();
+        foreach ($tokenize($detail_part) as $token) {
+            $normalized = $normalize_token($token);
+            $plain_normalized = function_exists('remove_accents') ? remove_accents($normalized) : $normalized;
+            if ($normalized === '' || in_array($normalized, $stopwords, true) || in_array($normalized, $editorial_fillers, true) || in_array($plain_normalized, $editorial_fillers, true)) {
+                continue;
+            }
+            if (preg_match('/^\d{1,4}$/', $normalized) || in_array($normalized, $keep_markers, true) || in_array($plain_normalized, $keep_markers, true)) {
+                $detail_tokens[] = $token;
+            }
+        }
+        $tokens = array_values(array_unique(array_merge($title_tokens, $detail_tokens)));
+        if (empty($tokens)) {
+            $tokens = $title_tokens;
+        }
+        if (empty($tokens)) {
+            return '';
+        }
+        $query = trim(implode(' ', array_slice($tokens, 0, 10)));
+        return trim(preg_replace('/\s+/u', ' ', $query));
+    }
+
+    public static function extract_source_work_title_candidate($item)
+    {
+        $item = is_array($item) ? $item : array();
+        $h1 = self::extract_source_h1_title($item);
+        if ($h1 === '') {
+            return '';
+        }
+        if (!preg_match('/\s*(?:[:|]|\s-\s)\s*/u', $h1)) {
+            $tokens = preg_split('/\s+/u', trim($h1));
+            $stopwords = array('a', 'an', 'as', 'at', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'for', 'from', 'in', 'na', 'nas', 'no', 'nos', 'of', 'on', 'or', 'os', 'para', 'por', 'the', 'um', 'uma', 'with', 'com', 'que');
+            $markers = array('season', 'seasons', 'temporada', 'temporadas', 'episode', 'episodes', 'episodio', 'episodios', 'final', 'finale', 'trailer', 'estreia', 'premiere');
+            $candidate_tokens = array();
+            foreach (is_array($tokens) ? $tokens : array() as $token) {
+                $normalized = strtolower(trim((string) $token, " \t\n\r\0\x0B.,;!?()[]{}\"'"));
+                $plain_normalized = function_exists('remove_accents') ? remove_accents($normalized) : $normalized;
+                if ($normalized === '' || in_array($normalized, $stopwords, true)) {
+                    continue;
+                }
+                if (in_array($normalized, $markers, true) || in_array($plain_normalized, $markers, true) || preg_match('/^\d{1,4}$/', $normalized)) {
+                    break;
+                }
+                $candidate_tokens[] = $token;
+            }
+            if (!empty($candidate_tokens) && count($candidate_tokens) < count(is_array($tokens) ? $tokens : array())) {
+                return self::normalize_plain_text(implode(' ', $candidate_tokens));
+            }
+            if (count(is_array($tokens) ? $tokens : array()) > 5) {
+                return '';
+            }
+        }
+        $parts = preg_split('/\s*(?:[:|]|\s-\s)\s*/u', $h1, 2);
+        $candidate = !empty($parts[0]) ? trim((string) $parts[0]) : trim($h1);
+        return self::normalize_plain_text($candidate);
+    }
+
+    public static function append_tavily_sources_to_content($html, $generator, $item)
+    {
+        $html = (string) $html;
+        $generator = is_array($generator) ? $generator : array();
+        $item = is_array($item) ? $item : array();
+        if (empty($item['tavily_context']['results']) || !is_array($item['tavily_context']['results'])) {
+            return $html;
+        }
+
+        $language = !empty($generator['generation_language'])
+            ? strtolower(remove_accents((string) $generator['generation_language']))
+            : 'portugues';
+        $heading = strpos($language, 'ingles') !== false || strpos($language, 'english') !== false
+            ? 'Sources consulted'
+            : (strpos($language, 'espanhol') !== false || strpos($language, 'spanish') !== false ? 'Fuentes consultadas' : 'Fontes consultadas');
+        $links = array();
+        $seen = array();
+        foreach ($item['tavily_context']['results'] as $result) {
+            if (!is_array($result)) {
+                continue;
+            }
+            $url = !empty($result['url']) ? esc_url((string) $result['url']) : '';
+            if ($url === '' || !self::tavily_source_url_is_allowed($url)) {
+                continue;
+            }
+            $key = strtolower($url);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $title = !empty($result['title']) ? trim(wp_strip_all_tags((string) $result['title'])) : $url;
+            $links[] = '<li><a href="' . $url . '" target="_blank" rel="noopener noreferrer">' . esc_html($title) . '</a></li>';
+        }
+        if (empty($links)) {
+            return $html;
+        }
+        return rtrim($html) . "\n<h2>" . esc_html($heading) . "</h2>\n<ul>\n" . implode("\n", $links) . "\n</ul>";
     }
 
     public static function get_generator_editorial_context($generator)
@@ -5253,6 +5521,26 @@ class Content_Rank_Generator_Helper
         );
     }
 
+    public static function extract_source_h1_title($item)
+    {
+        $item = is_array($item) ? $item : array();
+        if (!empty($item['source_page_h1_title'])) {
+            return self::normalize_plain_text((string) $item['source_page_h1_title']);
+        }
+
+        foreach (array('source_page_content_html', 'source_page_html', 'content_html') as $html_key) {
+            if (empty($item[$html_key])) {
+                continue;
+            }
+            $h1_title = Content_Rank_Generator::extract_page_h1_title_from_html((string) $item[$html_key]);
+            if ($h1_title !== '') {
+                return self::normalize_plain_text($h1_title);
+            }
+        }
+
+        return '';
+    }
+
     public static function build_source_context_block($generator, $item, $options = array())
     {
         $options = is_array($options) ? $options : array();
@@ -5290,10 +5578,6 @@ class Content_Rank_Generator_Helper
             : '';
         $source_type = !empty($generator['source_type']) ? sanitize_key((string) $generator['source_type']) : 'rss';
         $generator_editorial_context = self::get_generator_editorial_context($generator);
-        $tavily_context_text = '';
-        if ($source_type === 'keyword_list' && !empty($item['tavily_context']) && is_array($item['tavily_context'])) {
-            $tavily_context_text = self::format_tavily_context_for_prompt($item['tavily_context']);
-        }
         $row_data = isset($item['row_data']) && is_array($item['row_data'])
             ? wp_json_encode($item['row_data'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
             : '';
@@ -5303,6 +5587,26 @@ class Content_Rank_Generator_Helper
 
         if ($source_title !== '') {
             $lines[] = 'Titulo da fonte: ' . $source_title;
+        }
+        $source_h1_title = self::extract_source_h1_title($item);
+        if ($source_h1_title !== '') {
+            $lines[] = 'H1 principal da fonte (referencia primaria para identificar a obra): ' . $source_h1_title;
+        }
+        if (!empty($item['source_work_title'])) {
+            $lines[] = 'Nome exato da obra identificado no H1: ' . self::normalize_plain_text((string) $item['source_work_title']);
+        }
+        if (!empty($item['source_work_title_localized'])) {
+            $lines[] = 'Nome localizado da obra para o idioma final: ' . self::normalize_plain_text((string) $item['source_work_title_localized']);
+        }
+        $tavily_search_query = !empty($item['tavily_search_query'])
+            ? self::normalize_plain_text((string) $item['tavily_search_query'])
+            : '';
+        $tavily_status = !empty($item['tavily_context']['results']) && is_array($item['tavily_context']['results'])
+            ? 'resultados_recebidos'
+            : (!empty($generator['tavily_enabled']) ? 'habilitado_sem_resultados' : 'desativado_no_gerador');
+        $lines[] = 'Status do Tavily neste gerador: ' . $tavily_status;
+        if ($tavily_search_query !== '') {
+            $lines[] = 'Consulta Tavily usada para verificar a pauta: ' . $tavily_search_query;
         }
         if ($source_type === 'keyword_list') {
             $lines[] = 'Nome do gerador: ' . (!empty($generator_editorial_context['name']) ? $generator_editorial_context['name'] : '[sem nome definido]');
@@ -5327,9 +5631,6 @@ class Content_Rank_Generator_Helper
         }
         if ($source_page_content_html !== '') {
             $lines[] = 'Conteudo em HTML limpo da pagina de origem: ' . $source_page_content_html;
-        }
-        if ($tavily_context_text !== '') {
-            $lines[] = 'Pesquisa factual auxiliar do Tavily: ' . $tavily_context_text;
         }
         if (is_string($row_data) && $row_data !== '') {
             $lines[] = 'Dados completos da linha de origem: ' . $row_data;
@@ -5642,6 +5943,8 @@ class Content_Rank_Generator_Helper
         $funnel_level = !empty($outline_context['funnel_level']) ? sanitize_text_field((string) $outline_context['funnel_level']) : '';
         $primary_pain = !empty($outline_context['primary_pain']) ? sanitize_textarea_field((string) $outline_context['primary_pain']) : '';
         $focus_keyword = !empty($outline_context['focus_keyword']) ? sanitize_text_field((string) $outline_context['focus_keyword']) : '';
+        $source_work_title = !empty($outline_context['source_work_title']) ? sanitize_text_field((string) $outline_context['source_work_title']) : '';
+        $tavily_search_query = !empty($outline_context['tavily_search_query']) ? sanitize_text_field((string) $outline_context['tavily_search_query']) : '';
         $editorial_conflict = !empty($outline_context['editorial_conflict']) ? sanitize_textarea_field((string) $outline_context['editorial_conflict']) : '';
         $reader_transformation = !empty($outline_context['reader_transformation']) ? sanitize_textarea_field((string) $outline_context['reader_transformation']) : '';
         $main_promise = !empty($outline_context['main_promise']) ? sanitize_textarea_field((string) $outline_context['main_promise']) : '';
@@ -5659,6 +5962,12 @@ class Content_Rank_Generator_Helper
         }
         if ($focus_keyword !== '') {
             $lines[] = 'Keyword sugerida: ' . $focus_keyword;
+        }
+        if ($source_work_title !== '') {
+            $lines[] = 'Obra identificada no H1 da fonte: ' . $source_work_title;
+        }
+        if ($tavily_search_query !== '') {
+            $lines[] = 'Consulta Tavily planejada: ' . $tavily_search_query;
         }
         if ($editorial_conflict !== '') {
             $lines[] = 'Conflito editorial: ' . $editorial_conflict;
@@ -5745,7 +6054,7 @@ class Content_Rank_Generator_Helper
         $generation_language = !empty($generator['generation_language'])
             ? Content_Rank_Generator::normalize_generation_language_value($generator['generation_language'])
             : Content_Rank_Generator::get_default_generation_language();
-        $is_keyword_only = $source_type === 'keyword_list'
+        $is_keyword_only = ($source_type === 'keyword_list' && !Content_Rank_Generator::generator_uses_keyword_list_url_reference_mode($generator))
             || ($source_type === 'spreadsheet' && !Content_Rank_Generator::generator_uses_keyword_list_url_reference_mode($generator));
         if ($is_keyword_only) {
             return self::build_keyword_outline_analysis_prompt($generator, $item, $outline_context);
@@ -5761,6 +6070,10 @@ class Content_Rank_Generator_Helper
         if ($source_title === '' && !empty($seo_article['title'])) {
             $source_title = self::normalize_prompt_context_text($seo_article['title']);
         }
+        $source_h1_title = self::extract_source_h1_title($item);
+        $source_work_title_localized = !empty($item['source_work_title_localized'])
+            ? self::normalize_plain_text((string) $item['source_work_title_localized'])
+            : '';
         $source_content_html = '';
         foreach (array('source_page_content_html', 'content_html', 'source_page_html') as $candidate_key) {
             if (!empty($item[$candidate_key])) {
@@ -5790,6 +6103,12 @@ class Content_Rank_Generator_Helper
         $existing_keyword_post_titles = !empty($item['existing_keyword_post_titles']) && is_array($item['existing_keyword_post_titles'])
             ? array_values(array_filter(array_map('strval', $item['existing_keyword_post_titles']), 'strlen'))
             : array();
+        $initial_tavily_query = !empty($item['tavily_search_query'])
+            ? self::normalize_plain_text((string) $item['tavily_search_query'])
+            : self::build_tavily_search_query($item, $generator);
+        $tavily_status = !empty($item['tavily_context']['results']) && is_array($item['tavily_context']['results'])
+            ? 'resultados_recebidos'
+            : (!empty($generator['tavily_enabled']) ? 'habilitado_sem_resultados' : 'desativado_no_gerador');
         $available_prompt_models = Content_Rank_Generator::get_prompt_models($generator);
         $available_prompt_model_keys = array();
         $available_prompt_models_text = array();
@@ -5814,16 +6133,22 @@ class Content_Rank_Generator_Helper
             'Você é um classificador editorial interno.',
             'Idioma da resposta: ' . $generation_language . '.',
             'Analise o título, a keyword e o HTML completo da fonte. Ignore rodapé, sidebar, widgets e navegação.',
-            'Retorne somente JSON valido com: content_type, funnel_level, primary_pain, focus_keyword, recommended_prompt_model_key. funnel_level deve ser top, mid ou bottom, nunca numero.',
+            'Retorne somente JSON valido com: content_type, funnel_level, primary_pain, focus_keyword, source_work_title, tavily_search_query, recommended_prompt_model_key. funnel_level deve ser top, mid ou bottom, nunca numero.',
             'Escolha lista para pautas numeradas ou com quantidade; notícia para acontecimento pontual; review para avaliação; comparativo para duas opções; tutorial para passo a passo; artigo para os demais temas evergreen.',
             'Siga primeiro o título e a intenção da pauta; use o HTML apenas para confirmar o contexto.',
             'A focus_keyword deve ser curta, natural e coerente com a pauta.',
+            'Leia o H1 principal da fonte. Se ele mencionar claramente um filme, serie, anime, livro, jogo ou outra obra, extraia em source_work_title somente o nome exato da obra, sem slogan, noticia, temporada, episodio, ano ou complemento editorial. Se nao houver uma obra identificavel, use source_work_title como string vazia. Nunca invente nem deduza uma obra apenas por semelhança.',
+            'Crie tavily_search_query como uma consulta curta e factual para confirmar a pauta: use o nome exato da obra identificado no H1 e acrescente apenas temporada, episodio, final/finale, trailer, ano ou outro evento claramente presente. Remova frases editoriais como revela, pergunta crucial, deixa em aberto e nao invente termos. Exemplo: The Lioness: final da temporada 3 deixa pergunta crucial em aberto -> Lioness final temporada 3.',
             !empty($selected_prompt_model)
                 ? 'Modelo fixado pelo gerador: ' . $selected_prompt_model_key . ' (' . (string) $selected_prompt_model['name'] . ').'
                 : 'Escolha recommended_prompt_model_key entre os modelos disponiveis abaixo.',
             'Título da fonte: ' . ($source_title !== '' ? $source_title : '[sem título disponível]'),
             $source_item_count > 0 ? 'Quantidade indicada no título: ' . $source_item_count . '.' : '',
             'Keyword: ' . ($keyword !== '' ? $keyword : '[sem keyword]'),
+            'H1 principal da fonte: ' . ($source_h1_title !== '' ? $source_h1_title : '[sem H1 disponivel]'),
+            'Titulo localizado da obra para o idioma final: ' . ($source_work_title_localized !== '' ? $source_work_title_localized : '[ainda nao localizado]'),
+            'Consulta Tavily inicial: ' . ($initial_tavily_query !== '' ? $initial_tavily_query : '[nao identificada]'),
+            'Status do Tavily neste gerador: ' . $tavily_status,
             !empty($existing_keyword_post_titles)
                 ? "Posts ja gerados para esta keyword:\n- " . implode("\n- ", $existing_keyword_post_titles) . "\nEscolha um angulo diferente."
                 : '',
@@ -5884,9 +6209,9 @@ class Content_Rank_Generator_Helper
                 break;
             }
         }
-        $tavily_text = !empty($item['tavily_context']) && is_array($item['tavily_context'])
-            ? self::format_tavily_context_for_prompt($item['tavily_context'])
-            : '';
+        $initial_tavily_query = !empty($item['tavily_search_query'])
+            ? self::normalize_plain_text((string) $item['tavily_search_query'])
+            : self::build_tavily_search_query($item, $generator);
         $generator_editorial_context = self::get_generator_editorial_context($generator);
         $generator_name = !empty($generator_editorial_context['name']) ? $generator_editorial_context['name'] : '[sem nome]';
         $generator_category = !empty($generator_editorial_context['category_text']) ? $generator_editorial_context['category_text'] : '[sem categoria]';
@@ -5907,9 +6232,11 @@ class Content_Rank_Generator_Helper
             'Escolha comparativo quando houver versus, vs, comparar ou duas opcoes claras.',
             'Escolha tutorial quando houver como fazer, passo a passo ou instrucoes.',
             'Escolha noticia somente quando a keyword indicar acontecimento, anuncio, estreia, lancamento ou atualizacao pontual.',
-            'Retorne somente JSON valido com estas chaves: content_type, funnel_level, primary_pain, focus_keyword, recommended_prompt_model_key. funnel_level deve ser top, mid ou bottom.',
+            'Retorne somente JSON valido com estas chaves: content_type, funnel_level, primary_pain, focus_keyword, source_work_title, tavily_search_query, recommended_prompt_model_key. funnel_level deve ser top, mid ou bottom.',
             'Use content_type e recommended_prompt_model_key somente com as chaves validas abaixo.',
             'Keyword da pauta: ' . ($keyword !== '' ? $keyword : '[sem keyword]'),
+            'source_work_title: use string vazia; esta pauta nao possui H1 de uma pagina de referencia. Crie tavily_search_query como consulta curta com os termos centrais da keyword, sem frases editoriais.',
+            'Consulta Tavily inicial: ' . ($initial_tavily_query !== '' ? $initial_tavily_query : '[nao identificada]'),
             'Nome do gerador: ' . $generator_name,
             'Categoria editorial: ' . $generator_category,
             'Use o nome do gerador e a categoria editorial para interpretar o contexto da keyword. Nao imponha um nicho diferente apenas porque a keyword e ampla.',
@@ -5917,7 +6244,6 @@ class Content_Rank_Generator_Helper
                 ? "Posts ja gerados para esta mesma keyword:\n- " . implode("\n- ", $existing_keyword_post_titles) . "\nNao repita a mesma intencao de busca, promessa ou angulo; escolha uma intencao diferente."
                 : '',
             $custom_prompt !== '' ? 'Prompt personalizado do gerador: ' . $custom_prompt : '',
-            $tavily_text !== '' ? 'Pesquisa factual auxiliar do Tavily: ' . $tavily_text : '',
             $reference_html !== '' ? 'Conteudo HTML de referencia: ' . $reference_html : '',
             'Modelos disponiveis:',
             implode("\n", $available_models_text),
@@ -5948,6 +6274,12 @@ class Content_Rank_Generator_Helper
             : (!empty($outline_context['focus_keyword']) ? sanitize_text_field((string) $outline_context['focus_keyword']) : '');
         $focus_keyword = preg_replace('/^\s*(?:melhores?|best)\s+/iu', '', (string) $focus_keyword);
         $outline_context['focus_keyword'] = trim((string) $focus_keyword);
+        $outline_context['source_work_title'] = !empty($analysis['source_work_title'])
+            ? self::normalize_plain_text((string) $analysis['source_work_title'])
+            : (!empty($outline_context['source_work_title']) ? self::normalize_plain_text((string) $outline_context['source_work_title']) : '');
+        $outline_context['tavily_search_query'] = !empty($analysis['tavily_search_query'])
+            ? self::normalize_plain_text((string) $analysis['tavily_search_query'])
+            : (!empty($outline_context['tavily_search_query']) ? self::normalize_plain_text((string) $outline_context['tavily_search_query']) : '');
         foreach (array('editorial_conflict', 'reader_transformation', 'main_promise', 'reader_intent') as $narrative_key) {
             $outline_context[$narrative_key] = !empty($analysis[$narrative_key])
                 ? sanitize_textarea_field((string) $analysis[$narrative_key])
@@ -6329,6 +6661,13 @@ class Content_Rank_Generator_Helper
                 break;
             }
         }
+        $source_h1_title = self::extract_source_h1_title($item);
+        $source_work_title = !empty($item['source_work_title'])
+            ? self::normalize_plain_text((string) $item['source_work_title'])
+            : (!empty($outline_context['source_work_title']) ? self::normalize_plain_text((string) $outline_context['source_work_title']) : '');
+        $source_work_title_localized = !empty($item['source_work_title_localized'])
+            ? self::normalize_plain_text((string) $item['source_work_title_localized'])
+            : '';
         $source_url = isset($item['source_url']) ? $item['source_url'] : '';
         if ($source_url === '' && isset($item['permalink'])) {
             $source_url = $item['permalink'];
@@ -6375,6 +6714,8 @@ class Content_Rank_Generator_Helper
         $replacements = array(
             '{{feed_title}}' => isset($item['feed_title']) ? (string) $item['feed_title'] : '',
             '{{source_title}}' => $source_title,
+            '{{source_page_h1_title}}' => $source_h1_title,
+            '{{source_work_title}}' => $source_work_title_localized !== '' ? $source_work_title_localized : $source_work_title,
             '{{keyword}}' => isset($item['keyword']) ? $item['keyword'] : '',
             '{{source_url}}' => $source_url,
             '{{source_site_name}}' => $source_site_name,
@@ -6420,6 +6761,9 @@ class Content_Rank_Generator_Helper
         $prompt .= "- Use no focus_keyword apenas os termos essenciais da pauta. Nao adicione 'melhor', 'melhores', 'best' ou superlativos que nao estejam no titulo ou na fonte.\n";
         $prompt .= "- A keyword e uma referencia semantica, nao uma frase que precise ser copiada literalmente. Reescreva-a quando necessario para uma frase natural, com artigos, preposicoes, genero e numero corretos em portugues.\n";
         $prompt .= "- Para a plataforma Netflix, use a forma natural 'na Netflix' ou 'da Netflix'. Nunca use 'no Netflix' e nao una 'filmes' a 'Netflix' sem preposicao quando isso prejudicar a concordancia. Exemplo valido: '10 filmes infantis na Netflix para a familia aproveitar'.\n";
+        if ($source_work_title !== '') {
+            $prompt .= '- A obra identificada no H1 da fonte e "' . ($source_work_title_localized !== '' ? $source_work_title_localized : $source_work_title) . '". Preserve esse nome ao mencionar a obra no titulo, keyword e texto; nao traduza o nome manualmente nem o substitua por outra obra.\n';
+        }
         if (!empty($item['review_products_prompt'])) {
             $prompt .= "\n\nDADOS DOS PRODUTOS DA REVIEW:\n" . trim((string) $item['review_products_prompt']);
         }
@@ -6510,9 +6854,6 @@ class Content_Rank_Generator_Helper
         $review_products_prompt = !empty($item['review_products_prompt'])
             ? trim((string) $item['review_products_prompt'])
             : '';
-        $tavily_text = !empty($item['tavily_context']) && is_array($item['tavily_context'])
-            ? self::format_tavily_context_for_prompt($item['tavily_context'])
-            : '';
         $generator_context = self::get_generator_editorial_context($generator);
 
         $is_list_outline = in_array($content_type, array('lista', 'list', 'list_article'), true)
@@ -6593,7 +6934,6 @@ class Content_Rank_Generator_Helper
             'Titulo gerado (esse é o ponto central de tudo, é isso que deve ser respondido no conteúdo): ' . ($generated_title !== '' ? $generated_title : '[sem titulo gerado]'),
             'Keyword foco: ' . ($keyword !== '' ? $keyword : '[sem keyword]'),
             $source_outline_titles !== '' && $is_list_outline ? 'Itens da fonte, preserve a ordem:' . "\n" . $source_outline_titles : '',
-            $tavily_text !== '' ? 'Informacoes adicionais coletadas pelo Tavily:' . "\n" . $tavily_text : '',
             $review_products_prompt !== '' ? 'Dados fixos dos produtos da review. Use os placeholders exatamente como informados:' . "\n" . $review_products_prompt : '',
             $review_products_prompt !== '' ? 'Review de produtos: organize uma secao para cada produto e indique no outline o placeholder correspondente. O redator deve usar {{prod1}}, {{prod2}} e assim por diante no ponto exato em que cada card deve aparecer.' : '',
             !$is_keyword_only && $source_html !== '' ? 'HTML filtrado da pagina de referencia:' . "\n" . $source_html : '',
@@ -6847,8 +7187,8 @@ class Content_Rank_Generator_Helper
         $is_list_content = in_array($content_type, array('lista', 'list', 'list_article'), true)
             || in_array($normalized_prompt_model_key, array('lista', 'list', 'list_article'), true);
         $tavily_context_text = '';
-        if (!empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'keyword_list' && !empty($item['tavily_context']) && is_array($item['tavily_context'])) {
-            $tavily_context_text = self::format_tavily_context_for_prompt($item['tavily_context']);
+        if (!empty($item['tavily_context']) && is_array($item['tavily_context'])) {
+            $tavily_context_text = self::format_tavily_content_context_for_prompt($item['tavily_context']);
         }
         $review_products_prompt = !empty($item['review_products_prompt'])
             ? trim((string) $item['review_products_prompt'])
@@ -6904,6 +7244,15 @@ class Content_Rank_Generator_Helper
         if (!empty($outline_context['primary_pain'])) {
             $hidden_context[] = 'Dor principal definida no planejamento: ' . sanitize_text_field((string) $outline_context['primary_pain']);
         }
+        $source_work_title_for_content = !empty($item['source_work_title_localized'])
+            ? self::normalize_plain_text((string) $item['source_work_title_localized'])
+            : (!empty($item['source_work_title']) ? self::normalize_plain_text((string) $item['source_work_title']) : '');
+        if ($source_work_title_for_content !== '') {
+            $hidden_context[] = 'OBRA PRINCIPAL IDENTIFICADA NO H1: use exatamente este nome ao mencionar a obra: ' . $source_work_title_for_content . '. Nao traduza manualmente nem troque por outra obra.';
+        }
+        if (!empty($item['tavily_context']['results']) && is_array($item['tavily_context']['results'])) {
+            $hidden_context[] = 'HIERARQUIA FACTUAL: combine a fonte principal com os DADOS DO TAVILY. Afirme apenas fatos sustentados por uma ou pelas duas fontes; apresente divergencias, alegacoes e hipoteses como incerteza e nunca preencha lacunas com imaginacao.';
+        }
         if (!empty($outline_context['existing_keyword_post_titles']) && is_array($outline_context['existing_keyword_post_titles'])) {
             $hidden_context[] = 'POSTS JA GERADOS PARA ESTA MESMA KEYWORD:';
             foreach ($outline_context['existing_keyword_post_titles'] as $existing_title) {
@@ -6932,7 +7281,7 @@ class Content_Rank_Generator_Helper
             $hidden_context[] = 'REVIEW COM CARDS: use TODOS os placeholders de produtos informados, exatamente uma vez cada e sempre na ordem {{prod1}}, {{prod2}}, {{prod3}}...; coloque cada placeholder sozinho em um bloco, no ponto em que o respectivo produto deve aparecer. Nao crie HTML de card, nao invente dados, nao omita produtos e nao troque a ordem.';
         }
         if ($tavily_context_text !== '') {
-            $hidden_context[] = 'Pesquisa factual auxiliar do Tavily. Use apenas como apoio factual e nao invente informacoes fora dela:';
+            $hidden_context[] = 'DADOS DO TAVILY — PESQUISA OBRIGATORIA: incorpore ao texto os fatos relevantes e verificaveis desta pesquisa, sem copiar trechos longos, sem inventar informacoes e sem tratar especulacoes como fatos. As fontes consultadas serao anexadas automaticamente ao final do artigo; nao crie uma lista de fontes dentro do content_html.';
             $hidden_context[] = $tavily_context_text;
         }
         if (!empty($generator['source_type']) && sanitize_key((string) $generator['source_type']) === 'keyword_list') {
@@ -6949,6 +7298,8 @@ class Content_Rank_Generator_Helper
         $replacements = array(
             '{{feed_title}}' => isset($item['feed_title']) ? (string) $item['feed_title'] : '',
             '{{source_title}}' => $source_title,
+            '{{source_page_h1_title}}' => self::extract_source_h1_title($item),
+            '{{source_work_title}}' => $source_work_title_for_content,
             '{{keyword}}' => isset($item['keyword']) ? $item['keyword'] : '',
             '{{source_url}}' => $source_url,
             '{{source_site_name}}' => $source_site_name,
@@ -7060,23 +7411,41 @@ class Content_Rank_Generator_Helper
                 $item['existing_keyword_post_titles'] = $existing_keyword_post_titles;
             }
         }
-        if ($source_type === 'keyword_list' && !empty($generator['tavily_enabled'])) {
-            $generator_editorial_context = self::get_generator_editorial_context($generator);
-            $keyword_query = '';
-            foreach (array('keyword', 'title', 'source_title', 'item_title') as $candidate_key) {
-                if (!empty($item[$candidate_key])) {
-                    $keyword_query = self::normalize_prompt_context_text((string) $item[$candidate_key]);
-                    if ($keyword_query !== '') {
-                        break;
-                    }
+        $source_h1_for_cleanup = self::extract_source_h1_title($item);
+        if (!empty($item['source_work_title_localized']) && $source_h1_for_cleanup !== '') {
+            $normalize_title_for_cleanup = static function ($value) {
+                $value = strtolower(trim((string) $value));
+                if (function_exists('remove_accents')) {
+                    $value = strtolower(remove_accents($value));
+                }
+                return trim((string) preg_replace('/\s+/u', ' ', $value));
+            };
+            if ($normalize_title_for_cleanup($item['source_work_title_localized']) === $normalize_title_for_cleanup($source_h1_for_cleanup)) {
+                unset($item['source_work_title_localized']);
+            }
+        }
+        // Resolve the work named in the source H1 before the planning prompt,
+        // so the planner and Tavily query use the same canonical title.
+        if (!empty($generator['tmdb_title_translation_enabled']) && class_exists('Content_Rank_TMDB')) {
+            $source_work_candidate = self::extract_source_work_title_candidate($item);
+            if ($source_work_candidate !== '') {
+                $item['source_work_title'] = $source_work_candidate;
+                $localized_work_title = Content_Rank_TMDB::localize_title($generator, $item, $source_work_candidate);
+                if ($localized_work_title !== '') {
+                    $item['source_work_title_localized'] = $localized_work_title;
                 }
             }
+        }
+        if (!empty($generator['tavily_enabled'])) {
+            $keyword_query = self::build_tavily_search_query($item, $generator);
 
             if ($keyword_query !== '') {
-                if (!empty($generator_editorial_context['category_text'])) {
-                    $keyword_query .= ' ' . $generator_editorial_context['category_text'];
-                }
+                $item['tavily_search_query'] = $keyword_query;
                 $settings = Content_Rank_Generator::get_settings();
+                $tavily_configuration_error = self::get_tavily_configuration_error(false);
+                if ($tavily_configuration_error !== '') {
+                    return new WP_Error('content_rank_tavily_not_configured', $tavily_configuration_error);
+                }
                 $tavily_context = self::fetch_tavily_search_context(
                     $keyword_query,
                     !empty($settings['tavily_max_results']) ? intval($settings['tavily_max_results']) : 3,
@@ -7084,9 +7453,12 @@ class Content_Rank_Generator_Helper
                     false,
                     true
                 );
-                if (!empty($tavily_context) && is_array($tavily_context)) {
-                    $item['tavily_context'] = $tavily_context;
+                if (empty($tavily_context) || !is_array($tavily_context) || empty($tavily_context['results']) || !is_array($tavily_context['results'])) {
+                    return new WP_Error('content_rank_tavily_required_unavailable', 'O Tavily foi habilitado neste gerador, mas a pesquisa não retornou fontes. Verifique a consulta, a chave e a resposta da API.');
                 }
+                $item['tavily_context'] = $tavily_context;
+            } else {
+                return new WP_Error('content_rank_tavily_query_missing', 'O Tavily foi habilitado, mas este item nao possui titulo ou keyword para pesquisa.');
             }
         }
 
@@ -7096,6 +7468,62 @@ class Content_Rank_Generator_Helper
         $outline_context = self::build_outline_context_from_source($generator, $item, array(), $outline_base_context);
         if (is_wp_error($outline_context)) {
             return $outline_context;
+        }
+
+        // The planner can refine the search after identifying the canonical
+        // work and the concrete event in the H1. Re-run Tavily only when the
+        // planned query is materially different, then carry that evidence
+        // into SEO and content prompts.
+        if (!empty($generator['tavily_enabled'])) {
+            $planned_tavily_query = !empty($outline_context['tavily_search_query'])
+                ? self::normalize_plain_text((string) $outline_context['tavily_search_query'])
+                : '';
+            $initial_tavily_query = !empty($item['tavily_search_query'])
+                ? self::normalize_plain_text((string) $item['tavily_search_query'])
+                : '';
+            $normalize_query_for_compare = static function ($query) {
+                $query = strtolower(trim((string) $query));
+                if (function_exists('remove_accents')) {
+                    $query = strtolower(remove_accents($query));
+                }
+                return trim((string) preg_replace('/\s+/u', ' ', $query));
+            };
+            if ($planned_tavily_query !== '' && $normalize_query_for_compare($planned_tavily_query) !== $normalize_query_for_compare($initial_tavily_query)) {
+                $settings = Content_Rank_Generator::get_settings();
+                $refined_tavily_context = self::fetch_tavily_search_context(
+                    $planned_tavily_query,
+                    !empty($settings['tavily_max_results']) ? intval($settings['tavily_max_results']) : 3,
+                    !empty($settings['tavily_include_answer']),
+                    false,
+                    true
+                );
+                if (!empty($refined_tavily_context['results']) && is_array($refined_tavily_context['results'])) {
+                    $item['tavily_context'] = $refined_tavily_context;
+                    $item['tavily_search_query'] = $planned_tavily_query;
+                }
+            }
+            if (!empty($item['tavily_search_query'])) {
+                $outline_context['tavily_search_query'] = self::normalize_plain_text((string) $item['tavily_search_query']);
+            }
+        }
+
+        // The planning pass identifies the exact work named by the source H1.
+        // Keep it on the item so the SEO prompt and the TMDB localization pass
+        // use the same canonical work title.
+        $source_work_title = !empty($outline_context['source_work_title'])
+            ? self::normalize_plain_text((string) $outline_context['source_work_title'])
+            : '';
+        if ($source_work_title !== '') {
+            $item['source_work_title'] = $source_work_title;
+            if (!empty($item['source_work_title_localized'])) {
+                $outline_context['source_work_title_localized'] = self::normalize_plain_text((string) $item['source_work_title_localized']);
+            } elseif (!empty($generator['tmdb_title_translation_enabled']) && class_exists('Content_Rank_TMDB')) {
+                $localized_work_title = Content_Rank_TMDB::localize_title($generator, $item, $source_work_title);
+                if ($localized_work_title !== '') {
+                    $item['source_work_title_localized'] = $localized_work_title;
+                    $outline_context['source_work_title_localized'] = $localized_work_title;
+                }
+            }
         }
 
         if (!empty($item['existing_keyword_post_titles']) && is_array($item['existing_keyword_post_titles'])) {

@@ -2,7 +2,7 @@
 /*
 Plugin Name: Content Rank
 Description: Geradores RSS com reescrita com IA, imagens do Pexels, SEO, execucoes manuais e agendamento aleatorio.
-Version: 1.9.152
+Version: 1.9.153
 Author: Wallace Tavares e Codex
 Plugin URI: https://content-rank.com/
 License: GPLv2 or later
@@ -464,7 +464,7 @@ if (!class_exists('Content_Rank_Generator')) {
 
             $columns_to_check = array(
                 'tavily_enabled' => array(
-                    'definition' => 'tinyint(1) NOT NULL DEFAULT 1',
+                    'definition' => 'tinyint(1) NOT NULL DEFAULT 0',
                     'after' => 'keyword_list_mode',
                 ),
                 'content_image_interval_words' => array(
@@ -2387,6 +2387,10 @@ if (!class_exists('Content_Rank_Generator')) {
             }
 
             $generator['keyword_list_mode'] = $keyword_list_mode;
+            // Keep this option stable across database reads and the admin JSON
+            // payload. MySQL returns tinyint values as strings, while older
+            // admin clients may omit the key entirely.
+            $generator['tavily_enabled'] = !empty($generator['tavily_enabled']) ? 1 : 0;
             $generator['tmdb_title_translation_enabled'] = !empty($generator['tmdb_title_translation_enabled']) ? 1 : 0;
             $generator['tmdb_thumbnail_bg_color'] = self::normalize_hex_color(isset($generator['tmdb_thumbnail_bg_color']) ? $generator['tmdb_thumbnail_bg_color'] : '#c91414');
             $generator['tmdb_thumbnail_layout'] = self::normalize_tmdb_thumbnail_layout(isset($generator['tmdb_thumbnail_layout']) ? $generator['tmdb_thumbnail_layout'] : 'rotate');
@@ -3507,6 +3511,12 @@ if (!class_exists('Content_Rank_Generator')) {
         {
             $settings = self::get_settings();
             $payload = array();
+            $existing_generator = array();
+            $existing_generator_id = isset($raw['generator_id']) ? intval($raw['generator_id']) : 0;
+            if ($existing_generator_id > 0) {
+                $existing_generator = self::get_generator($existing_generator_id);
+                $existing_generator = is_array($existing_generator) ? $existing_generator : array();
+            }
 
             $payload['name'] = isset($raw['name']) ? sanitize_text_field(wp_unslash($raw['name'])) : '';
             $payload['source_type'] = isset($raw['source_type']) ? sanitize_key($raw['source_type']) : 'rss';
@@ -3562,7 +3572,11 @@ if (!class_exists('Content_Rank_Generator')) {
             if ($payload['source_type'] === 'keyword_list') {
                 $payload['keyword_list_mode'] = 'keywords';
             }
-            $payload['tavily_enabled'] = ($payload['source_type'] === 'keyword_list' && !empty($raw['tavily_enabled'])) ? 1 : 0;
+            // Preserve the current value when an older/custom admin client
+            // omits the field. A submitted "0" still explicitly disables it.
+            $payload['tavily_enabled'] = array_key_exists('tavily_enabled', $raw)
+                ? (!empty($raw['tavily_enabled']) ? 1 : 0)
+                : (!empty($existing_generator['tavily_enabled']) ? 1 : 0);
             $payload['tmdb_title_translation_enabled'] = !empty($raw['tmdb_title_translation_enabled']) ? 1 : 0;
             $payload['tmdb_thumbnail_bg_color'] = self::normalize_hex_color(isset($raw['tmdb_thumbnail_bg_color']) ? wp_unslash($raw['tmdb_thumbnail_bg_color']) : '#c91414');
             $payload['tmdb_thumbnail_layout'] = self::normalize_tmdb_thumbnail_layout(isset($raw['tmdb_thumbnail_layout']) ? wp_unslash($raw['tmdb_thumbnail_layout']) : 'rotate');
@@ -5299,6 +5313,25 @@ if (!class_exists('Content_Rank_Generator')) {
             return '';
         }
 
+        /**
+         * Return the first visible H1 separately from the document title.
+         * The document title may be an SEO headline, while the H1 often
+         * contains the exact name of the work that needs localization.
+         */
+        public static function extract_page_h1_title_from_html($html)
+        {
+            $html = (string) $html;
+            if ($html === '') {
+                return '';
+            }
+
+            if (preg_match('/<h1\b[^>]*>(.*?)<\/h1>/is', $html, $matches)) {
+                return self::clean_source_text($matches[1]);
+            }
+
+            return '';
+        }
+
         public static function extract_page_content_from_html($html, $content_selector = '')
         {
             $html = (string) $html;
@@ -5391,6 +5424,7 @@ if (!class_exists('Content_Rank_Generator')) {
             if ($url === '') {
                 return array(
                     'title' => '',
+                    'h1_title' => '',
                     'content' => '',
                     'excerpt' => '',
                     'outline' => array(),
@@ -5409,6 +5443,7 @@ if (!class_exists('Content_Rank_Generator')) {
             if ($html === '') {
                 return array(
                     'title' => '',
+                    'h1_title' => '',
                     'html' => '',
                     'content' => '',
                     'content_html' => '',
@@ -5420,6 +5455,7 @@ if (!class_exists('Content_Rank_Generator')) {
                 );
             }
             $title = self::extract_page_title_from_html($html);
+            $h1_title = self::extract_page_h1_title_from_html($html);
             $content = self::extract_page_content_from_html($html, $content_selector);
             $content_html = Content_Rank_Generator_Helper::extract_html_from_html_with_fallbacks($html, $content_selector);
             $excerpt = $content !== '' ? wp_trim_words($content, 24) : '';
@@ -5427,6 +5463,7 @@ if (!class_exists('Content_Rank_Generator')) {
             $outline = Content_Rank_Generator_Helper::extract_page_outline_from_html($html, $resolved_url, 50, 10, 5, $image_selector_class, $link_selector_class, $content_selector);
             $page_context = array(
                 'title' => $title,
+                'h1_title' => $h1_title,
                 'html' => $html,
                 'content' => $content,
                 'content_html' => $content_html,
@@ -5526,6 +5563,7 @@ if (!class_exists('Content_Rank_Generator')) {
             $original_excerpt = isset($item['excerpt']) ? (string) $item['excerpt'] : '';
             $original_content = isset($item['content']) ? (string) $item['content'] : '';
             $page_title = !empty($page_context['title']) ? trim((string) $page_context['title']) : '';
+            $page_h1_title = !empty($page_context['h1_title']) ? trim((string) $page_context['h1_title']) : '';
             $page_excerpt = !empty($page_context['excerpt']) ? trim((string) $page_context['excerpt']) : '';
             $page_content = !empty($page_context['content']) ? trim((string) $page_context['content']) : '';
             $page_content_html = !empty($page_context['content_html']) ? trim((string) $page_context['content_html']) : '';
@@ -5545,6 +5583,7 @@ if (!class_exists('Content_Rank_Generator')) {
             }
 
             $item['source_page_title'] = $page_title;
+            $item['source_page_h1_title'] = $page_h1_title;
             $item['source_page_excerpt'] = $page_excerpt;
             $item['source_page_content'] = $page_content;
             $item['source_page_content_html'] = $page_content_html !== '' ? $page_content_html : $page_html;
@@ -7163,6 +7202,9 @@ if (!class_exists('Content_Rank_Generator')) {
                 }
                 if (!empty($page_context['title'])) {
                     $item['source_page_title'] = $page_context['title'];
+                }
+                if (!empty($page_context['h1_title'])) {
+                    $item['source_page_h1_title'] = $page_context['h1_title'];
                 }
                 if (!empty($page_context['html'])) {
                     $item['source_page_html'] = $page_context['html'];
@@ -10144,6 +10186,12 @@ if (!class_exists('Content_Rank_Generator')) {
                 if ($tmdb_titles_override === '' && !empty($article['titles_found']) && is_array($article['titles_found'])) {
                     $tmdb_titles_override = implode("\n", array_values(array_filter(array_map('sanitize_text_field', $article['titles_found']))));
                 }
+                $source_work_title = !empty($item['source_work_title'])
+                    ? sanitize_text_field((string) $item['source_work_title'])
+                    : '';
+                if ($source_work_title !== '') {
+                    $tmdb_titles_override = $source_work_title . ($tmdb_titles_override !== '' ? "\n" . $tmdb_titles_override : '');
+                }
                 if ($tmdb_titles_override === '') {
                     $tmdb_titles_override = null;
                 }
@@ -10151,7 +10199,10 @@ if (!class_exists('Content_Rank_Generator')) {
                     $generator,
                     $item,
                     $article,
-                    $use_tmdb_titles,
+                    // Titles are localized before the SEO/content prompts.
+                    // Keep this pass metadata-only so a translated title is
+                    // never translated a second time (e.g. Operação: Operação: Lioness).
+                    false,
                     $tmdb_titles_override
                 );
             }
@@ -10367,6 +10418,21 @@ if (!class_exists('Content_Rank_Generator')) {
                             return $update_content;
                         }
                     }
+                }
+
+                $article['content_html'] = Content_Rank_Generator_Helper::append_tavily_sources_to_content(
+                    $article['content_html'],
+                    $generator,
+                    $item
+                );
+                $article['content_html'] = Content_Rank_Generator_Helper::ensure_content_starts_with_paragraph_html($article['content_html']);
+                $sources_update = wp_update_post(array(
+                    'ID' => $post_id,
+                    'post_content' => $article['content_html'],
+                ), true);
+                if (is_wp_error($sources_update)) {
+                    self::force_generated_post_draft($post_id, $sources_update->get_error_message());
+                    return $sources_update;
                 }
 
                 $taxonomy_result = self::apply_taxonomies_and_meta($post_id, $generator, $article, $item);
@@ -11186,21 +11252,35 @@ if (!class_exists('Content_Rank_Generator')) {
             );
 
             if ($generator_id > 0) {
-                $wpdb->update(
+                $updated = $wpdb->update(
                     self::$table_generators,
                     $data,
                     array('id' => $generator_id)
                 );
+                if ($updated === false) {
+                    return new WP_Error('content_rank_generator_save_failed', 'Não foi possível salvar o gerador no banco de dados.');
+                }
                 self::update_generator_schedule($generator_id);
+                $saved_generator = self::get_generator($generator_id);
+                if (!is_array($saved_generator) || intval($saved_generator['tavily_enabled']) !== intval($payload['tavily_enabled'])) {
+                    return new WP_Error('content_rank_generator_save_verification_failed', 'O gerador foi salvo, mas a opção do Tavily não pôde ser confirmada.');
+                }
                 return $generator_id;
             }
 
             $data['created_at'] = $now;
             $data['next_run_at'] = null;
-            $wpdb->insert(self::$table_generators, $data);
+            $inserted = $wpdb->insert(self::$table_generators, $data);
+            if ($inserted === false) {
+                return new WP_Error('content_rank_generator_insert_failed', 'Não foi possível criar o gerador no banco de dados.');
+            }
 
             $generator_id = intval($wpdb->insert_id);
             self::update_generator_schedule($generator_id);
+            $saved_generator = self::get_generator($generator_id);
+            if (!is_array($saved_generator) || intval($saved_generator['tavily_enabled']) !== intval($payload['tavily_enabled'])) {
+                return new WP_Error('content_rank_generator_save_verification_failed', 'O gerador foi criado, mas a opção do Tavily não pôde ser confirmada.');
+            }
             return $generator_id;
         }
 

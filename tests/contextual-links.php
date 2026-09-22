@@ -200,6 +200,10 @@ check(count(array_filter($split_ranked, static function ($item) { return $item['
 $posts[21] = new WP_Post(21, 'Spin-off de The Big Bang Theory ganha trailer', 'Neagley');
 check(!Content_Rank_Contextual_Links::candidates(array('spin', 'off', 'trailer'), 99, ''), 'Generic spin-off/trailer term became a candidate');
 unset($posts[21]);
+$posts[23] = new WP_Post(23, 'Jackass: Best and Last traz trailer final');
+$lioness_candidates = Content_Rank_Contextual_Links::candidates(array('lioness', 'final', 'trailer'), 99, '');
+check(count(array_filter($lioness_candidates, static function ($item) { return $item['id'] === 23; })) === 0, 'Generic final/trailer terms linked an unrelated Jackass post');
+unset($posts[23]);
 $posts[22] = new WP_Post(22, 'O rosto por trás de Jim em Slow Horses na temporada 6');
 $posts[22]->post_status = 'draft';
 $draft_ranked = Content_Rank_Contextual_Links::candidates(array('slow horses'), 99, '');
@@ -245,6 +249,11 @@ $actor_plan = $cast_plan;
 $actor_plan['suggestions'][0]['paragraph'] = 'O elenco também inclui <a href="xxx">Kyle Soller como Jim</a>, antagonista em Slow Horses.';
 $actor_result = Content_Rank_Contextual_Links::apply($cast_html, $actor_plan, 99);
 check($actor_result['applied_count'] === 1, 'Actor-as-character anchor was rejected');
+$generic_plan = $cast_plan;
+$generic_plan['candidate_facts'] = array(22 => array('context' => 'Jim é interpretado por Kyle Soller.'));
+$generic_plan['suggestions'][0]['paragraph'] = 'A presença de Jim adiciona uma nova camada de complexidade à trama de Slow Horses com <a href="xxx">Jim em Slow Horses</a>.';
+$generic_result = Content_Rank_Contextual_Links::apply($cast_html, $generic_plan, 99);
+check($generic_result['applied_count'] === 0, 'Generic contextual bridge was accepted');
 $bridge_plan = $cast_plan;
 $bridge_plan['suggestions'][0]['paragraph'] = 'O elenco da <a href="xxx">temporada 6 também inclui Kyle Soller como Jim</a>, antagonista em Slow Horses.';
 $bridge_result = Content_Rank_Contextual_Links::apply($cast_html, $bridge_plan, 99);
@@ -362,7 +371,7 @@ $source = '<p>Jackson Lamb em Slow Horses temporada 6 tem seu maior segredo reve
     . '<p>Além disso, a narrativa liga a traição de Partner à possível tragédia pessoal de Lamb, já que em temporadas anteriores foi revelado que Lamb foi capturado e torturado pelos Stasi, e que sua companheira grávida foi morta. A série sugere que as ações de Partner podem ter contribuído para esse desfecho.</p>'
     . '<p>Com a revelação, a relação entre Lamb e Standish fica alterada.</p>'
     . '<p>A temporada seguirá com impactos profundos nas alianças.</p>';
-$proposed = 'Além disso, o antagonista Jim, interpretado por Kyle Soller na temporada 6, adiciona uma nova camada de tensão à trama, complementando os conflitos pessoais de Lamb e a dinâmica do MI5. Saiba mais sobre <a href="xxx">O rosto por trás de Jim em Slow Horses na temporada 6</a>.';
+$proposed = 'O elenco da temporada 6 também inclui <a href="xxx">Kyle Soller como Jim</a>, antagonista em Slow Horses.';
 foreach (array('insert_after', 'replace') as $operation) {
     $posts[6956] = new WP_Post(6956, 'Jackson Lamb em Slow Horses temporada 6', $source);
     $paragraph = $operation === 'insert_after' ? $proposed

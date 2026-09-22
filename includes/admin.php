@@ -191,6 +191,11 @@ class Content_Rank_Generator_Admin
         $keyword_lists = Content_Rank_Generator::get_keyword_lists(200);
         $edit_id = isset($_GET['edit']) ? intval($_GET['edit']) : 0;
         $editing_generator = $edit_id > 0 ? Content_Rank_Generator::get_generator($edit_id) : array();
+        // A failed lookup must never reach the template as WP_Error. The
+        // editor reads this value as an array in several fields.
+        if (!is_array($editing_generator)) {
+            $editing_generator = array();
+        }
         $prompt_models = Content_Rank_Generator::get_prompt_models($editing_generator);
 
         $users = Content_Rank_Generator::get_content_author_users();
@@ -344,6 +349,7 @@ class Content_Rank_Generator_Admin
                                                     <button
                                                         type="button"
                                                         data-edit-generator-id="<?php echo esc_attr($generator['id']); ?>"
+                                                        data-tavily-enabled="<?php echo esc_attr(!empty($generator['tavily_enabled']) ? '1' : '0'); ?>"
                                                         class="content-rank-generator-action-btn inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
                                                         aria-label="Editar"
                                                         title="Editar">
@@ -655,13 +661,13 @@ class Content_Rank_Generator_Admin
                                         <option value="url_reference" <?php selected(isset($editing_generator['keyword_list_mode']) ? $editing_generator['keyword_list_mode'] : '', 'url_reference'); ?>>Palavra-chave + URL de referência</option>
                                     </select>
                                 </div>
-                                <div data-tavily-field class="hidden">
-                                    <label class="mb-1 block text-sm font-medium text-slate-700">Usar Tavily no planejamento</label>
+                                <div data-tavily-field style="display:block !important; visibility:visible !important;">
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Enriquecer o conteúdo com Tavily</label>
                                     <select name="tavily_enabled" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                                         <option value="0" <?php selected(isset($editing_generator['tavily_enabled']) ? intval($editing_generator['tavily_enabled']) : 0, 0); ?>>Não</option>
                                         <option value="1" <?php selected(isset($editing_generator['tavily_enabled']) ? intval($editing_generator['tavily_enabled']) : 0, 1); ?>>Sim</option>
                                     </select>
-                                    <p class="mt-1 text-xs text-slate-500">Faz uma pesquisa do Tavily para enriquecer o planejamento desta keyword. A integração global também precisa estar ativa.</p>
+                                    <p class="mt-1 text-xs text-slate-500">Pesquisa fontes atuais antes da geração, orienta o conteúdo e acrescenta a lista de fontes ao final do artigo. Basta cadastrar a chave da API do Tavily nas configurações.</p>
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Status do gerador</label>
@@ -778,7 +784,7 @@ class Content_Rank_Generator_Admin
                                         var field = tmdbTranslation.closest('div');
                                         var label = field ? field.querySelector('label') : null;
                                         var description = field ? field.querySelector('p') : null;
-                                        if (label) label.textContent = 'Localizar títulos de filmes via TMDB';
+                                        if (label) label.textContent = 'Localizar títulos de obras via TMDB';
                                         var noOption = tmdbTranslation.querySelector('option[value="0"]');
                                         if (noOption) noOption.textContent = 'Não';
                                         if (description) description.remove();
@@ -786,12 +792,12 @@ class Content_Rank_Generator_Admin
                                     </script>
                                 </div>
                                 <div>
-                                    <label class="mb-1 block text-sm font-medium text-slate-700">Localizar títulos de filmes via TMDB</label>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Localizar títulos de obras via TMDB</label>
                                     <select name="tmdb_title_translation_enabled" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                                         <option value="0">Não</option>
                                         <option value="1">Sim (experimental)</option>
                                     </select>
-                                    <p class="mt-1 text-xs text-slate-500">Usa os tÃ­tulos encontrados na estrutura da fonte e substitui os nomes no artigo final.</p>
+                                    <p class="mt-1 text-xs text-slate-500">Usa o nome da obra identificado no H1 e os títulos da estrutura da fonte para localizar os nomes no artigo final.</p>
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Usar vídeo da fonte</label>
@@ -1376,7 +1382,11 @@ class Content_Rank_Generator_Admin
                     }
 
                     function convertBooleanSelectsToSwitches() {
-                        var names = ['tavily_enabled', 'tmdb_title_translation_enabled', 'source_video_enabled', 'source_content_images_enabled', 'source_content_links_enabled', 'random_bolds_enabled', 'source_context_keep_unrated', 'seo_enabled', 'related_posts_enabled', 'related_posts_same_category_only', 'related_posts_allow_fallback'];
+                        // Keep Tavily as a native select. Unlike the visual
+                        // switches, this value must always be present in the
+                        // admin POST so a generator cannot silently revert to
+                        // disabled when the checkbox is not serialized.
+                        var names = ['tmdb_title_translation_enabled', 'source_video_enabled', 'source_content_images_enabled', 'source_content_links_enabled', 'random_bolds_enabled', 'source_context_keep_unrated', 'seo_enabled', 'related_posts_enabled', 'related_posts_same_category_only', 'related_posts_allow_fallback'];
                         names.forEach(function(name) {
                             var select = form.querySelector('select[name="' + name + '"]');
                             if (!select || select.options.length !== 2) return;
@@ -1449,7 +1459,7 @@ class Content_Rank_Generator_Admin
                             keywordListModeField.classList.toggle('hidden', isSatelliteMode || !isSpreadsheetSource);
                         }
                         if (tavilyField) {
-                            tavilyField.classList.toggle('hidden', isSatelliteMode || sourceType !== 'keyword_list');
+                            tavilyField.classList.remove('hidden');
                         }
                         if (imageIntervalField) {
                             imageIntervalField.classList.toggle('hidden', isSatelliteMode || !isKeywordListSourceType(sourceType));
@@ -1980,7 +1990,7 @@ class Content_Rank_Generator_Admin
                         }
                     }
 
-                    function fillForm(generator) {
+                    function fillForm(generator, triggerButton) {
                         applyDefaults();
                         if (!generator) {
                             return;
@@ -1994,7 +2004,14 @@ class Content_Rank_Generator_Admin
                         setValue('source_type', generator.source_type || defaults.source_type);
                         setValue('list_id', typeof generator.list_id !== 'undefined' ? String(generator.list_id) : defaults.list_id);
                         setValue('keyword_list_mode', generator.keyword_list_mode || defaults.keyword_list_mode);
-                        setValue('tavily_enabled', typeof generator.tavily_enabled !== 'undefined' ? generator.tavily_enabled : defaults.tavily_enabled);
+                        // Keep the value stable even if an old cached JSON
+                        // payload does not yet contain the generator option.
+                        var tavilyValue = typeof generator.tavily_enabled !== 'undefined'
+                            ? generator.tavily_enabled
+                            : (triggerButton && triggerButton.getAttribute('data-tavily-enabled') !== null
+                                ? triggerButton.getAttribute('data-tavily-enabled')
+                                : (byName('tavily_enabled') ? byName('tavily_enabled').value : defaults.tavily_enabled));
+                        setValue('tavily_enabled', String(tavilyValue) === '1' || tavilyValue === true ? '1' : '0');
                         setValue('status', generator.status);
                         setValue('post_type', generator.post_type);
                         setValue('post_status', generator.post_status);
@@ -2033,6 +2050,7 @@ class Content_Rank_Generator_Admin
                         setValue('related_posts_phrases', generator.related_posts_phrases || defaults.related_posts_phrases);
                         setValue('internal_links_json', generator.internal_links_json || defaults.internal_links_json);
                         setValue('contextual_links_enabled', String(typeof generator.contextual_links_enabled !== 'undefined' ? generator.contextual_links_enabled : defaults.contextual_links_enabled));
+                        setValue('contextual_links_rewrite_enabled', String(typeof generator.contextual_links_rewrite_enabled !== 'undefined' ? generator.contextual_links_rewrite_enabled : defaults.contextual_links_rewrite_enabled));
                         setCheckboxGroup('category_ids[]', parseListValue(generator.category_ids));
                         setValue('default_category_id', typeof generator.default_category_id !== 'undefined' ? String(generator.default_category_id) : defaults.default_category_id);
                         setValue('tags_default', listToText(parseListValue(generator.tags_default)));
@@ -2100,6 +2118,13 @@ class Content_Rank_Generator_Admin
 
                     if (form) {
                         form.addEventListener('submit', function() {
+                            var tavilySelect = byName('tavily_enabled');
+                            if (tavilySelect) {
+                                // Guarantee that the per-generator setting is
+                                // serialized by the browser on every save.
+                                tavilySelect.disabled = false;
+                                tavilySelect.value = tavilySelect.value === '1' ? '1' : '0';
+                            }
                             syncInternalLinksField();
                         });
                     }
@@ -2188,7 +2213,7 @@ class Content_Rank_Generator_Admin
                             var generator = generators.find(function(item) {
                                 return String(item.id) === id;
                             });
-                            fillForm(generator || null);
+                            fillForm(generator || null, button);
                             openModal(modal);
                         });
                     });
@@ -2452,7 +2477,7 @@ class Content_Rank_Generator_Admin
                                 </div>
                                 <label class="flex items-center gap-3 text-sm text-slate-700">
                                     <input type="checkbox" name="tavily_enabled" value="1" <?php checked(!empty($settings['tavily_enabled'])); ?> class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                                    Ativar pesquisa Tavily
+                                    Ativar pesquisa Tavily em recursos gerais
                                 </label>
                                 <label class="flex items-center gap-3 text-sm text-slate-700">
                                     <input type="checkbox" name="tavily_include_answer" value="1" <?php checked(!empty($settings['tavily_include_answer'])); ?> class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />

@@ -348,7 +348,7 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             return trim((string) $text);
         }
 
-        private static function fetch_tavily_research($query, $max_results = 3)
+        private static function fetch_tavily_research($query, $max_results = 3, $enabled_override = null)
         {
             $query = self::normalize_plain_text($query);
             if ($query === '' || !class_exists('Content_Rank_Generator_Helper')) {
@@ -360,7 +360,8 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                 $query,
                 $max_results,
                 !empty($settings['tavily_include_answer']),
-                true
+                true,
+                $enabled_override
             );
             if (!is_array($context) || empty($context)) {
                 return array();
@@ -1477,7 +1478,10 @@ if (!class_exists('Content_Rank_Content_Plans')) {
             $generated_posts = array();
             $errors = array();
             $global_settings = class_exists('Content_Rank_Generator') ? Content_Rank_Generator::get_settings() : array();
-            $tavily_enabled = !empty($global_settings['tavily_enabled']);
+            // Tavily is controlled per generator. The global setting supplies
+            // the API key and defaults, but must not trigger paid searches for
+            // generators that opted out.
+            $tavily_enabled = !empty($generator['tavily_enabled']);
             $tavily_max_results = !empty($global_settings['tavily_max_results']) ? intval($global_settings['tavily_max_results']) : 3;
 
             foreach ($satellites as $satellite) {
@@ -1498,7 +1502,7 @@ if (!class_exists('Content_Rank_Content_Plans')) {
                         ? self::normalize_plain_text((string) $normalized_satellite['focus_keyword'])
                         : self::normalize_plain_text((string) $normalized_satellite['title']);
                     if ($satellite_query !== '') {
-                        $satellite_tavily_context = self::fetch_tavily_research($satellite_query, $tavily_max_results);
+                        $satellite_tavily_context = self::fetch_tavily_research($satellite_query, $tavily_max_results, true);
                     }
                 }
                 $item = self::build_satellite_generation_item($context, $plan, $normalized_satellite, $satellite_tavily_context);
